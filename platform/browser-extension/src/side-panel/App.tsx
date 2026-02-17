@@ -82,6 +82,25 @@ const App = () => {
           return true;
         }
 
+        // plugin.updated notification — single plugin push update
+        if (data.method === 'plugin.updated' && data.params) {
+          const params = data.params as { plugin?: PluginState };
+          if (params.plugin && typeof params.plugin.name === 'string') {
+            const updated = params.plugin;
+            setPlugins(prev => {
+              const idx = prev.findIndex(p => p.name === updated.name);
+              if (idx >= 0) {
+                const next = [...prev];
+                next[idx] = updated;
+                return next;
+              }
+              return [...prev, updated];
+            });
+          }
+          sendResponse({ ok: true });
+          return true;
+        }
+
         // plugins.changed notification — refetch the full plugin list (fallback)
         if (data.method === 'plugins.changed') {
           loadPluginsRef.current();
