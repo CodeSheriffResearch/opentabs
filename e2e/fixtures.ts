@@ -618,14 +618,13 @@ const createExtensionCopy = (
   // the background script. The offscreen.js has DEFAULT_MCP_SERVER_URL and
   // background.js has the fallback URL in the offscreen:getUrl handler.
   // Both must be patched so the extension connects to this test's port.
-  const defaultUrl = 'ws://localhost:9515/ws';
   const testUrl = `ws://localhost:${mcpPort}/ws`;
 
   const offscreenPath = path.join(extensionDir, 'dist/offscreen/index.js');
   const offscreenCode = fs.readFileSync(offscreenPath, 'utf-8');
   const patchedOffscreen = offscreenCode.replace(/ws:\/\/localhost:9515\/ws/g, testUrl);
   if (patchedOffscreen === offscreenCode) {
-    throw new Error(`Failed to patch offscreen.js — could not find "${defaultUrl}" in ${offscreenPath}`);
+    throw new Error(`Failed to patch offscreen.js — could not find "ws://localhost:9515/ws" in ${offscreenPath}`);
   }
   fs.writeFileSync(offscreenPath, patchedOffscreen, 'utf-8');
 
@@ -633,7 +632,7 @@ const createExtensionCopy = (
   const backgroundCode = fs.readFileSync(backgroundPath, 'utf-8');
   const patchedBackground = backgroundCode.replace(/ws:\/\/localhost:9515\/ws/g, testUrl);
   if (patchedBackground === backgroundCode) {
-    throw new Error(`Failed to patch background.js — could not find "${defaultUrl}" in ${backgroundPath}`);
+    throw new Error(`Failed to patch background.js — could not find "ws://localhost:9515/ws" in ${backgroundPath}`);
   }
   fs.writeFileSync(backgroundPath, patchedBackground, 'utf-8');
 
