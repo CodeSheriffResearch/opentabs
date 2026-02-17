@@ -72,7 +72,17 @@ const App = () => {
 
         // Handle notifications (messages with method, no id)
 
-        // plugins.changed notification — refetch the full plugin list
+        // plugins.state notification — direct push of the full plugin list
+        if (data.method === 'plugins.state' && data.params) {
+          const params = data.params as { plugins?: PluginState[] };
+          if (Array.isArray(params.plugins)) {
+            setPlugins(params.plugins);
+          }
+          sendResponse({ ok: true });
+          return true;
+        }
+
+        // plugins.changed notification — refetch the full plugin list (fallback)
         if (data.method === 'plugins.changed') {
           loadPluginsRef.current();
           sendResponse({ ok: true });
