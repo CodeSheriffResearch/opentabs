@@ -65,6 +65,25 @@ cd "$PROJECT_DIR"
 ARCHIVE_DIR="$SCRIPT_DIR/archive"
 mkdir -p "$ARCHIVE_DIR"
 
+# --- Single Instance Lock ---
+# Prevent multiple ralph.sh daemons from running simultaneously.
+
+PIDFILE="$SCRIPT_DIR/.ralph.pid"
+
+if [ -f "$PIDFILE" ]; then
+  EXISTING_PID=$(cat "$PIDFILE")
+  if kill -0 "$EXISTING_PID" 2>/dev/null; then
+    echo "Error: ralph.sh is already running (PID $EXISTING_PID)."
+    echo "Kill it first: kill $EXISTING_PID"
+    exit 1
+  fi
+  # Stale PID file from a crashed process — clean up
+  rm -f "$PIDFILE"
+fi
+
+echo $$ > "$PIDFILE"
+trap 'rm -f "$PIDFILE"' EXIT
+
 # Colors
 RED='\033[31m'
 GREEN='\033[32m'
