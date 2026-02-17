@@ -29,6 +29,9 @@ import {
   readTestConfig,
   writeTestConfig,
   launchExtensionContext,
+  createTestConfigDir,
+  cleanupTestConfigDir,
+  createMcpClient,
 } from './fixtures.js';
 import {
   waitForExtensionConnected,
@@ -42,6 +45,7 @@ import {
 import fs from 'node:fs';
 import path from 'node:path';
 import type { McpServer } from './fixtures.js';
+import type { BrowserContext } from '@playwright/test';
 
 // ---------------------------------------------------------------------------
 // Tests
@@ -659,6 +663,133 @@ test.describe('extension_reload', () => {
       } catch {
         // best-effort cleanup
       }
+    }
+  });
+});
+
+// ---------------------------------------------------------------------------
+// URL change reconnection — verifies that changing the MCP server URL in
+// chrome.storage.local while disconnected triggers reconnection to the new server.
+// This exercises the US-002 fix: the ws:setUrl handler's third branch where
+// ws is null and no reconnect timer is pending.
+// ---------------------------------------------------------------------------
+
+/**
+ * Get the extension ID from the background service worker URL.
+ */
+const getExtensionId = async (context: BrowserContext): Promise<string> => {
+  const deadline = Date.now() + 10_000;
+  while (Date.now() < deadline) {
+    for (const sw of context.serviceWorkers()) {
+      const m = sw.url().match(/chrome-extension:\/\/([^/]+)/);
+      if (m?.[1]) return m[1];
+    }
+    await new Promise(r => setTimeout(r, 300));
+  }
+  throw new Error('Could not find extension service worker within 10s');
+};
+
+/**
+ * Set mcpServerUrl in chrome.storage.local via an extension page.
+ * This triggers the background script's chrome.storage.onChanged listener,
+ * which relays ws:setUrl to the offscreen document.
+ */
+const setMcpServerUrl = async (context: BrowserContext, wsUrl: string): Promise<void> => {
+  const extId = await getExtensionId(context);
+  const page = await context.newPage();
+  await page.goto(`chrome-extension://${extId}/side-panel/side-panel.html`, {
+    waitUntil: 'load',
+    timeout: 10_000,
+  });
+  await page.evaluate(async (url: string) => {
+    const chromeApi = (globalThis as Record<string, unknown>).chrome as {
+      storage: { local: { set: (items: Record<string, unknown>) => Promise<void> } };
+    };
+    await chromeApi.storage.local.set({ mcpServerUrl: url });
+  }, wsUrl);
+  await page.close();
+};
+
+test.describe('URL change reconnection', () => {
+  test('changing mcpServerUrl while disconnected triggers reconnection to new server', async ({
+    mcpServer,
+    extensionContext,
+    mcpClient,
+  }) => {
+    test.slow();
+
+    // 1. Verify extension is connected to server A and tools work
+    await waitForExtensionConnected(mcpServer);
+    await waitForLog(mcpServer, 'tab.syncAll received');
+
+    const preResult = await mcpClient.callTool('browser_list_tabs');
+    expect(preResult.isError).toBe(false);
+
+    const serverAPort = mcpServer.port;
+
+    // 2. Kill server A
+    await mcpServer.kill();
+
+    // Verify server A is dead
+    const dead = await mcpServer.health();
+    expect(dead).toBeNull();
+
+    // 3. Wait for extension to detect the disconnect and exhaust initial
+    //    reconnect attempts. The backoff starts at 1s and doubles (1→2→4s),
+    //    so after 5s the extension has failed several reconnects.
+    await new Promise(r => setTimeout(r, 5_000));
+
+    // 4. Start a NEW server B on a DIFFERENT port with the same plugin config
+    const configDirB = createTestConfigDir();
+    let serverB: McpServer | null = null;
+
+    try {
+      serverB = await startMcpServer(configDirB, true);
+      const serverBPort = serverB.port;
+
+      // Verify server B is on a different port than A
+      expect(serverBPort).not.toBe(serverAPort);
+
+      // Set up adapter symlinks for server B. Read the extension's adapters
+      // directory from server A's existing symlink so server B can write
+      // adapter IIFEs to the same extension copy.
+      const serverAAdaptersDir = path.join(mcpServer.configDir, 'extension', 'adapters');
+      const extensionAdaptersDir = fs.readlinkSync(serverAAdaptersDir);
+      const serverBAdaptersParent = path.join(configDirB, 'extension');
+      fs.mkdirSync(serverBAdaptersParent, { recursive: true });
+      const serverBAdaptersDir = path.join(serverBAdaptersParent, 'adapters');
+      fs.rmSync(serverBAdaptersDir, { recursive: true, force: true });
+      fs.symlinkSync(extensionAdaptersDir, serverBAdaptersDir);
+
+      // 5. Change mcpServerUrl in chrome.storage.local to point to server B.
+      //    The background script's chrome.storage.onChanged listener relays
+      //    ws:setUrl to the offscreen document, which (per US-002) calls
+      //    connect() even when ws is null and no reconnect timer is pending.
+      const newWsUrl = `ws://localhost:${serverBPort}/ws`;
+      await setMcpServerUrl(extensionContext, newWsUrl);
+
+      // 6. Wait for extension to connect to server B
+      await waitForExtensionConnected(serverB, 45_000);
+      await waitForLog(serverB, 'tab.syncAll received', 15_000);
+
+      // 7. Verify server B shows the extension connected
+      const h = await serverB.health();
+      expect(h).not.toBeNull();
+      if (!h) throw new Error('health returned null');
+      expect(h.status).toBe('ok');
+      expect(h.extensionConnected).toBe(true);
+
+      // 8. Verify tool dispatch works through server B
+      const clientB = createMcpClient(serverBPort);
+      await clientB.initialize();
+
+      const tabsResult = await clientB.callTool('browser_list_tabs');
+      expect(tabsResult.isError).toBe(false);
+
+      await clientB.close();
+    } finally {
+      if (serverB) await serverB.kill();
+      cleanupTestConfigDir(configDirB);
     }
   });
 });
