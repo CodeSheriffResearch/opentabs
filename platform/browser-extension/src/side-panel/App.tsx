@@ -153,7 +153,7 @@ const App = () => {
         ) : plugins.length === 0 ? (
           <EmptyState />
         ) : (
-          <PluginList plugins={plugins} activeTools={activeTools} onRefresh={loadPlugins} />
+          <PluginList plugins={plugins} activeTools={activeTools} setPlugins={setPlugins} />
         )}
       </main>
       <Footer />
