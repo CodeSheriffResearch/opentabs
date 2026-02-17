@@ -397,6 +397,71 @@ test.describe('Tool dispatch timeout', () => {
 });
 
 // ---------------------------------------------------------------------------
+// Concurrent tool dispatch timeouts
+// ---------------------------------------------------------------------------
+
+test.describe('Concurrent tool dispatch timeouts', () => {
+  test('3 concurrent tool calls that all time out return clean errors without interfering', async ({
+    mcpServer,
+    testServer,
+    extensionContext,
+    mcpClient,
+  }) => {
+    // This test waits ~25s for the extension-side SCRIPT_TIMEOUT_MS to fire
+    test.slow();
+
+    const page = await setupToolTest(mcpServer, testServer, extensionContext, mcpClient);
+
+    // Verify tools work normally before adding the delay
+    const okOutput = await callToolExpectSuccess(mcpClient, mcpServer, 'e2e-test_echo', {
+      message: 'pre-concurrent-timeout',
+    });
+    expect(okOutput.message).toBe('pre-concurrent-timeout');
+
+    // Set the test server delay to 27s — longer than SCRIPT_TIMEOUT_MS (25s)
+    await testServer.setSlow(27_000);
+
+    // Fire 3 concurrent tool calls that will all time out
+    const start = Date.now();
+    const results = await Promise.allSettled([
+      mcpClient.callTool('e2e-test_echo', { message: 'timeout-1' }),
+      mcpClient.callTool('e2e-test_echo', { message: 'timeout-2' }),
+      mcpClient.callTool('e2e-test_echo', { message: 'timeout-3' }),
+    ]);
+    const elapsed = Date.now() - start;
+
+    // All 3 should resolve (not reject) — the MCP protocol returns timeout
+    // as a tool result with isError: true, not as a transport-level failure.
+    for (const result of results) {
+      expect(result.status).toBe('fulfilled');
+      if (result.status !== 'fulfilled') throw new Error('Expected fulfilled');
+      expect(result.value.isError).toBe(true);
+      expect(result.value.content.toLowerCase()).toContain('timed out');
+    }
+
+    // All calls should time out around the same time (~25s SCRIPT_TIMEOUT_MS),
+    // not sequentially (which would be ~75s)
+    expect(elapsed).toBeGreaterThan(20_000);
+    expect(elapsed).toBeLessThan(40_000);
+
+    // Reset slow mode and verify a subsequent normal tool call works
+    await testServer.setSlow(0);
+
+    const afterTimeout = await waitForToolResult(
+      mcpClient,
+      'e2e-test_echo',
+      { message: 'after-concurrent-timeout' },
+      { isError: false },
+      15_000,
+    );
+    const afterOutput = parseToolResult(afterTimeout.content);
+    expect(afterOutput.message).toBe('after-concurrent-timeout');
+
+    await page.close();
+  });
+});
+
+// ---------------------------------------------------------------------------
 // Server-side DISPATCH_TIMEOUT_MS (30s)
 // ---------------------------------------------------------------------------
 
