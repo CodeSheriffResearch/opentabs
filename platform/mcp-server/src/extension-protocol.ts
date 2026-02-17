@@ -6,6 +6,7 @@
 import { getAdaptersDir } from './config.js';
 import { log } from './logger.js';
 import { prefixedToolName, isToolEnabled, getNextRequestId, DISPATCH_TIMEOUT_MS } from './state.js';
+import { SIDE_PANEL_PROTOCOL_VERSION } from '@opentabs-dev/shared';
 import { mkdir, readdir, rename } from 'node:fs/promises';
 import { join } from 'node:path';
 import type { ServerState, TabMapping, PendingDispatch } from './state.js';
@@ -543,6 +544,7 @@ const handleConfigGetState = (state: ServerState, id: string | number): void => 
     result: {
       plugins,
       outdatedPlugins: state.outdatedPlugins,
+      protocolVersion: SIDE_PANEL_PROTOCOL_VERSION,
     },
     id,
   });

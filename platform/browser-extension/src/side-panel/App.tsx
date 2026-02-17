@@ -3,6 +3,8 @@ import { DisconnectedState, EmptyState, LoadingState } from './components/EmptyS
 import { Footer } from './components/Footer.js';
 import { Header } from './components/Header.js';
 import { PluginList } from './components/PluginList.js';
+import { VersionMismatchBanner } from './components/VersionMismatchBanner.js';
+import { SIDE_PANEL_PROTOCOL_VERSION } from '@opentabs-dev/shared';
 import { useState, useEffect, useCallback, useRef } from 'react';
 import type { PluginState } from './bridge.js';
 import type { InternalMessage } from '../types.js';
@@ -15,11 +17,17 @@ const App = () => {
   const [plugins, setPlugins] = useState<PluginState[]>([]);
   const [loading, setLoading] = useState(true);
   const [activeTools, setActiveTools] = useState<Set<string>>(new Set());
+  const [versionMismatch, setVersionMismatch] = useState(false);
 
   const loadPlugins = useCallback(() => {
     fetchConfigState()
       .then(result => {
         setPlugins(result.plugins);
+        if (result.protocolVersion !== undefined && result.protocolVersion !== SIDE_PANEL_PROTOCOL_VERSION) {
+          setVersionMismatch(true);
+        } else if (result.protocolVersion !== undefined) {
+          setVersionMismatch(false);
+        }
       })
       .catch(() => {
         // Server may not be ready yet
@@ -90,6 +98,7 @@ const App = () => {
         } else {
           setPlugins([]);
           setActiveTools(new Set());
+          setVersionMismatch(false);
           rejectAllPending();
         }
         sendResponse({ ok: true });
@@ -148,6 +157,7 @@ const App = () => {
   return (
     <div className="flex min-h-screen flex-col text-gray-200">
       <Header connected={connected} />
+      {versionMismatch && <VersionMismatchBanner />}
       <main className="flex-1 px-3 py-2">
         {loading ? (
           <LoadingState />
