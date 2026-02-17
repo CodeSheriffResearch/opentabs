@@ -1,0 +1,375 @@
+/**
+ * Shared E2E test helpers — extracted from individual test files to eliminate
+ * duplication. All test files import these helpers instead of defining their
+ * own copies.
+ */
+
+import {
+  copyE2eTestPlugin,
+  readPluginToolNames,
+  writeTestConfig,
+  startMcpServer,
+  startTestServer,
+  launchExtensionContext,
+  createMcpClient,
+  cleanupTestConfigDir,
+} from './fixtures.js';
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
+import type { McpClient, McpServer, TestServer } from './fixtures.js';
+import type { BrowserContext, Page } from '@playwright/test';
+
+// ---------------------------------------------------------------------------
+// Log and health polling
+// ---------------------------------------------------------------------------
+
+/**
+ * Wait until the server's accumulated logs contain `substring`.
+ * Polls the logs array every `intervalMs` until found or timeout.
+ */
+export const waitForLog = async (
+  server: McpServer,
+  substring: string,
+  timeoutMs = 15_000,
+  intervalMs = 200,
+): Promise<void> => {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    if (server.logs.join('\n').includes(substring)) return;
+    await new Promise(r => setTimeout(r, intervalMs));
+  }
+  throw new Error(
+    `waitForLog timed out after ${timeoutMs}ms waiting for "${substring}".\n` +
+      `Logs so far:\n${server.logs.join('\n')}`,
+  );
+};
+
+/**
+ * Wait for the extension to connect to the MCP server.
+ * Polls /health until extensionConnected === true.
+ */
+export const waitForExtensionConnected = async (server: McpServer, timeoutMs = 45_000): Promise<void> => {
+  await server.waitForHealth(h => h.extensionConnected, timeoutMs);
+};
+
+/**
+ * Wait for the extension to be disconnected from the MCP server.
+ * Polls /health until extensionConnected === false.
+ */
+export const waitForExtensionDisconnected = async (server: McpServer, timeoutMs = 10_000): Promise<void> => {
+  await server.waitForHealth(h => !h.extensionConnected, timeoutMs);
+};
+
+// ---------------------------------------------------------------------------
+// Generic condition polling
+// ---------------------------------------------------------------------------
+
+/**
+ * Poll a predicate until it returns true or timeout. Use this instead of
+ * fixed `setTimeout` waits — it's both faster (returns as soon as the
+ * condition is met) and more reliable (doesn't depend on wall-clock guesses).
+ */
+export const waitFor = async (
+  predicate: () => boolean | Promise<boolean>,
+  timeoutMs = 10_000,
+  intervalMs = 250,
+  label = 'condition',
+): Promise<void> => {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    if (await predicate()) return;
+    await new Promise(r => setTimeout(r, intervalMs));
+  }
+  throw new Error(`waitFor timed out after ${timeoutMs}ms waiting for: ${label}`);
+};
+
+/**
+ * Wait until a tool call returns the expected outcome (success or error).
+ * Replaces fixed `setTimeout` waits after state changes (auth toggle, tab
+ * close/reopen, error mode) — polls by actually calling the tool until
+ * the result matches expectations.
+ */
+export const waitForToolResult = async (
+  mcpClient: McpClient,
+  toolName: string,
+  args: Record<string, unknown>,
+  expect: { isError: boolean },
+  timeoutMs = 15_000,
+  intervalMs = 500,
+): Promise<{ content: string; isError: boolean }> => {
+  const deadline = Date.now() + timeoutMs;
+  let last: { content: string; isError: boolean } | undefined;
+  while (Date.now() < deadline) {
+    try {
+      last = await mcpClient.callTool(toolName, args);
+      if (last.isError === expect.isError) return last;
+    } catch {
+      // MCP call itself failed — retry
+    }
+    await new Promise(r => setTimeout(r, intervalMs));
+  }
+  throw new Error(
+    `waitForToolResult timed out after ${timeoutMs}ms waiting for ${toolName} ` +
+      `isError=${String(expect.isError)}. Last result: ${last ? `isError=${String(last.isError)}, content=${last.content.slice(0, 200)}` : 'none'}`,
+  );
+};
+
+/**
+ * Poll `listTools()` until the tool list satisfies a predicate.
+ * Replaces the `waitForLog('Manifest updated') + sleep(500)` pattern in
+ * file-watcher and hot-reload tests.
+ */
+export const waitForToolList = async (
+  mcpClient: McpClient,
+  predicate: (tools: Array<{ name: string; description: string; inputSchema?: unknown }>) => boolean,
+  timeoutMs = 10_000,
+  intervalMs = 300,
+  label = 'tool list condition',
+): Promise<Array<{ name: string; description: string; inputSchema?: unknown }>> => {
+  const deadline = Date.now() + timeoutMs;
+  let last: Array<{ name: string; description: string; inputSchema?: unknown }> = [];
+  while (Date.now() < deadline) {
+    try {
+      last = await mcpClient.listTools();
+      if (predicate(last)) return last;
+    } catch {
+      // MCP call failed — retry
+    }
+    await new Promise(r => setTimeout(r, intervalMs));
+  }
+  throw new Error(
+    `waitForToolList timed out after ${timeoutMs}ms waiting for: ${label}. ` +
+      `Last tool names: [${last.map(t => t.name).join(', ')}]`,
+  );
+};
+
+// ---------------------------------------------------------------------------
+// Tool result parsing
+// ---------------------------------------------------------------------------
+
+export const parseToolResult = (content: string): Record<string, unknown> =>
+  JSON.parse(content) as Record<string, unknown>;
+
+// ---------------------------------------------------------------------------
+// Browser tool names
+// ---------------------------------------------------------------------------
+
+/** Known browser tool names that should always be present */
+export const BROWSER_TOOL_NAMES = [
+  'browser_list_tabs',
+  'browser_open_tab',
+  'browser_close_tab',
+  'browser_navigate_tab',
+  'browser_execute_script',
+  'extension_reload',
+];
+
+// ---------------------------------------------------------------------------
+// Test setup helpers
+// ---------------------------------------------------------------------------
+
+/**
+ * Standard test preamble: wait for extension, open tab, poll until the
+ * e2e-test plugin reports "ready" state, init MCP client.
+ * Returns the page handle.
+ */
+export const setupToolTest = async (
+  mcpServer: McpServer,
+  testServer: TestServer,
+  extensionContext: BrowserContext,
+  mcpClient: McpClient,
+): Promise<Page> => {
+  await waitForExtensionConnected(mcpServer);
+  await waitForLog(mcpServer, 'tab.syncAll received');
+  await testServer.reset();
+
+  const page = await openTestAppTab(extensionContext, testServer.url, mcpServer, testServer);
+
+  // Poll until the tool is actually callable (tab state = ready) instead
+  // of using a fixed READY_SETTLE_MS sleep.
+  await waitForToolResult(mcpClient, 'e2e-test_get_status', {}, { isError: false }, 15_000);
+
+  return page;
+};
+
+/**
+ * Call a tool and throw with diagnostics if the result is unexpectedly an error.
+ */
+export const callToolExpectSuccess = async (
+  mcpClient: McpClient,
+  mcpServer: McpServer,
+  toolName: string,
+  args: Record<string, unknown> = {},
+): Promise<Record<string, unknown>> => {
+  const result = await mcpClient.callTool(toolName, args);
+  if (result.isError) {
+    throw new Error(
+      `${toolName} returned isError=true.\n` +
+        `Content: ${result.content}\n` +
+        `MCP server logs (last 5):\n${mcpServer.logs.slice(-5).join('\n')}`,
+    );
+  }
+  return parseToolResult(result.content);
+};
+
+// ---------------------------------------------------------------------------
+// Test app tab helpers
+// ---------------------------------------------------------------------------
+
+/**
+ * Open the test app tab and wait for the e2e-test adapter to be injected.
+ * Polls with rich diagnostics — fails fast with context.
+ */
+export const openTestAppTab = async (
+  context: BrowserContext,
+  testServerUrl: string,
+  mcpServer?: McpServer,
+  testServer?: TestServer,
+  timeoutMs = 20_000,
+): Promise<Page> => {
+  const page = await context.newPage();
+  await page.goto(testServerUrl, { waitUntil: 'load' });
+
+  const deadline = Date.now() + timeoutMs;
+  let lastDiag = '';
+
+  while (Date.now() < deadline) {
+    const injected = await page.evaluate(() => {
+      const ot = (globalThis as Record<string, unknown>).__openTabs as
+        | { adapters?: Record<string, unknown> }
+        | undefined;
+      return {
+        hasOpenTabs: ot !== undefined,
+        hasAdapters: ot?.adapters !== undefined,
+        hasE2eTest: ot?.adapters?.['e2e-test'] !== undefined,
+        adapterNames: ot?.adapters ? Object.keys(ot.adapters) : [],
+      };
+    });
+
+    if (injected.hasE2eTest) {
+      return page;
+    }
+
+    // Build diagnostic snapshot periodically
+    if (Date.now() % 2000 < 500) {
+      const parts: string[] = [
+        `adapter: openTabs=${String(injected.hasOpenTabs)}, adapters=${String(injected.hasAdapters)}, e2e-test=${String(injected.hasE2eTest)}, names=[${injected.adapterNames.join(',')}]`,
+      ];
+
+      if (mcpServer) {
+        const h = await mcpServer.health().catch(() => null);
+        parts.push(`mcp: ${h ? `connected=${String(h.extensionConnected)}, plugins=${h.plugins}` : 'unreachable'}`);
+      }
+
+      if (testServer) {
+        try {
+          const diag = (await testServer.controlGet('diagnostics')) as Record<string, unknown>;
+          const counts = diag.counts as Record<string, number> | undefined;
+          const authChecks = counts?.authCheckCalls ?? '?';
+          const adapterLikely =
+            typeof diag.adapterLikelyInjected === 'boolean' || typeof diag.adapterLikelyInjected === 'string'
+              ? diag.adapterLikelyInjected
+              : '?';
+          parts.push(`testServer: authChecks=${String(authChecks)}, adapterLikely=${String(adapterLikely)}`);
+        } catch {
+          parts.push('testServer: unreachable');
+        }
+      }
+
+      lastDiag = parts.join(' | ');
+    }
+
+    await new Promise(r => setTimeout(r, 500));
+  }
+
+  const finalParts: string[] = [`Adapter not injected after ${timeoutMs}ms`];
+  finalParts.push(`Last diagnostic: ${lastDiag}`);
+  if (mcpServer) {
+    finalParts.push(`MCP server logs (last 10):\n${mcpServer.logs.slice(-10).join('\n')}`);
+  }
+  finalParts.push(`Tab URL: ${page.url()}`);
+
+  await page.close();
+  throw new Error(finalParts.join('\n\n'));
+};
+
+// ---------------------------------------------------------------------------
+// Isolated IIFE test setup — encapsulates repeated infrastructure for tests
+// that use raw Playwright `test` (not fixture-based `fixtureTest`).
+// ---------------------------------------------------------------------------
+
+/**
+ * Resources created by setupIsolatedIifeTest, with a cleanup() method
+ * that tears down everything in the correct order.
+ */
+export interface IsolatedIifeTestContext {
+  /** Per-test copy of the e2e-test plugin directory. */
+  pluginDir: string;
+  /** Config directory for this test's MCP server. */
+  configDir: string;
+  /** MCP server subprocess with hot reload enabled. */
+  server: McpServer;
+  /** Controllable test web server. */
+  testServer: TestServer;
+  /** Chromium browser context with the extension loaded. */
+  context: BrowserContext;
+  /** MCP client connected to this test's server. */
+  client: McpClient;
+  /** Tear down all resources (servers, client, browser, temp dirs). */
+  cleanup: () => Promise<void>;
+}
+
+/**
+ * Standard setup for isolated IIFE injection tests that need their own
+ * plugin copy, config directory, MCP server, test server, extension context,
+ * and MCP client.
+ *
+ * Encapsulates the repeated 8-step infrastructure that appears in every
+ * non-fixture IIFE test: copyE2eTestPlugin, mkdtemp for config, build tool
+ * config, startMcpServer, startTestServer, launchExtensionContext with adapter
+ * symlink, createMcpClient, initialize + waitForExtensionConnected + waitForLog.
+ *
+ * Returns an IsolatedIifeTestContext with all resources and a cleanup() function.
+ * Use in a try/finally block: `try { ... } finally { await ctx.cleanup(); }`
+ */
+export const setupIsolatedIifeTest = async (configDirPrefix: string): Promise<IsolatedIifeTestContext> => {
+  const { pluginDir, tmpDir } = copyE2eTestPlugin();
+  const configDir = fs.mkdtempSync(path.join(os.tmpdir(), `opentabs-e2e-${configDirPrefix}-`));
+
+  const prefixedToolNames = readPluginToolNames();
+  const tools: Record<string, boolean> = {};
+  for (const t of prefixedToolNames) {
+    tools[t] = true;
+  }
+  writeTestConfig(configDir, { plugins: [pluginDir], tools });
+
+  const server = await startMcpServer(configDir, true);
+  const testSrv = await startTestServer();
+
+  const { context, cleanupDir, extensionDir } = await launchExtensionContext(server.port);
+  const serverAdaptersParent = path.join(configDir, 'extension');
+  fs.mkdirSync(serverAdaptersParent, { recursive: true });
+  const serverAdaptersDir = path.join(serverAdaptersParent, 'adapters');
+  const extensionAdaptersDir = path.join(extensionDir, 'adapters');
+  fs.rmSync(serverAdaptersDir, { recursive: true, force: true });
+  fs.symlinkSync(extensionAdaptersDir, serverAdaptersDir);
+
+  const client = createMcpClient(server.port);
+
+  await client.initialize();
+  await waitForExtensionConnected(server);
+  await waitForLog(server, 'tab.syncAll received');
+
+  const cleanup = async () => {
+    await client.close();
+    await context.close();
+    await server.kill();
+    await testSrv.kill();
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+    fs.rmSync(cleanupDir, { recursive: true, force: true });
+    cleanupTestConfigDir(configDir);
+  };
+
+  return { pluginDir, configDir, server, testServer: testSrv, context, client, cleanup };
+};

@@ -1,0 +1,378 @@
+/**
+ * HTTP and WebSocket route handlers.
+ *
+ * Extracted from index.ts so that the entry point is a thin frozen shell
+ * (Bun.serve() delegate, HotState management, reload orchestration) while
+ * all routing logic lives here and hot-reloads freely.
+ *
+ * Includes sweepStaleSessions() to prevent memory leaks in the sessionServers
+ * array. If an MCP client drops the TCP connection without a proper close
+ * (network partition, OOM kill), the onsessionclosed / transport.onclose
+ * callbacks may never fire, leaving ghost entries. The sweep runs on each
+ * hot reload and removes entries whose transport is no longer in the map.
+ */
+
+import { saveConfig } from './config.js';
+import { handleExtensionMessage, sendSyncFull } from './extension-protocol.js';
+import { log } from './logger.js';
+import { createMcpServer, notifyToolListChanged } from './mcp-setup.js';
+import { performConfigReload } from './reload.js';
+import { getNextRequestId, STATE_SCHEMA_VERSION } from './state.js';
+import { version } from './version.js';
+import { WebStandardStreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/webStandardStreamableHttp.js';
+import { isInitializeRequest } from '@modelcontextprotocol/sdk/types.js';
+import type { McpCallbacks } from './extension-protocol.js';
+import type { McpServerInstance } from './mcp-setup.js';
+import type { ServerState } from './state.js';
+import type { WsHandle } from '@opentabs/shared';
+
+/** Opaque HotState accessor — index.ts injects the getter */
+type GetHotState = () => { reloadCount: number; lastReloadTimestamp: number; lastReloadDurationMs: number } | undefined;
+
+/** Dependencies injected by index.ts to avoid circular imports */
+interface RouteDeps {
+  state: ServerState;
+  transports: Map<string, WebStandardStreamableHTTPServerTransport>;
+  sessionServers: McpServerInstance[];
+  getHotState: GetHotState;
+}
+
+/** Callbacks for extension protocol → MCP server integration */
+const createMcpCallbacks = (state: ServerState, sessionServers: McpServerInstance[]): McpCallbacks => ({
+  onToolConfigChanged: () => {
+    for (const srv of sessionServers) {
+      notifyToolListChanged(srv);
+    }
+  },
+  onToolConfigPersist: () => {
+    saveConfig(state, {
+      plugins: state.pluginPaths,
+      tools: { ...state.toolConfig },
+      secret: state.wsSecret ?? undefined,
+    }).catch(() => {
+      // Error already logged by saveConfig
+    });
+  },
+});
+
+const createHandleFetch =
+  ({ state, transports, sessionServers, getHotState }: RouteDeps) =>
+  async (
+    req: Request,
+    bunServer: {
+      upgrade: (req: Request, opts: { data: unknown }) => boolean;
+      timeout: (req: Request, seconds: number) => void;
+    },
+  ): Promise<Response | undefined> => {
+    const url = new URL(req.url);
+
+    // --- CORS protection ---
+    // MCP clients (Claude Code, etc.) don't run in browsers, so legitimate
+    // requests never carry an Origin header. Reject requests with an Origin
+    // header to prevent DNS rebinding attacks from malicious web pages.
+    //
+    // Chrome extension requests carry an Origin of `chrome-extension://...`
+    // and must be allowed through — the extension's background script
+    // fetches /ws-info to obtain the authenticated WebSocket URL.
+    const origin = req.headers.get('Origin');
+    if (origin && !origin.startsWith('chrome-extension://')) {
+      return new Response('Forbidden: browser requests are not allowed', { status: 403 });
+    }
+
+    // --- WebSocket upgrade for extension ---
+    if (url.pathname === '/ws') {
+      // Authenticate WebSocket connections using a shared secret
+      if (state.wsSecret) {
+        const token = url.searchParams.get('token');
+        if (token !== state.wsSecret) {
+          return new Response('Unauthorized', { status: 401 });
+        }
+      }
+      const upgraded = bunServer.upgrade(req, { data: undefined });
+      if (!upgraded) {
+        return new Response('WebSocket upgrade failed', { status: 400 });
+      }
+      return undefined;
+    }
+
+    // --- WebSocket info endpoint (for extension authentication) ---
+    if (url.pathname === '/ws-info' && req.method === 'GET') {
+      const wsUrl = state.wsSecret
+        ? `ws://${url.host}/ws?token=${encodeURIComponent(state.wsSecret)}`
+        : `ws://${url.host}/ws`;
+      return Response.json({ wsUrl });
+    }
+
+    // --- Health endpoint ---
+    if (url.pathname === '/health' && req.method === 'GET') {
+      const hs = getHotState();
+
+      const pluginDetails = [...state.plugins.values()].map(p => ({
+        name: p.name,
+        displayName: p.displayName ?? p.name,
+        toolCount: p.tools.length,
+        tabState: state.tabMapping.get(p.name)?.state ?? 'closed',
+      }));
+
+      const toolCount = state.toolLookup.size + state.cachedBrowserTools.length;
+      const uptimeSeconds = Math.floor((Date.now() - state.startedAt) / 1000);
+
+      return Response.json({
+        status: 'ok',
+        version,
+        extensionConnected: state.extensionWs !== null,
+        mcpClients: transports.size,
+        plugins: state.plugins.size,
+        pluginDetails,
+        toolCount,
+        uptime: uptimeSeconds,
+        reloadCount: hs?.reloadCount ?? 0,
+        lastReloadTimestamp: hs?.lastReloadTimestamp ?? 0,
+        lastReloadDurationMs: hs?.lastReloadDurationMs ?? 0,
+        stateSchemaVersion: STATE_SCHEMA_VERSION,
+      });
+    }
+
+    // --- Config/plugin rediscovery endpoint ---
+    if (url.pathname === '/reload' && req.method === 'POST') {
+      try {
+        const result = await performConfigReload(state, sessionServers, transports);
+        return Response.json({
+          ok: true,
+          plugins: result.plugins,
+          durationMs: result.durationMs,
+        });
+      } catch (err) {
+        log.error(`Config reload failed: ${err instanceof Error ? err.message : String(err)}`);
+        return Response.json({ ok: false, error: err instanceof Error ? err.message : String(err) }, { status: 500 });
+      }
+    }
+
+    // --- Extension reload endpoint ---
+    if (url.pathname === '/extension/reload' && req.method === 'POST') {
+      if (!state.extensionWs) {
+        return Response.json({ ok: false, error: 'Extension not connected' }, { status: 503 });
+      }
+      const id = getNextRequestId(state);
+      state.extensionWs.send(JSON.stringify({ jsonrpc: '2.0', method: 'extension.reload', id }));
+      return Response.json({ ok: true, message: 'Reload signal sent to extension' });
+    }
+
+    // --- MCP Streamable HTTP transport ---
+    if (url.pathname === '/mcp') {
+      // Disable Bun's per-connection idle timeout for MCP requests.
+      // Tool dispatches can take up to DISPATCH_TIMEOUT_MS (30s) and the
+      // Streamable HTTP transport holds the response open until the tool
+      // result arrives. The default idle timeout (10s) would close the
+      // connection before long-running dispatches complete.
+      bunServer.timeout(req, 0);
+
+      const sessionId = req.headers.get('mcp-session-id');
+
+      if (req.method === 'POST') {
+        // Existing session
+        if (sessionId) {
+          const existingTransport = transports.get(sessionId);
+          if (existingTransport) {
+            return existingTransport.handleRequest(req);
+          }
+        }
+
+        // New session — check if it's an initialize request
+        const body: unknown = await req.json().catch(() => null);
+        if (body && isInitializeRequest(body)) {
+          let sessionServer: McpServerInstance | null = null;
+
+          const removeSession = (): void => {
+            if (sessionServer) {
+              const idx = sessionServers.indexOf(sessionServer);
+              if (idx !== -1) sessionServers.splice(idx, 1);
+              sessionServer = null;
+            }
+          };
+
+          const transport = new WebStandardStreamableHTTPServerTransport({
+            sessionIdGenerator: () => crypto.randomUUID(),
+            onsessioninitialized: (sid: string) => {
+              transports.set(sid, transport);
+              // Track which transport this session is connected to for stale sweep
+              if (sessionServer) {
+                state.sessionTransportIds.set(sessionServer, sid);
+              }
+              log.info(`MCP client connected (session: ${sid})`);
+            },
+            onsessionclosed: (sid: string) => {
+              transports.delete(sid);
+              removeSession();
+              log.info(`MCP client disconnected (session: ${sid})`);
+            },
+          });
+
+          transport.onclose = () => {
+            if (transport.sessionId) {
+              transports.delete(transport.sessionId);
+            }
+            removeSession();
+          };
+
+          sessionServer = await createMcpServer(state);
+          sessionServers.push(sessionServer);
+          await sessionServer.connect(transport);
+          return transport.handleRequest(req, { parsedBody: body });
+        }
+
+        return Response.json(
+          {
+            jsonrpc: '2.0',
+            error: {
+              code: -32600,
+              message: 'Bad Request: missing session or not an initialize request',
+            },
+            id: null,
+          },
+          { status: 400 },
+        );
+      }
+
+      if (req.method === 'GET') {
+        const getTransport = sessionId ? transports.get(sessionId) : undefined;
+        if (getTransport) {
+          return getTransport.handleRequest(req);
+        }
+        return new Response('Missing or invalid session', { status: 400 });
+      }
+
+      if (req.method === 'DELETE') {
+        const delTransport = sessionId ? transports.get(sessionId) : undefined;
+        if (delTransport) {
+          return delTransport.handleRequest(req);
+        }
+        return new Response('Missing or invalid session', { status: 400 });
+      }
+
+      return new Response('Method not allowed', { status: 405 });
+    }
+
+    return new Response('Not Found', { status: 404 });
+  };
+
+const createHandleWsOpen =
+  (state: ServerState) =>
+  (ws: WsHandle): void => {
+    // Close any previous extension connection (only one allowed)
+    if (state.extensionWs && state.extensionWs !== ws) {
+      log.info('Closing previous extension WebSocket (replaced by new connection)');
+      try {
+        state.extensionWs.close(1000, 'Replaced by new connection');
+      } catch {
+        // Already closed
+      }
+    }
+
+    log.info('Extension WebSocket connected');
+    state.extensionWs = ws;
+    void sendSyncFull(state);
+  };
+
+const createHandleWsMessage =
+  (state: ServerState, mcpCallbacks: McpCallbacks) =>
+  (ws: WsHandle, message: string | ArrayBuffer | Uint8Array): void => {
+    const text = typeof message === 'string' ? message : new TextDecoder().decode(message);
+    handleExtensionMessage(state, text, mcpCallbacks, ws);
+  };
+
+const createHandleWsClose =
+  (state: ServerState) =>
+  (ws: WsHandle): void => {
+    log.info('Extension WebSocket disconnected');
+    if (state.extensionWs === ws) {
+      state.extensionWs = null;
+
+      // Reject all pending dispatches immediately so MCP clients get a fast
+      // error instead of hanging until the 30-second dispatch timeout fires.
+      if (state.pendingDispatches.size > 0) {
+        log.info(`Rejecting ${state.pendingDispatches.size} pending dispatch(es) due to extension disconnect`);
+        for (const [id, pending] of state.pendingDispatches) {
+          state.pendingDispatches.delete(id);
+          clearTimeout(pending.timerId);
+          pending.reject(new Error('Extension disconnected'));
+        }
+      }
+    }
+  };
+
+/** Hot-reloadable handler functions for the Bun.serve() delegate shell */
+interface HotHandlers {
+  /** HTTP request handler — all routing logic */
+  fetch: (
+    req: Request,
+    bunServer: {
+      upgrade: (req: Request, opts: { data: unknown }) => boolean;
+      timeout: (req: Request, seconds: number) => void;
+    },
+  ) => Promise<Response | undefined>;
+  /** Extension WebSocket opened */
+  wsOpen: (ws: WsHandle) => void;
+  /** Extension WebSocket message received */
+  wsMessage: (ws: WsHandle, message: string | ArrayBuffer | Uint8Array) => void;
+  /** Extension WebSocket closed */
+  wsClose: (ws: WsHandle) => void;
+}
+
+/**
+ * Create all hot-reloadable handler functions.
+ * Called on every module evaluation (first load + hot reloads) to produce
+ * fresh closures over the latest module imports.
+ */
+const createHandlers = (deps: RouteDeps): HotHandlers => {
+  const mcpCallbacks = createMcpCallbacks(deps.state, deps.sessionServers);
+  return {
+    fetch: createHandleFetch(deps),
+    wsOpen: createHandleWsOpen(deps.state),
+    wsMessage: createHandleWsMessage(deps.state, mcpCallbacks),
+    wsClose: createHandleWsClose(deps.state),
+  };
+};
+
+/**
+ * Remove sessionServers entries whose transport is no longer in the transports
+ * map. This prevents unbounded growth when MCP clients disconnect ungracefully
+ * (network partition, OOM kill) and the onsessionclosed / transport.onclose
+ * callbacks never fire.
+ *
+ * Each session server is tracked in state.sessionTransportIds (a WeakMap keyed
+ * by the McpServerInstance) with the transport session ID it was connected to.
+ * A session is stale if its transport ID is absent from the active transports
+ * map — meaning the transport was cleaned up but the session server was not.
+ *
+ * Called on each hot reload from reload.ts.
+ */
+const sweepStaleSessions = (
+  state: ServerState,
+  transports: Map<string, WebStandardStreamableHTTPServerTransport>,
+  sessionServers: McpServerInstance[],
+): number => {
+  let swept = 0;
+
+  for (let i = sessionServers.length - 1; i >= 0; i--) {
+    const srv = sessionServers[i];
+    if (!srv) continue;
+    const transportId = state.sessionTransportIds.get(srv);
+    // If we have a recorded transport ID and that transport is gone, the session is stale.
+    // If there is no recorded transport ID, the session may be in-flight (created but
+    // onsessioninitialized hasn't fired yet) — keep it to avoid trimming valid sessions.
+    if (transportId !== undefined && !transports.has(transportId)) {
+      sessionServers.splice(i, 1);
+      swept++;
+    }
+  }
+
+  if (swept > 0) {
+    log.info(`Swept ${swept} stale MCP session(s) (${transports.size} active transport(s) remain)`);
+  }
+
+  return swept;
+};
+
+export type { HotHandlers };
+export { createHandlers, sweepStaleSessions };

@@ -1,0 +1,15 @@
+.DS_Store
+node_modules/
+dist/
+*.tsbuildinfo
+bun.lockb
+test-results/
+playwright-report/
+.env
+.env.local
+.env.*.local
+/.ralph/*
+!/.ralph/RALPH.md
+!/.ralph/ralph.sh
+!/.ralph/PERFECT-LOOP.md
+!/.ralph/perfect.sh

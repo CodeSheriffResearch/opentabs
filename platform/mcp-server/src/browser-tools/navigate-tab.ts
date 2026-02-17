@@ -1,0 +1,21 @@
+/**
+ * browser_navigate_tab — navigates an existing tab to a new URL.
+ */
+
+import { defineBrowserTool } from './definition.js';
+import { safeUrl } from './url-validation.js';
+import { dispatchToExtension } from '../extension-protocol.js';
+import { z } from 'zod';
+
+const navigateTab = defineBrowserTool({
+  name: 'browser_navigate_tab',
+  description: 'Navigate an existing browser tab to a new URL.',
+  input: z.object({
+    tabId: z.number().int().positive().describe('Tab ID to navigate'),
+    url: safeUrl.describe('URL to navigate to'),
+  }),
+  handler: async (args, state) =>
+    dispatchToExtension(state, 'browser.navigateTab', { tabId: args.tabId, url: args.url }),
+});
+
+export { navigateTab };

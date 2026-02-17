@@ -1,0 +1,20 @@
+import { slackApi } from '../slack-api.js';
+import { defineTool } from '@opentabs/plugin-sdk';
+import { z } from 'zod';
+
+export const unpinMessage = defineTool({
+  name: 'unpin_message',
+  description: 'Unpin a message from a Slack channel',
+  input: z.object({
+    channel: z.string().min(1).describe('Channel ID where the message is pinned (e.g., C01234567)'),
+    timestamp: z.string().min(1).describe('Timestamp of the message to unpin (e.g., 1234567890.123456)'),
+  }),
+  output: z.object({}),
+  handle: async params => {
+    await slackApi('pins.remove', {
+      channel: params.channel,
+      timestamp: params.timestamp,
+    });
+    return {};
+  },
+});

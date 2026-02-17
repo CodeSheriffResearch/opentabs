@@ -1,0 +1,19 @@
+/**
+ * browser_open_tab — opens a new browser tab with the given URL.
+ */
+
+import { defineBrowserTool } from './definition.js';
+import { safeUrl } from './url-validation.js';
+import { dispatchToExtension } from '../extension-protocol.js';
+import { z } from 'zod';
+
+const openTab = defineBrowserTool({
+  name: 'browser_open_tab',
+  description: 'Open a new browser tab with the specified URL.',
+  input: z.object({
+    url: safeUrl.describe('URL to open in a new tab'),
+  }),
+  handler: async (args, state) => dispatchToExtension(state, 'browser.openTab', { url: args.url }),
+});
+
+export { openTab };

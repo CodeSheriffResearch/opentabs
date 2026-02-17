@@ -1,0 +1,23 @@
+{
+  "name": "@opentabs/browser-extension",
+  "version": "0.0.1",
+  "type": "module",
+  "exports": {
+    "./package.json": "./package.json"
+  },
+  "scripts": {
+    "build": "tsc --build",
+    "build:bundle": "bun run build-extension.ts",
+    "build:side-panel": "bun run build-side-panel.ts && bun run build:tailwind",
+    "build:tailwind": "bunx @tailwindcss/cli -i src/side-panel/styles.css -o dist/side-panel/styles.css --minify"
+  },
+  "dependencies": {
+    "@opentabs/shared": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/chrome": "^0.1.36",
+    "lucide-react": "^0.563.0",
+    "react": "^19.2.4",
+    "react-dom": "^19.2.4"
+  }
+}

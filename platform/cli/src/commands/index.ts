@@ -1,0 +1,9 @@
+export { registerBuildCommand } from './build.js';
+export { registerConfigCommand } from './config.js';
+export { registerDevCommand } from './dev.js';
+export { registerDoctorCommand } from './doctor.js';
+export { registerLogsCommand } from './logs.js';
+export { registerReloadCommand } from './reload.js';
+export { registerStatusCommand } from './status.js';
+export { registerSetupCommand } from './setup.js';
+export { registerPluginCommand } from './plugin.js';

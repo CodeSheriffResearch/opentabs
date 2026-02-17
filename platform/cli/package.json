@@ -1,0 +1,30 @@
+{
+  "name": "@opentabs/cli",
+  "version": "0.0.1",
+  "type": "module",
+  "exports": {
+    "./scaffold": {
+      "types": "./dist/scaffold.d.ts",
+      "import": "./dist/scaffold.js"
+    }
+  },
+  "bin": {
+    "opentabs": "./dist/cli.js"
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsc --build"
+  },
+  "dependencies": {
+    "@opentabs/plugin-sdk": "workspace:*",
+    "@opentabs/shared": "workspace:*",
+    "commander": "^14.0.3",
+    "picocolors": "^1.1.1",
+    "zod-to-json-schema": "^3.25.1"
+  },
+  "devDependencies": {
+    "bun-types": "^1.3.9"
+  }
+}
