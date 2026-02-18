@@ -35,6 +35,9 @@ const mockHandleBrowserFocusTab = mock(
 const mockHandleBrowserGetTabInfo = mock(
   asyncNoop as (params: Record<string, unknown>, id: string | number) => Promise<void>,
 );
+const mockHandleBrowserGetTabContent = mock(
+  asyncNoop as (params: Record<string, unknown>, id: string | number) => Promise<void>,
+);
 const mockHandleBrowserScreenshotTab = mock(
   asyncNoop as (params: Record<string, unknown>, id: string | number) => Promise<void>,
 );
@@ -57,6 +60,7 @@ await mock.module('./browser-commands.js', () => ({
   handleBrowserCloseTab: mockHandleBrowserCloseTab,
   handleBrowserNavigateTab: mockHandleBrowserNavigateTab,
   handleBrowserFocusTab: mockHandleBrowserFocusTab,
+  handleBrowserGetTabContent: mockHandleBrowserGetTabContent,
   handleBrowserGetTabInfo: mockHandleBrowserGetTabInfo,
   handleBrowserScreenshotTab: mockHandleBrowserScreenshotTab,
   handleBrowserExecuteScript: mockHandleBrowserExecuteScript,
@@ -405,6 +409,7 @@ const resetRoutingMocks = (): void => {
   mockHandleBrowserOpenTab.mockReset();
   mockHandleBrowserCloseTab.mockReset();
   mockHandleBrowserNavigateTab.mockReset();
+  mockHandleBrowserGetTabContent.mockReset();
   mockHandleBrowserScreenshotTab.mockReset();
   mockHandleBrowserExecuteScript.mockReset();
 };
@@ -418,6 +423,7 @@ describe('handleServerMessage', () => {
     mockHandleBrowserOpenTab.mockResolvedValue(undefined);
     mockHandleBrowserCloseTab.mockResolvedValue(undefined);
     mockHandleBrowserNavigateTab.mockResolvedValue(undefined);
+    mockHandleBrowserGetTabContent.mockResolvedValue(undefined);
     mockHandleBrowserScreenshotTab.mockResolvedValue(undefined);
     mockHandleBrowserExecuteScript.mockResolvedValue(undefined);
   });
@@ -592,6 +598,20 @@ describe('handleServerMessage', () => {
 
       expect(mockHandleBrowserGetTabInfo).toHaveBeenCalledTimes(1);
       expect(mockHandleBrowserGetTabInfo).toHaveBeenCalledWith({ tabId: 11 }, 26);
+    });
+
+    test('dispatches browser.getTabContent to handleBrowserGetTabContent', () => {
+      handleServerMessage({
+        method: 'browser.getTabContent',
+        id: 28,
+        params: { tabId: 13, selector: 'body', maxLength: 50000 },
+      });
+
+      expect(mockHandleBrowserGetTabContent).toHaveBeenCalledTimes(1);
+      expect(mockHandleBrowserGetTabContent).toHaveBeenCalledWith(
+        { tabId: 13, selector: 'body', maxLength: 50000 },
+        28,
+      );
     });
 
     test('dispatches browser.screenshotTab to handleBrowserScreenshotTab', () => {

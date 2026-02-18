@@ -2,6 +2,7 @@ import {
   handleBrowserCloseTab,
   handleBrowserExecuteScript,
   handleBrowserFocusTab,
+  handleBrowserGetTabContent,
   handleBrowserGetTabInfo,
   handleBrowserListTabs,
   handleBrowserNavigateTab,
@@ -229,6 +230,14 @@ const methodHandlers = new Map<string, MessageHandler>([
     (params, id) => {
       if (id !== undefined) {
         handleBrowserScreenshotTab(params, id).catch(console.error);
+      }
+    },
+  ],
+  [
+    'browser.getTabContent',
+    (params, id) => {
+      if (id !== undefined) {
+        handleBrowserGetTabContent(params, id).catch(console.error);
       }
     },
   ],
