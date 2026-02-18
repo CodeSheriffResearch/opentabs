@@ -202,6 +202,8 @@ cd platform/mcp-server && bun run build
 # 3. Done — bun --hot detects the change and reinitializes
 ```
 
+**Known issue**: `bun --hot` file watchers can go stale on long-running processes (22+ hours). If `bun run build` does not trigger a hot reload (verify via the `/health` endpoint's `reloadCount`), restart the MCP server process manually. Note: `tsc` uses `writeFileSync` (in-place, preserves inodes), so this is not a kqueue inode invalidation issue — it is a bug in Bun's file watcher that surfaces on long-running processes (see oven-sh/bun#14568, oven-sh/bun#15200).
+
 ### Chrome Extension Changes
 
 Extension changes require building and manually reloading from `chrome://extensions/`.
@@ -242,6 +244,7 @@ You are the best frontend React engineer, the best UI/UX designer, and the best 
 - **Think before acting** - step back and consider the broader design before making changes. Ask: "Is this the right place for this code? Is this the right level of abstraction? Will this be clear to the next person reading it?"
 - **Decide component boundaries before coding** - when building UI, determine which component owns which state and which DOM elements before writing any JSX. If controls must appear on the same row, they must live in the same component's render output. Do not split a visual unit across component boundaries and then try to patch it back together with props, slots, or wrappers. If the first attempt creates a layout problem, do not patch the symptom — redesign the boundary.
 - **Never iterate in circles** - if a fix introduces a new problem, stop. Do not apply another incremental patch. Instead, re-examine the root cause and identify the correct architectural solution. Two failed attempts at the same problem means the approach is wrong, not that it needs more tweaking.
+- **Search for existing solutions before inventing your own** - when facing an unfamiliar problem (runtime behavior, library quirk, platform limitation), search online for similar issues before guessing at a fix. Check official documentation, GitHub issues, and community forums (Stack Overflow, etc.) for known solutions and workarounds. The correct fix is often already documented — inventing a workaround without researching first wastes time and risks introducing a worse solution than the established one.
 - **No TODO/FIXME/HACK comments** - if something needs to be done, do it now. Do not leave markers for future work as an excuse to ship incomplete code.
 - **Naming matters** - spend time choosing precise, descriptive names for variables, functions, types, and files. A good name eliminates the need for a comment.
 - **Delete fearlessly** - if code is unused, remove it. If a file is obsolete, delete it. Dead code is noise that obscures intent.
