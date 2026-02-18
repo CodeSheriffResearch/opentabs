@@ -82,6 +82,9 @@ const mockHandleBrowserClearConsoleLogs = mock(syncNoop);
 const mockHandleBrowserExecuteScript = mock(
   asyncNoop as (params: Record<string, unknown>, id: string | number) => Promise<void>,
 );
+const mockHandleBrowserListResources = mock(
+  asyncNoop as (params: Record<string, unknown>, id: string | number) => Promise<void>,
+);
 
 await mock.module('./messaging.js', () => ({
   sendToServer: mockSendToServer,
@@ -117,6 +120,7 @@ await mock.module('./browser-commands.js', () => ({
   handleBrowserGetConsoleLogs: mockHandleBrowserGetConsoleLogs,
   handleBrowserClearConsoleLogs: mockHandleBrowserClearConsoleLogs,
   handleBrowserExecuteScript: mockHandleBrowserExecuteScript,
+  handleBrowserListResources: mockHandleBrowserListResources,
 }));
 
 // Chrome API stubs for modules that are NOT mocked (plugin-storage, iife-injection,
@@ -480,6 +484,7 @@ const resetRoutingMocks = (): void => {
   mockHandleBrowserGetConsoleLogs.mockReset();
   mockHandleBrowserClearConsoleLogs.mockReset();
   mockHandleBrowserExecuteScript.mockReset();
+  mockHandleBrowserListResources.mockReset();
 };
 
 describe('handleServerMessage', () => {
@@ -505,6 +510,7 @@ describe('handleServerMessage', () => {
     mockHandleBrowserDeleteCookies.mockResolvedValue(undefined);
     mockHandleBrowserEnableNetworkCapture.mockResolvedValue(undefined);
     mockHandleBrowserExecuteScript.mockResolvedValue(undefined);
+    mockHandleBrowserListResources.mockResolvedValue(undefined);
   });
 
   describe('sync.full routing', () => {
@@ -890,6 +896,17 @@ describe('handleServerMessage', () => {
 
       expect(mockHandleBrowserExecuteScript).toHaveBeenCalledTimes(1);
       expect(mockHandleBrowserExecuteScript).toHaveBeenCalledWith({ tabId: 7, code: 'return 1' }, 24);
+    });
+
+    test('dispatches browser.listResources to handleBrowserListResources', () => {
+      handleServerMessage({
+        method: 'browser.listResources',
+        id: 43,
+        params: { tabId: 25, type: 'Script' },
+      });
+
+      expect(mockHandleBrowserListResources).toHaveBeenCalledTimes(1);
+      expect(mockHandleBrowserListResources).toHaveBeenCalledWith({ tabId: 25, type: 'Script' }, 43);
     });
   });
 

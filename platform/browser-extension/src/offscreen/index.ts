@@ -61,6 +61,7 @@ const ALLOWED_METHODS = new Set([
   'browser.getConsoleLogs',
   'browser.clearConsoleLogs',
   'browser.executeScript',
+  'browser.listResources',
   'extension.reload',
 ]);
 

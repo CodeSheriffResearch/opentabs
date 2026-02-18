@@ -1,8 +1,34 @@
 import { SCRIPT_TIMEOUT_MS } from './constants.js';
 import { sendToServer } from './messaging.js';
-import { startCapture, stopCapture, getRequests, getConsoleLogs, clearConsoleLogs } from './network-capture.js';
+import {
+  isCapturing,
+  startCapture,
+  stopCapture,
+  getRequests,
+  getConsoleLogs,
+  clearConsoleLogs,
+} from './network-capture.js';
 import { sanitizeErrorMessage } from './sanitize-error.js';
 import { isBlockedUrlScheme } from '@opentabs-dev/shared';
+
+interface CdpFrame {
+  id: string;
+  url: string;
+  securityOrigin: string;
+}
+
+interface CdpResource {
+  url: string;
+  type: string;
+  mimeType: string;
+  contentLength?: number;
+}
+
+interface CdpFrameResourceTree {
+  frame: CdpFrame;
+  childFrames?: CdpFrameResourceTree[];
+  resources: CdpResource[];
+}
 
 export const handleBrowserListTabs = async (id: string | number): Promise<void> => {
   try {
@@ -1076,6 +1102,84 @@ export const handleBrowserClearConsoleLogs = (params: Record<string, unknown>, i
     }
     clearConsoleLogs(tabId);
     sendToServer({ jsonrpc: '2.0', result: { cleared: true }, id });
+  } catch (err) {
+    sendToServer({
+      jsonrpc: '2.0',
+      error: { code: -32603, message: sanitizeErrorMessage(err instanceof Error ? err.message : String(err)) },
+      id,
+    });
+  }
+};
+
+export const handleBrowserListResources = async (
+  params: Record<string, unknown>,
+  id: string | number,
+): Promise<void> => {
+  try {
+    const tabId = params.tabId;
+    if (typeof tabId !== 'number') {
+      sendToServer({ jsonrpc: '2.0', error: { code: -32602, message: 'Missing or invalid tabId parameter' }, id });
+      return;
+    }
+    const typeFilter = typeof params.type === 'string' ? params.type : undefined;
+
+    const alreadyAttached = isCapturing(tabId);
+    if (!alreadyAttached) {
+      try {
+        await chrome.debugger.attach({ tabId }, '1.3');
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        sendToServer({
+          jsonrpc: '2.0',
+          error: {
+            code: -32603,
+            message: msg.includes('Another debugger')
+              ? 'Failed to attach debugger — another debugger (e.g., DevTools) is already attached. ' +
+                'Close DevTools or enable network capture first (browser_enable_network_capture) ' +
+                'so this tool can reuse the existing debugger session.'
+              : `Failed to attach debugger: ${sanitizeErrorMessage(msg)}`,
+          },
+          id,
+        });
+        return;
+      }
+    }
+
+    try {
+      await chrome.debugger.sendCommand({ tabId }, 'Page.enable');
+      const treeResult = (await chrome.debugger.sendCommand({ tabId }, 'Page.getResourceTree')) as {
+        frameTree: CdpFrameResourceTree;
+      };
+
+      const frames: Array<{ url: string; securityOrigin: string }> = [];
+      const resources: Array<{ url: string; type: string; mimeType: string; contentLength: number }> = [];
+
+      const walk = (node: CdpFrameResourceTree): void => {
+        frames.push({ url: node.frame.url, securityOrigin: node.frame.securityOrigin });
+        for (const r of node.resources) {
+          if (typeFilter && r.type !== typeFilter) continue;
+          resources.push({
+            url: r.url,
+            type: r.type,
+            mimeType: r.mimeType,
+            contentLength: r.contentLength ?? -1,
+          });
+        }
+        if (node.childFrames) {
+          for (const child of node.childFrames) walk(child);
+        }
+      };
+
+      walk(treeResult.frameTree);
+
+      resources.sort((a, b) => a.type.localeCompare(b.type) || a.url.localeCompare(b.url));
+
+      sendToServer({ jsonrpc: '2.0', result: { frames, resources }, id });
+    } finally {
+      if (!alreadyAttached) {
+        await chrome.debugger.detach({ tabId }).catch(() => {});
+      }
+    }
   } catch (err) {
     sendToServer({
       jsonrpc: '2.0',

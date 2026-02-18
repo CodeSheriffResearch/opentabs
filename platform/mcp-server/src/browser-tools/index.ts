@@ -17,6 +17,7 @@ import { getPageHtml } from './get-page-html.js';
 import { getStorage } from './get-storage.js';
 import { getTabContent } from './get-tab-content.js';
 import { getTabInfo } from './get-tab-info.js';
+import { listResources } from './list-resources.js';
 import { listTabs } from './list-tabs.js';
 import { navigateTab } from './navigate-tab.js';
 import { openTab } from './open-tab.js';
@@ -55,6 +56,7 @@ const browserTools: BrowserToolDefinition[] = [
   disableNetworkCapture,
   getConsoleLogs,
   clearConsoleLogs,
+  listResources,
 ];
 
 export { browserTools };
