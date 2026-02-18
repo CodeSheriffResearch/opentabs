@@ -173,8 +173,13 @@ export const startCapture = async (tabId: number, maxRequests: number = 100, url
     );
   }
 
-  await chrome.debugger.sendCommand({ tabId }, 'Network.enable');
-  await chrome.debugger.sendCommand({ tabId }, 'Runtime.enable');
+  try {
+    await chrome.debugger.sendCommand({ tabId }, 'Network.enable');
+    await chrome.debugger.sendCommand({ tabId }, 'Runtime.enable');
+  } catch (err) {
+    await chrome.debugger.detach({ tabId }).catch(() => {});
+    throw err;
+  }
 
   captures.set(tabId, {
     requests: [],
