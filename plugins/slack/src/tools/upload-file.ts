@@ -63,9 +63,19 @@ export const uploadFile = defineTool({
       throw new ToolError('Failed to obtain upload URL from Slack', 'upload_url_failed');
     }
 
+    const uploadUrl = new URL(uploadResponse.upload_url);
+    if (uploadUrl.protocol !== 'https:') {
+      throw new ToolError('Upload URL must use HTTPS', 'insecure_protocol');
+    }
+    const SLACK_DOMAINS = ['slack.com', 'slack-edge.com'];
+    if (!SLACK_DOMAINS.some(d => uploadUrl.hostname === d || uploadUrl.hostname.endsWith('.' + d))) {
+      throw new ToolError('Upload URL domain is not a trusted Slack domain', 'untrusted_upload_domain');
+    }
+
     const uploadResult = await fetch(uploadResponse.upload_url, {
       method: 'POST',
       body: contentBytes,
+      redirect: 'error',
       signal: AbortSignal.timeout(30_000),
     });
     if (!uploadResult.ok) {
