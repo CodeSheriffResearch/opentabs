@@ -169,8 +169,15 @@ const toPascalCase = (name: string): string =>
     .map(part => part.charAt(0).toUpperCase() + part.slice(1))
     .join('');
 
+/** Convert a hyphenated name to title case: "my-cool-plugin" → "My Cool Plugin" */
+const toTitleCase = (name: string): string =>
+  name
+    .split('-')
+    .map(part => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(' ');
+
 const generatePluginIndex = (args: ScaffoldArgs, urlPattern: string): string => {
-  const displayName = args.display ?? args.name.charAt(0).toUpperCase() + args.name.slice(1);
+  const displayName = args.display ?? toTitleCase(args.name);
   const desc = args.description ?? `OpenTabs plugin for ${displayName}`;
 
   return `import { OpenTabsPlugin } from '@opentabs-dev/plugin-sdk';
@@ -200,7 +207,7 @@ export default new ${toPascalCase(args.name)}Plugin();
 };
 
 const generateExampleTool = (args: ScaffoldArgs): string => {
-  const displayName = args.display ?? args.name.charAt(0).toUpperCase() + args.name.slice(1);
+  const displayName = args.display ?? toTitleCase(args.name);
 
   const escaped = JSON.stringify(displayName);
 
@@ -326,5 +333,5 @@ const scaffoldPlugin = async (args: ScaffoldArgs): Promise<string> => {
   return projectDir;
 };
 
-export { scaffoldPlugin, ScaffoldError };
+export { scaffoldPlugin, ScaffoldError, toTitleCase };
 export type { ScaffoldArgs };
