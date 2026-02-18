@@ -165,8 +165,8 @@ const registerMcpHandlers = (server: McpServerInstance, state: ServerState): voi
     const toolName = request.params.name;
     const args = request.params.arguments ?? {};
 
-    // Check cached browser tools first (O(n) over small fixed set, but
-    // avoids zodToJsonSchema per call). Browser tools are few and fixed.
+    // Check cached browser tools first (O(n) over small fixed set).
+    // Browser tools are few and fixed.
     const cachedBt = state.cachedBrowserTools.find(c => c.name === toolName);
     if (cachedBt) {
       // Validate args through the tool's Zod input schema

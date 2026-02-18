@@ -15,8 +15,12 @@ const ALLOWED_URL_SCHEMES = new Set(['http:', 'https:']);
  */
 const safeUrl = z.url().refine(
   val => {
-    const parsed = new URL(val);
-    return ALLOWED_URL_SCHEMES.has(parsed.protocol);
+    try {
+      const parsed = new URL(val);
+      return ALLOWED_URL_SCHEMES.has(parsed.protocol);
+    } catch {
+      return false;
+    }
   },
   { message: 'URL scheme must be http: or https:' },
 );
