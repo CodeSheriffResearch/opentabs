@@ -144,8 +144,8 @@ const injectAdapterFile = async (
       const retryMatched = await verifyAdapterHash(tabId, pluginName, adapterHash);
       if (!retryMatched) {
         const actualHash = await readAdapterHash(tabId, pluginName);
-        console.warn(
-          `[opentabs] Adapter hash mismatch for ${pluginName} after retry: expected ${adapterHash}, got ${String(actualHash)}`,
+        throw new Error(
+          `Adapter hash mismatch for ${pluginName} after retry: expected ${adapterHash}, got ${String(actualHash)}`,
         );
       }
     }
