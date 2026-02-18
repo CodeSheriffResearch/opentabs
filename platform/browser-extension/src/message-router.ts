@@ -26,6 +26,7 @@ import { RELOAD_FLUSH_DELAY_MS, WS_CONNECTED_KEY } from './constants.js';
 import { cleanupAdaptersInMatchingTabs, injectPluginIntoMatchingTabs } from './iife-injection.js';
 import { forwardToSidePanel, sendToServer } from './messaging.js';
 import { getAllPluginMeta, removePlugin, removePluginsBatch, storePluginsBatch } from './plugin-storage.js';
+import { checkRateLimit } from './rate-limiter.js';
 import { clearPluginTabState, computePluginTabState, sendTabSyncAll } from './tab-state.js';
 import { handleToolDispatch } from './tool-dispatch.js';
 import type { PluginMeta } from './types.js';
@@ -548,6 +549,17 @@ const handleServerMessage = (message: Record<string, unknown>): void => {
 
   const handler = methodHandlers.get(method);
   if (handler) {
+    if (!checkRateLimit(method)) {
+      console.warn(`[opentabs] Rate limited: ${method}`);
+      if (id !== undefined) {
+        sendToServer({
+          jsonrpc: '2.0',
+          error: { code: -32603, message: `Rate limited: ${method}` },
+          id,
+        });
+      }
+      return;
+    }
     handler(params, id);
     return;
   }
