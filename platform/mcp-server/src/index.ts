@@ -169,26 +169,37 @@ const handlers: HotHandlers = createHandlers({
 const PORT = hotState?.actualPort ?? (Bun.env.PORT !== undefined ? Number(Bun.env.PORT) : 9515);
 
 /** Create a Bun HTTP + WebSocket server (only on first load) */
-const createHttpServer = (): ReturnType<typeof Bun.serve> =>
-  Bun.serve({
-    port: PORT,
-    async fetch(req, server) {
-      const hs = getHotState();
-      if (!hs) return new Response('Server initializing', { status: 503 });
-      return hs.handlers.fetch(req, server);
-    },
-    websocket: {
-      open(ws) {
-        getHotState()?.handlers.wsOpen(ws);
+const createHttpServer = (): ReturnType<typeof Bun.serve> => {
+  try {
+    return Bun.serve({
+      port: PORT,
+      async fetch(req, server) {
+        const hs = getHotState();
+        if (!hs) return new Response('Server initializing', { status: 503 });
+        return hs.handlers.fetch(req, server);
       },
-      message(ws, message) {
-        getHotState()?.handlers.wsMessage(ws, message);
+      websocket: {
+        open(ws) {
+          getHotState()?.handlers.wsOpen(ws);
+        },
+        message(ws, message) {
+          getHotState()?.handlers.wsMessage(ws, message);
+        },
+        close(ws) {
+          getHotState()?.handlers.wsClose(ws);
+        },
       },
-      close(ws) {
-        getHotState()?.handlers.wsClose(ws);
-      },
-    },
-  });
+    });
+  } catch (error: unknown) {
+    const isAddrInUse = error instanceof Error && 'code' in error && error.code === 'EADDRINUSE';
+    if (isAddrInUse) {
+      log.error(`Port ${PORT} is already in use. Kill the existing process or use a different port:`);
+      log.error(`  lsof -ti :${PORT} | xargs kill`);
+      log.error(`  PORT=<number> bun dev`);
+    }
+    throw error;
+  }
+};
 
 // Reuse existing server on hot reload, create new on first load
 const server = hotState?.server ?? createHttpServer();
