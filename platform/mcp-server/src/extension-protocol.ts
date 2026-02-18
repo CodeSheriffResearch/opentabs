@@ -342,8 +342,8 @@ const handleExtensionMessage = (
     return;
   }
 
-  const method = parsed.method as string | undefined;
-  const id = parsed.id as string | number | undefined;
+  const method = typeof parsed.method === 'string' ? parsed.method : undefined;
+  const id = typeof parsed.id === 'string' || typeof parsed.id === 'number' ? parsed.id : undefined;
 
   // Handle ping keepalive — reply on the SAME ws that sent the ping.
   // This is critical during hot reload: if the old connection sends a ping
