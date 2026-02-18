@@ -397,7 +397,7 @@ export const handleBrowserSelectOption = async (
     const results = await chrome.scripting.executeScript({
       target: { tabId },
       world: 'MAIN',
-      func: (sel: string, val: string | undefined, lbl: string | undefined) => {
+      func: (sel: string, val: string | null, lbl: string | null) => {
         const el = document.querySelector(sel);
         if (!el) return { error: `Element not found: ${sel}` };
         if (el.tagName.toLowerCase() !== 'select') return { error: `Element is not a <select>: ${sel}` };
@@ -407,14 +407,14 @@ export const handleBrowserSelectOption = async (
         for (let i = 0; i < options.length; i++) {
           const opt = options[i];
           if (!opt) continue;
-          const isMatch = val !== undefined ? opt.value === val : (opt.textContent || '').trim() === lbl;
+          const isMatch = val !== null ? opt.value === val : (opt.textContent || '').trim() === lbl;
           if (isMatch) {
             matchedIndex = i;
             break;
           }
         }
         if (matchedIndex === -1) {
-          const criterion = val !== undefined ? `value="${val}"` : `label="${String(lbl)}"`;
+          const criterion = val !== null ? `value="${val}"` : `label="${String(lbl)}"`;
           return { error: `Option not found: ${criterion}` };
         }
         select.selectedIndex = matchedIndex;
@@ -426,7 +426,7 @@ export const handleBrowserSelectOption = async (
           label: selectedOpt ? (selectedOpt.textContent || '').trim() : '',
         };
       },
-      args: [selector, value, label],
+      args: [selector, value ?? null, label ?? null],
     });
 
     const result = results[0]?.result as

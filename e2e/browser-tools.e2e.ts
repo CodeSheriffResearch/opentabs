@@ -72,6 +72,39 @@ const openTestServerTab = async (mcpClient: McpClient, testServer: TestServer): 
   return tabId;
 };
 
+/**
+ * Open a tab to the test server's /interactive page, wait for full load,
+ * and return the tab ID.
+ */
+const openInteractivePage = async (mcpClient: McpClient, testServer: TestServer): Promise<number> => {
+  const openResult = await mcpClient.callTool('browser_open_tab', { url: testServer.url + '/interactive' });
+  expect(openResult.isError).toBe(false);
+  const tabInfo = parseToolResult(openResult.content);
+  const tabId = tabInfo.id as number;
+
+  await waitFor(
+    async () => {
+      try {
+        const result = await mcpClient.callTool('browser_execute_script', {
+          tabId,
+          code: 'return document.readyState',
+        });
+        if (result.isError) return false;
+        const data = parseToolResult(result.content);
+        const value = data.value as Record<string, unknown> | undefined;
+        return value?.value === 'complete';
+      } catch {
+        return false;
+      }
+    },
+    10_000,
+    300,
+    `interactive page tab ${tabId} readyState === complete`,
+  );
+
+  return tabId;
+};
+
 // ---------------------------------------------------------------------------
 // Browser tools presence
 // ---------------------------------------------------------------------------
@@ -1043,6 +1076,273 @@ test.describe('browser_get_tab_content', () => {
     expect(result.isError).toBe(true);
 
     // Clean up
+    await mcpClient.callTool('browser_close_tab', { tabId });
+  });
+});
+
+// ---------------------------------------------------------------------------
+// browser_click_element
+// ---------------------------------------------------------------------------
+
+test.describe('browser_click_element', () => {
+  test('clicks a button on /interactive page and verifies state change', async ({
+    mcpServer,
+    testServer,
+    extensionContext: _extensionContext,
+    mcpClient,
+  }) => {
+    await initAndListTools(mcpServer, mcpClient);
+    const tabId = await openInteractivePage(mcpClient, testServer);
+
+    const result = await mcpClient.callTool('browser_click_element', { tabId, selector: '#test-btn' });
+    expect(result.isError).toBe(false);
+
+    const data = parseToolResult(result.content);
+    expect(data.clicked).toBe(true);
+    expect(data.tagName).toBe('button');
+
+    // Verify the button's click handler ran
+    const execResult = await mcpClient.callTool('browser_execute_script', {
+      tabId,
+      code: 'return window.__btnClicked',
+    });
+    expect(execResult.isError).toBe(false);
+    const execData = parseToolResult(execResult.content);
+    const value = execData.value as Record<string, unknown>;
+    expect(value.value).toBe(true);
+
+    await mcpClient.callTool('browser_close_tab', { tabId });
+  });
+
+  test('returns error for non-existent selector', async ({
+    mcpServer,
+    testServer,
+    extensionContext: _extensionContext,
+    mcpClient,
+  }) => {
+    await initAndListTools(mcpServer, mcpClient);
+    const tabId = await openInteractivePage(mcpClient, testServer);
+
+    const result = await mcpClient.callTool('browser_click_element', {
+      tabId,
+      selector: '#nonexistent-btn',
+    });
+    expect(result.isError).toBe(true);
+
+    await mcpClient.callTool('browser_close_tab', { tabId });
+  });
+});
+
+// ---------------------------------------------------------------------------
+// browser_type_text
+// ---------------------------------------------------------------------------
+
+test.describe('browser_type_text', () => {
+  test('types into an input on /interactive page', async ({
+    mcpServer,
+    testServer,
+    extensionContext: _extensionContext,
+    mcpClient,
+  }) => {
+    await initAndListTools(mcpServer, mcpClient);
+    const tabId = await openInteractivePage(mcpClient, testServer);
+
+    const result = await mcpClient.callTool('browser_type_text', {
+      tabId,
+      selector: '#test-input',
+      text: 'hello world',
+    });
+    expect(result.isError).toBe(false);
+
+    const data = parseToolResult(result.content);
+    expect(data.typed).toBe(true);
+    expect(data.tagName).toBe('input');
+    expect(data.value).toBe('hello world');
+
+    await mcpClient.callTool('browser_close_tab', { tabId });
+  });
+
+  test('clear=false appends text', async ({
+    mcpServer,
+    testServer,
+    extensionContext: _extensionContext,
+    mcpClient,
+  }) => {
+    await initAndListTools(mcpServer, mcpClient);
+    const tabId = await openInteractivePage(mcpClient, testServer);
+
+    // Type initial text
+    await mcpClient.callTool('browser_type_text', {
+      tabId,
+      selector: '#test-input',
+      text: 'hello',
+    });
+
+    // Append text with clear=false
+    const result = await mcpClient.callTool('browser_type_text', {
+      tabId,
+      selector: '#test-input',
+      text: ' world',
+      clear: false,
+    });
+    expect(result.isError).toBe(false);
+
+    const data = parseToolResult(result.content);
+    expect(data.typed).toBe(true);
+    expect(data.value).toBe('hello world');
+
+    await mcpClient.callTool('browser_close_tab', { tabId });
+  });
+});
+
+// ---------------------------------------------------------------------------
+// browser_select_option
+// ---------------------------------------------------------------------------
+
+test.describe('browser_select_option', () => {
+  test('selects by value on /interactive page', async ({
+    mcpServer,
+    testServer,
+    extensionContext: _extensionContext,
+    mcpClient,
+  }) => {
+    await initAndListTools(mcpServer, mcpClient);
+    const tabId = await openInteractivePage(mcpClient, testServer);
+
+    const result = await mcpClient.callTool('browser_select_option', {
+      tabId,
+      selector: '#test-select',
+      value: 'b',
+    });
+    expect(result.isError).toBe(false);
+
+    const data = parseToolResult(result.content);
+    expect(data.selected).toBe(true);
+    expect(data.value).toBe('b');
+    expect(data.label).toBe('Beta');
+
+    await mcpClient.callTool('browser_close_tab', { tabId });
+  });
+
+  test('selects by label on /interactive page', async ({
+    mcpServer,
+    testServer,
+    extensionContext: _extensionContext,
+    mcpClient,
+  }) => {
+    await initAndListTools(mcpServer, mcpClient);
+    const tabId = await openInteractivePage(mcpClient, testServer);
+
+    const result = await mcpClient.callTool('browser_select_option', {
+      tabId,
+      selector: '#test-select',
+      label: 'Gamma',
+    });
+    expect(result.isError).toBe(false);
+
+    const data = parseToolResult(result.content);
+    expect(data.selected).toBe(true);
+    expect(data.value).toBe('c');
+    expect(data.label).toBe('Gamma');
+
+    await mcpClient.callTool('browser_close_tab', { tabId });
+  });
+});
+
+// ---------------------------------------------------------------------------
+// browser_wait_for_element
+// ---------------------------------------------------------------------------
+
+test.describe('browser_wait_for_element', () => {
+  test('finds the delayed content on /interactive page', async ({
+    mcpServer,
+    testServer,
+    extensionContext: _extensionContext,
+    mcpClient,
+  }) => {
+    await initAndListTools(mcpServer, mcpClient);
+    const tabId = await openInteractivePage(mcpClient, testServer);
+
+    // #delayed-content appears after ~500ms
+    const result = await mcpClient.callTool('browser_wait_for_element', {
+      tabId,
+      selector: '#delayed-content',
+      timeout: 5000,
+      visible: true,
+    });
+    expect(result.isError).toBe(false);
+
+    const data = parseToolResult(result.content);
+    expect(data.found).toBe(true);
+    expect(data.tagName).toBe('div');
+    expect(data.text).toBe('Delayed content loaded');
+
+    await mcpClient.callTool('browser_close_tab', { tabId });
+  });
+
+  test('times out for non-existent selector', async ({
+    mcpServer,
+    testServer,
+    extensionContext: _extensionContext,
+    mcpClient,
+  }) => {
+    await initAndListTools(mcpServer, mcpClient);
+    const tabId = await openInteractivePage(mcpClient, testServer);
+
+    const result = await mcpClient.callTool('browser_wait_for_element', {
+      tabId,
+      selector: '#nonexistent-element',
+      timeout: 1000,
+    });
+    expect(result.isError).toBe(true);
+
+    await mcpClient.callTool('browser_close_tab', { tabId });
+  });
+});
+
+// ---------------------------------------------------------------------------
+// browser_query_elements
+// ---------------------------------------------------------------------------
+
+test.describe('browser_query_elements', () => {
+  test('returns elements matching selector with attributes', async ({
+    mcpServer,
+    testServer,
+    extensionContext: _extensionContext,
+    mcpClient,
+  }) => {
+    await initAndListTools(mcpServer, mcpClient);
+    const tabId = await openInteractivePage(mcpClient, testServer);
+
+    const result = await mcpClient.callTool('browser_query_elements', {
+      tabId,
+      selector: 'input, select, button',
+    });
+    expect(result.isError).toBe(false);
+
+    const data = parseToolResult(result.content);
+    expect(data.count).toBeGreaterThanOrEqual(3);
+    expect(Array.isArray(data.elements)).toBe(true);
+
+    const elements = data.elements as Array<{
+      tagName: string;
+      text: string;
+      attributes: Record<string, string>;
+    }>;
+    const tagNames = elements.map(e => e.tagName);
+    expect(tagNames).toContain('button');
+    expect(tagNames).toContain('input');
+    expect(tagNames).toContain('select');
+
+    // Verify attributes are returned
+    const inputEl = elements.find(e => e.tagName === 'input');
+    expect(inputEl).toBeDefined();
+    if (!inputEl) throw new Error('input element not found');
+    expect(inputEl.attributes).toHaveProperty('id');
+    expect(inputEl.attributes.id).toBe('test-input');
+    expect(inputEl.attributes).toHaveProperty('type');
+    expect(inputEl.attributes.type).toBe('text');
+
     await mcpClient.callTool('browser_close_tab', { tabId });
   });
 });
