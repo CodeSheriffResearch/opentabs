@@ -23,7 +23,9 @@ const executeScript = defineBrowserTool({
     'Bypasses page Content-Security-Policy restrictions. ' +
     'The last expression value is returned (use `return` for explicit values). ' +
     'Supports both synchronous and asynchronous code (Promises are awaited automatically). ' +
-    'Examples: `return document.title`, `return localStorage.length`, `return document.querySelectorAll("div").length`.',
+    'Examples: `return document.title`, `return localStorage.length`, `return document.querySelectorAll("div").length`. ' +
+    'The return value must be JSON-serializable (strings, numbers, booleans, arrays, plain objects). ' +
+    'DOM nodes, functions, and circular references cannot be returned.',
   input: z.object({
     tabId: z.number().int().positive().describe('Tab ID to execute the code in'),
     code: z
