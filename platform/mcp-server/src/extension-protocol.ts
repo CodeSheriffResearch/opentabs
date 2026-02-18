@@ -181,11 +181,12 @@ const sendSyncFull = async (state: ServerState): Promise<void> => {
     })),
   }));
 
-  sendToExtension(state, {
+  const sent = sendToExtension(state, {
     jsonrpc: '2.0',
     method: 'sync.full',
     params: { plugins },
   });
+  if (!sent) log.warn('Failed to send sync.full — extension not connected');
 };
 
 /**
@@ -291,7 +292,7 @@ const sendPluginUpdate = async (state: ServerState, pluginName: string, iife: st
   await ensureAdaptersDir();
   await writeAdapterFile(pluginName, iife);
 
-  sendToExtension(state, {
+  const sent = sendToExtension(state, {
     jsonrpc: '2.0',
     method: 'plugin.update',
     params: {
@@ -309,6 +310,7 @@ const sendPluginUpdate = async (state: ServerState, pluginName: string, iife: st
       })),
     },
   });
+  if (!sent) log.warn('Failed to send plugin.update — extension not connected');
 };
 
 /**
