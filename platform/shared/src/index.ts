@@ -302,6 +302,13 @@ export const validateUrlPattern = (pattern: string): string | null => {
   }
 
   const host = match[2] ?? '';
+
+  // Reject bare TLD wildcards (e.g., *.com, *.org) — these match nearly every website.
+  // A wildcard host must include at least a second-level domain (e.g., *.example.com).
+  if (/^\*\.[a-z]{2,}$/i.test(host)) {
+    return `URL pattern "${pattern}" is too broad — "${host}" matches all domains under a TLD. Use a more specific domain (e.g., *.example.com)`;
+  }
+
   // Host must be *, *.domain, a specific domain, or localhost (with optional port).
   // Chrome match patterns natively support localhost — essential for local development
   // and E2E testing where plugins target local web servers.

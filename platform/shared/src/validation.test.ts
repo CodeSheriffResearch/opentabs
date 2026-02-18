@@ -50,6 +50,76 @@ describe('validateUrlPattern', () => {
     });
   });
 
+  describe('bare TLD wildcard patterns', () => {
+    test('rejects *.com', () => {
+      const error = validateUrlPattern('*://*.com/*');
+      expect(error).not.toBeNull();
+      expect(error).toContain('too broad');
+      expect(error).toContain('*.com');
+      expect(error).toContain('*.example.com');
+    });
+
+    test('rejects *.org', () => {
+      const error = validateUrlPattern('*://*.org/*');
+      expect(error).not.toBeNull();
+      expect(error).toContain('too broad');
+    });
+
+    test('rejects *.net', () => {
+      const error = validateUrlPattern('*://*.net/*');
+      expect(error).not.toBeNull();
+      expect(error).toContain('too broad');
+    });
+
+    test('rejects *.io', () => {
+      const error = validateUrlPattern('*://*.io/*');
+      expect(error).not.toBeNull();
+      expect(error).toContain('too broad');
+    });
+
+    test('rejects *.dev', () => {
+      const error = validateUrlPattern('*://*.dev/*');
+      expect(error).not.toBeNull();
+      expect(error).toContain('too broad');
+    });
+
+    test('rejects *.app', () => {
+      const error = validateUrlPattern('*://*.app/*');
+      expect(error).not.toBeNull();
+      expect(error).toContain('too broad');
+    });
+
+    test('rejects *.edu', () => {
+      const error = validateUrlPattern('*://*.edu/*');
+      expect(error).not.toBeNull();
+      expect(error).toContain('too broad');
+    });
+
+    test('rejects *.gov', () => {
+      const error = validateUrlPattern('*://*.gov/*');
+      expect(error).not.toBeNull();
+      expect(error).toContain('too broad');
+    });
+
+    test('rejects *.xyz', () => {
+      const error = validateUrlPattern('https://*.xyz/*');
+      expect(error).not.toBeNull();
+      expect(error).toContain('too broad');
+    });
+
+    test('allows *.example.com (second-level domain)', () => {
+      expect(validateUrlPattern('*://*.example.com/*')).toBeNull();
+    });
+
+    test('allows *://app.slack.com/* (specific subdomain)', () => {
+      expect(validateUrlPattern('*://app.slack.com/*')).toBeNull();
+    });
+
+    test('allows *://localhost:3000/*', () => {
+      expect(validateUrlPattern('*://localhost:3000/*')).toBeNull();
+    });
+  });
+
   describe('invalid patterns', () => {
     test('rejects missing scheme', () => {
       const error = validateUrlPattern('example.com/*');
