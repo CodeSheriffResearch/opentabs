@@ -11,7 +11,7 @@
  */
 
 import { log } from './logger.js';
-import { chmod, mkdir } from 'node:fs/promises';
+import { chmod, mkdir, rename, unlink } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
 
@@ -42,6 +42,23 @@ const getExtensionVersionFile = (): string => join(getExtensionDir(), '.opentabs
 /** @public Directory for plugin adapter IIFEs inside the managed extension */
 const getAdaptersDir = (): string => join(getExtensionDir(), 'adapters');
 
+/**
+ * Write config atomically: write to a temp file in the same directory,
+ * set restrictive permissions, then rename over the target. The rename
+ * is atomic on POSIX filesystems, so readers never see a partially-written file.
+ */
+const atomicWriteConfig = async (configPath: string, content: string): Promise<void> => {
+  const tmpPath = configPath + '.tmp';
+  try {
+    await Bun.write(tmpPath, content);
+    await chmod(tmpPath, 0o600).catch(() => {});
+    await rename(tmpPath, configPath);
+  } catch (err) {
+    await unlink(tmpPath).catch(() => {});
+    throw err;
+  }
+};
+
 /** Returned when config cannot be loaded (file corrupted, permissions error, etc.) */
 const FALLBACK_CONFIG: OpentabsConfig = {
   plugins: [],
@@ -64,8 +81,7 @@ const loadConfig = async (): Promise<OpentabsConfig> => {
     if (!(await configFile.exists())) {
       // First run — create default config with a fresh shared secret
       const config: OpentabsConfig = { plugins: [], tools: {}, secret: crypto.randomUUID(), npmPlugins: [] };
-      await Bun.write(configPath, JSON.stringify(config, null, 2) + '\n');
-      await chmod(configPath, 0o600).catch(() => {});
+      await atomicWriteConfig(configPath, JSON.stringify(config, null, 2) + '\n');
       log.info(`Created default config at ${configPath}`);
       return config;
     }
@@ -106,8 +122,7 @@ const loadConfig = async (): Promise<OpentabsConfig> => {
     if (!secret) {
       secret = crypto.randomUUID();
       const updated: OpentabsConfig = { plugins, tools, secret, npmPlugins };
-      await Bun.write(configPath, JSON.stringify(updated, null, 2) + '\n');
-      await chmod(configPath, 0o600).catch(() => {});
+      await atomicWriteConfig(configPath, JSON.stringify(updated, null, 2) + '\n');
       log.info(`Generated WebSocket authentication secret in ${configPath}`);
     }
 
@@ -131,8 +146,7 @@ const saveConfig = async (state: { configWriteMutex: Promise<void> }, config: Op
   state.configWriteMutex = (async () => {
     await prev;
     await mkdir(configDir, { recursive: true, mode: 0o700 });
-    await Bun.write(configPath, JSON.stringify(config, null, 2) + '\n');
-    await chmod(configPath, 0o600).catch(() => {});
+    await atomicWriteConfig(configPath, JSON.stringify(config, null, 2) + '\n');
   })().catch((err: unknown) => {
     // Reset mutex so subsequent writes don't hang on a rejected promise
     state.configWriteMutex = Promise.resolve();
