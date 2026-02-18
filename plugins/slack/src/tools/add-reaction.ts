@@ -7,7 +7,7 @@ export const addReaction = defineTool({
   description: 'Add an emoji reaction to a Slack message',
   input: z.object({
     channel: z.string().min(1).describe('Channel ID where the message is located (e.g., C01234567)'),
-    timestamp: z
+    ts: z
       .string()
       .min(1)
       .describe('Timestamp of the message to react to — serves as the unique message ID (e.g., 1234567890.123456)'),
@@ -17,7 +17,7 @@ export const addReaction = defineTool({
   handle: async params => {
     await slackApi<Record<string, never>>('reactions.add', {
       channel: params.channel,
-      timestamp: params.timestamp,
+      timestamp: params.ts,
       name: params.name.replace(/^:|:$/g, ''),
     });
     return {};

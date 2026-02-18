@@ -1421,7 +1421,7 @@
             "minLength": 1,
             "description": "Channel ID where the message is located (e.g., C01234567)"
           },
-          "timestamp": {
+          "ts": {
             "type": "string",
             "minLength": 1,
             "description": "Timestamp of the message to react to — serves as the unique message ID (e.g., 1234567890.123456)"
@@ -1434,7 +1434,7 @@
         },
         "required": [
           "channel",
-          "timestamp",
+          "ts",
           "name"
         ],
         "additionalProperties": false
@@ -1456,10 +1456,10 @@
             "minLength": 1,
             "description": "Channel ID where the message is located (e.g., C01234567)"
           },
-          "timestamp": {
+          "ts": {
             "type": "string",
             "minLength": 1,
-            "description": "Timestamp of the message to remove the reaction from (e.g., 1234567890.123456)"
+            "description": "Timestamp of the message to remove the reaction from — serves as the unique message ID (e.g., 1234567890.123456)"
           },
           "name": {
             "type": "string",
@@ -1469,7 +1469,7 @@
         },
         "required": [
           "channel",
-          "timestamp",
+          "ts",
           "name"
         ],
         "additionalProperties": false
@@ -1491,15 +1491,15 @@
             "minLength": 1,
             "description": "Channel ID where the message is located (e.g., C01234567)"
           },
-          "timestamp": {
+          "ts": {
             "type": "string",
             "minLength": 1,
-            "description": "Timestamp of the message to pin (e.g., 1234567890.123456)"
+            "description": "Timestamp of the message to pin — serves as the unique message ID (e.g., 1234567890.123456)"
           }
         },
         "required": [
           "channel",
-          "timestamp"
+          "ts"
         ],
         "additionalProperties": false
       },
@@ -1520,15 +1520,15 @@
             "minLength": 1,
             "description": "Channel ID where the message is pinned (e.g., C01234567)"
           },
-          "timestamp": {
+          "ts": {
             "type": "string",
             "minLength": 1,
-            "description": "Timestamp of the message to unpin (e.g., 1234567890.123456)"
+            "description": "Timestamp of the message to unpin — serves as the unique message ID (e.g., 1234567890.123456)"
           }
         },
         "required": [
           "channel",
-          "timestamp"
+          "ts"
         ],
         "additionalProperties": false
       },
@@ -1539,5 +1539,5 @@
       }
     }
   ],
-  "adapterHash": "834825e7a91292c0478465e7e8a9f1e721061fd804374203c59e07fd6361059e"
+  "adapterHash": "51a7a28e274ba3c156b0eaf8dcfab45a3949fefc1a682fbc59fd1e8961082660"
 }
