@@ -16,7 +16,8 @@
 import { log } from './logger.js';
 import { parseManifest } from './manifest-schema.js';
 import { validatePluginName, validateUrlPattern } from '@opentabs-dev/shared';
-import { readdir, stat } from 'node:fs/promises';
+import { readdir, realpath, stat } from 'node:fs/promises';
+import { homedir, tmpdir } from 'node:os';
 import { join, resolve, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import type { RegisteredPlugin } from './state.js';
@@ -364,13 +365,52 @@ const discoverFromNodeModules = async (rootDir: string, allowedPackages: string[
 };
 
 /**
- * Discover plugins from local filesystem paths (from config.json plugins array).
+ * Allowed root directories for local plugin paths.
+ * Plugins must reside under the user's home directory or the system temp directory.
+ * The temp directory allowance supports E2E tests and development workflows.
  */
+const getAllowedRoots = (): string[] => [homedir(), tmpdir()];
+
+/**
+ * Resolve a path to its canonical form, following symlinks.
+ * Falls back to the input path if realpath fails (e.g., non-existent target).
+ */
+const safeRealpath = async (path: string): Promise<string> => {
+  try {
+    return await realpath(path);
+  } catch {
+    return path;
+  }
+};
+
+/**
+ * Validate that a resolved plugin path is under an allowed root directory.
+ * Uses realpath on both the plugin path and the allowed roots to resolve
+ * symlinks (e.g., macOS /var → /private/var), preventing traversal attacks.
+ * Checks against both raw and resolved roots to handle non-existent paths
+ * where realpath falls back to the unresolved input.
+ */
+const isAllowedPluginPath = async (resolvedPath: string): Promise<boolean> => {
+  const realPath = await safeRealpath(resolvedPath);
+  const rawRoots = getAllowedRoots();
+  const realRoots = await Promise.all(rawRoots.map(safeRealpath));
+
+  // Deduplicate: on macOS, raw /var/... and resolved /private/var/... differ
+  const allRoots = [...new Set([...rawRoots, ...realRoots])];
+  return allRoots.some(root => realPath.startsWith(root + '/') || realPath === root);
+};
+
 const discoverFromLocalPaths = async (paths: string[]): Promise<DiscoveryResult[]> => {
   const results: DiscoveryResult[] = [];
 
   for (const pluginPath of paths) {
     const resolvedPath = resolve(pluginPath);
+
+    if (!(await isAllowedPluginPath(resolvedPath))) {
+      log.warn(`Rejected plugin path outside allowed directories: ${resolvedPath}`);
+      continue;
+    }
+
     if (!(await dirExists(resolvedPath))) {
       log.warn(`Local plugin path does not exist: ${resolvedPath}`);
       continue;
@@ -474,4 +514,11 @@ const checkBrowserToolReferences = (
   return matches;
 };
 
-export { checkBrowserToolReferences, determineTrustTier, discoverPlugins, loadPluginFromDir, pluginNameFromPackage };
+export {
+  checkBrowserToolReferences,
+  determineTrustTier,
+  discoverPlugins,
+  isAllowedPluginPath,
+  loadPluginFromDir,
+  pluginNameFromPackage,
+};

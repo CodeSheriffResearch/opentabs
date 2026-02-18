@@ -1,5 +1,12 @@
-import { checkBrowserToolReferences, determineTrustTier, pluginNameFromPackage } from './discovery.js';
+import {
+  checkBrowserToolReferences,
+  determineTrustTier,
+  isAllowedPluginPath,
+  pluginNameFromPackage,
+} from './discovery.js';
 import { describe, expect, test } from 'bun:test';
+import { homedir, tmpdir } from 'node:os';
+import { join } from 'node:path';
 
 describe('pluginNameFromPackage', () => {
   test('strips opentabs-plugin- prefix from unscoped package', () => {
@@ -109,5 +116,41 @@ describe('checkBrowserToolReferences', () => {
 
   test('returns empty array for empty tools list', () => {
     expect(checkBrowserToolReferences([])).toEqual([]);
+  });
+});
+
+describe('isAllowedPluginPath', () => {
+  test('allows path under home directory', async () => {
+    const path = join(homedir(), '.opentabs', 'plugins', 'my-plugin');
+    expect(await isAllowedPluginPath(path)).toBe(true);
+  });
+
+  test('allows path under temp directory', async () => {
+    const path = join(tmpdir(), 'opentabs-test', 'plugin');
+    expect(await isAllowedPluginPath(path)).toBe(true);
+  });
+
+  test('rejects path outside allowed directories', async () => {
+    expect(await isAllowedPluginPath('/etc/evil-plugin')).toBe(false);
+  });
+
+  test('rejects root path', async () => {
+    expect(await isAllowedPluginPath('/')).toBe(false);
+  });
+
+  test('rejects path with .. traversal that escapes home', async () => {
+    // resolve() normalizes .., but the resulting path must still be under an allowed root
+    expect(await isAllowedPluginPath('/var/data/../../../etc/passwd')).toBe(false);
+  });
+
+  test('allows exact home directory', async () => {
+    expect(await isAllowedPluginPath(homedir())).toBe(true);
+  });
+
+  test('rejects path that is a prefix of home but not a child', async () => {
+    // e.g., if homedir is /Users/foo, reject /Users/foobar
+    const home = homedir();
+    const fakePrefix = home + 'bar';
+    expect(await isAllowedPluginPath(fakePrefix)).toBe(false);
   });
 });
