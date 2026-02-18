@@ -1,4 +1,4 @@
-import { rebuildToolLookups, registerMcpHandlers, trustTierPrefix } from './mcp-setup.js';
+import { getEnabledToolsList, rebuildToolLookups, registerMcpHandlers, trustTierPrefix } from './mcp-setup.js';
 import { createState } from './state.js';
 import { describe, expect, test } from 'bun:test';
 import { z } from 'zod';
@@ -346,5 +346,147 @@ describe('registerMcpHandlers — disabled tool filtering', () => {
     expect(namesAfter).toContain('slack_send_message');
     expect(namesAfter).toContain('slack_read_messages');
     expect(namesAfter).toHaveLength(2);
+  });
+});
+
+/** Helper to create a browser tool definition for testing */
+const createBrowserTool = (name: string, description: string): BrowserToolDefinition => ({
+  name,
+  description,
+  input: z.object({}),
+  handler: () => Promise.resolve([]),
+});
+
+describe('getEnabledToolsList — all tools enabled (default)', () => {
+  test('returns all plugin tools and browser tools when no toolConfig is set', () => {
+    const state = createState();
+    state.plugins.set('slack', createPlugin('slack', ['send_message', 'read_messages']));
+    state.browserTools = [createBrowserTool('browser_list_tabs', 'List tabs')];
+    rebuildToolLookups(state);
+
+    const tools = getEnabledToolsList(state);
+    const names = tools.map(t => t.name);
+
+    expect(names).toContain('slack_send_message');
+    expect(names).toContain('slack_read_messages');
+    expect(names).toContain('browser_list_tabs');
+    expect(tools).toHaveLength(3);
+  });
+});
+
+describe('getEnabledToolsList — disabled tool filtering', () => {
+  test('one plugin tool disabled via toolConfig is excluded, others remain', () => {
+    const state = createState();
+    state.plugins.set('slack', createPlugin('slack', ['send_message', 'read_messages']));
+    state.browserTools = [createBrowserTool('browser_list_tabs', 'List tabs')];
+    rebuildToolLookups(state);
+    state.toolConfig = { slack_read_messages: false };
+
+    const tools = getEnabledToolsList(state);
+    const names = tools.map(t => t.name);
+
+    expect(names).toContain('slack_send_message');
+    expect(names).not.toContain('slack_read_messages');
+    expect(names).toContain('browser_list_tabs');
+    expect(tools).toHaveLength(2);
+  });
+
+  test('all plugin tools disabled — only browser tools appear', () => {
+    const state = createState();
+    state.plugins.set('slack', createPlugin('slack', ['send_message', 'read_messages']));
+    state.browserTools = [createBrowserTool('browser_list_tabs', 'List tabs')];
+    rebuildToolLookups(state);
+    state.toolConfig = { slack_send_message: false, slack_read_messages: false };
+
+    const tools = getEnabledToolsList(state);
+    const names = tools.map(t => t.name);
+
+    expect(names).not.toContain('slack_send_message');
+    expect(names).not.toContain('slack_read_messages');
+    expect(names).toContain('browser_list_tabs');
+    expect(tools).toHaveLength(1);
+  });
+
+  test('browser tools always appear regardless of toolConfig entries matching their names', () => {
+    const state = createState();
+    state.plugins.set('slack', createPlugin('slack', ['send_message']));
+    state.browserTools = [createBrowserTool('browser_list_tabs', 'List tabs')];
+    rebuildToolLookups(state);
+    // Attempt to disable a browser tool via toolConfig — should have no effect
+    state.toolConfig = { browser_list_tabs: false };
+
+    const tools = getEnabledToolsList(state);
+    const names = tools.map(t => t.name);
+
+    expect(names).toContain('browser_list_tabs');
+    expect(names).toContain('slack_send_message');
+    expect(tools).toHaveLength(2);
+  });
+
+  test('multiple plugins with mixed enabled/disabled tools — correct filtering per plugin', () => {
+    const state = createState();
+    state.plugins.set('slack', createPlugin('slack', ['send_message', 'read_messages']));
+    state.plugins.set('github', createPlugin('github', ['create_issue', 'list_prs']));
+    state.browserTools = [createBrowserTool('browser_list_tabs', 'List tabs')];
+    rebuildToolLookups(state);
+    state.toolConfig = { slack_read_messages: false, github_create_issue: false };
+
+    const tools = getEnabledToolsList(state);
+    const names = tools.map(t => t.name);
+
+    expect(names).toContain('slack_send_message');
+    expect(names).not.toContain('slack_read_messages');
+    expect(names).not.toContain('github_create_issue');
+    expect(names).toContain('github_list_prs');
+    expect(names).toContain('browser_list_tabs');
+    expect(tools).toHaveLength(3);
+  });
+
+  test('empty plugins map returns only browser tools', () => {
+    const state = createState();
+    state.browserTools = [
+      createBrowserTool('browser_list_tabs', 'List tabs'),
+      createBrowserTool('browser_open_tab', 'Open a tab'),
+    ];
+    rebuildToolLookups(state);
+
+    const tools = getEnabledToolsList(state);
+    const names = tools.map(t => t.name);
+
+    expect(names).toContain('browser_list_tabs');
+    expect(names).toContain('browser_open_tab');
+    expect(tools).toHaveLength(2);
+  });
+});
+
+describe('getEnabledToolsList — tool entry shape', () => {
+  test('plugin tools have correct name, description with trust tier prefix, and inputSchema', () => {
+    const state = createState();
+    state.plugins.set('slack', createPlugin('slack', ['send_message']));
+    rebuildToolLookups(state);
+
+    const tools = getEnabledToolsList(state);
+
+    expect(tools).toHaveLength(1);
+    expect(tools[0]).toMatchObject({
+      name: 'slack_send_message',
+      description: '[Local plugin] send_message description',
+      inputSchema: { type: 'object' },
+    });
+  });
+
+  test('browser tools have correct name, description, and inputSchema', () => {
+    const state = createState();
+    state.browserTools = [createBrowserTool('browser_list_tabs', 'List all open tabs')];
+    rebuildToolLookups(state);
+
+    const tools = getEnabledToolsList(state);
+
+    expect(tools).toHaveLength(1);
+    expect(tools[0]).toMatchObject({
+      name: 'browser_list_tabs',
+      description: 'List all open tabs',
+    });
+    expect(typeof tools[0]?.inputSchema).toBe('object');
   });
 });

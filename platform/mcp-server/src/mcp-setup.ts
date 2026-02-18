@@ -191,42 +191,11 @@ const rebuildToolLookups = (state: ServerState): void => {
  */
 const registerMcpHandlers = (server: McpServerInstance, state: ServerState): void => {
   // Handler: tools/list — return enabled plugin tools + browser tools.
-  // Both plugin tool schemas and browser tool JSON schemas are pre-computed
-  // in rebuildToolLookups() (called during reload), so this handler only
-  // filters and collects — no schema conversion per request.
-  server.setRequestHandler(ListToolsRequestSchema, () => {
-    const tools: Array<{
-      name: string;
-      description: string;
-      inputSchema: Record<string, unknown>;
-    }> = [];
-
-    // Plugin tools (from discovered plugins)
-    for (const plugin of state.plugins.values()) {
-      for (const toolDef of plugin.tools) {
-        const prefixed = prefixedToolName(plugin.name, toolDef.name);
-        if (!isToolEnabled(state, prefixed)) continue;
-
-        tools.push({
-          name: prefixed,
-          description: trustTierPrefix(plugin.trustTier) + toolDef.description,
-          inputSchema: toolDef.input_schema,
-        });
-      }
-    }
-
-    // Browser tools (always enabled — no per-tool config gating).
-    // JSON schemas are cached at reload time in state.cachedBrowserTools.
-    for (const cached of state.cachedBrowserTools) {
-      tools.push({
-        name: cached.name,
-        description: cached.description,
-        inputSchema: cached.inputSchema,
-      });
-    }
-
-    return { tools };
-  });
+  // Delegates to getEnabledToolsList() which filters disabled plugin tools
+  // and always includes browser tools.
+  server.setRequestHandler(ListToolsRequestSchema, () => ({
+    tools: getEnabledToolsList(state),
+  }));
 
   // Handler: tools/call — dispatch to extension or handle browser tool locally.
   // Uses pre-built lookup maps for O(1) tool resolution.
@@ -443,6 +412,39 @@ const notifyToolListChanged = (server: McpServerInstance): void => {
   server.sendToolListChanged().catch((err: unknown) => {
     log.warn('Failed to notify tool list change:', err);
   });
+};
+
+/**
+ * Returns the list of enabled tools for MCP tools/list responses.
+ * Plugin tools are filtered by the toolConfig (disabled tools are excluded).
+ * Browser tools are always included (no per-tool config gating).
+ */
+export const getEnabledToolsList = (
+  state: ServerState,
+): Array<{ name: string; description: string; inputSchema: Record<string, unknown> }> => {
+  const tools: Array<{ name: string; description: string; inputSchema: Record<string, unknown> }> = [];
+
+  for (const plugin of state.plugins.values()) {
+    for (const toolDef of plugin.tools) {
+      const prefixed = prefixedToolName(plugin.name, toolDef.name);
+      if (!isToolEnabled(state, prefixed)) continue;
+      tools.push({
+        name: prefixed,
+        description: trustTierPrefix(plugin.trustTier) + toolDef.description,
+        inputSchema: toolDef.input_schema,
+      });
+    }
+  }
+
+  for (const cached of state.cachedBrowserTools) {
+    tools.push({
+      name: cached.name,
+      description: cached.description,
+      inputSchema: cached.inputSchema,
+    });
+  }
+
+  return tools;
 };
 
 export type { McpServerInstance };
