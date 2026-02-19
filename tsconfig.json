@@ -28,8 +28,7 @@
     { "path": "platform/create-plugin/tsconfig.test.json" },
     { "path": "tsconfig.configs.json" },
     { "path": "tsconfig.scripts.json" },
-    { "path": "e2e" },
-    { "path": "website" }
+    { "path": "e2e" }
   ],
   "files": []
 }

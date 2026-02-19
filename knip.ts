@@ -30,12 +30,6 @@ const config: KnipConfig = {
       ],
     },
     'platform/create-plugin': {},
-    website: {
-      ignoreDependencies: [
-        // Peer dependency required by vitepress at runtime
-        'vue',
-      ],
-    },
   },
   tags: ['+@public'],
   ignore: ['**/dist/**', 'plugins/**', 'docs/**'],
