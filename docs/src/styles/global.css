@@ -61,6 +61,12 @@
   --destructive: #ef4444;
   --destructive-foreground: #fff;
   --border: #3a3a3a;
+  --background-image: url('/images/bg_void_3.svg');
+  --chart-1: #ffdb33;
+  --chart-2: #000;
+  --chart-3: #aeaeae;
+  --chart-4: #fae583;
+  --chart-5: #e63946;
 }
 
 .dark,
@@ -81,6 +87,12 @@
   --destructive: #ef4444;
   --destructive-foreground: #fff;
   --border: #2e2e32;
+  --background-image: url('/images/bg_void_3.svg');
+  --chart-1: #ffdb33;
+  --chart-2: #000;
+  --chart-3: #aeaeae;
+  --chart-4: #fae583;
+  --chart-5: #e63946;
 }
 
 /* Body — RetroUI base styles */
