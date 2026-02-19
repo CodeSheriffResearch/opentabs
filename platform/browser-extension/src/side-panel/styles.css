@@ -33,43 +33,42 @@
 }
 
 :root {
-  --radius: 0;
-  --background: #fff;
-  --foreground: #000;
-  --card: #fff;
-  --card-foreground: #000;
-  --primary: #ffdb33;
-  --primary-hover: #ffcc00;
-  --primary-foreground: #000;
-  --secondary: #000;
-  --secondary-foreground: #fff;
-  --muted: #d5d5d5;
-  --muted-foreground: #5a5a5a;
-  --accent: #fae583;
-  --accent-foreground: #000;
-  --destructive: #e63946;
+  --radius: 0.5rem;
+  --background: #f5f5f5;
+  --foreground: #1a1a1a;
+  --card: #ffffff;
+  --card-foreground: #f5f5f5;
+  --primary: #5f4fe6;
+  --primary-hover: #4938c2;
+  --primary-foreground: #fff;
+  --secondary: #3a3a3a;
+  --secondary-foreground: #f5f5f5;
+  --muted: #cfccea;
+  --muted-foreground: #5b5686;
+  --accent: #fed13b;
+  --accent-foreground: #000000;
+  --destructive: #ef4444;
   --destructive-foreground: #fff;
-  --border: #000;
+  --border: #3a3a3a;
 }
 
 .dark {
-  --radius: 0;
-  --background: #1a1a1a;
+  --background: #0f0f12;
   --foreground: #f5f5f5;
-  --card: #242424;
-  --card-foreground: #f5f5f5;
-  --primary: #ffdb33;
-  --primary-hover: #ffcc00;
-  --primary-foreground: #000;
-  --secondary: #3a3a3a;
-  --secondary-foreground: #f5f5f5;
-  --muted: #3f3f46;
-  --muted-foreground: #a0a0a0;
-  --accent: #fae583;
+  --card: #1a1a1d;
+  --card-foreground: #eaeaea;
+  --primary: #7b6df5;
+  --primary-hover: #5f4fe6;
+  --primary-foreground: #fff;
+  --secondary: #2a2a2e;
+  --secondary-foreground: #eaeaea;
+  --muted: #3d395a;
+  --muted-foreground: #a49fce;
+  --accent: #fed13b;
   --accent-foreground: #000;
-  --destructive: #e63946;
+  --destructive: #ef4444;
   --destructive-foreground: #fff;
-  --border: #5c5c5c;
+  --border: #2e2e32;
 }
 
 body {
@@ -88,8 +87,13 @@ body {
 }
 
 @keyframes pulse-dot {
-  0%, 100% { opacity: 1; }
-  50% { opacity: 0.5; }
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.5;
+  }
 }
 
 .animate-pulse-dot {
@@ -97,8 +101,13 @@ body {
 }
 
 @keyframes tool-pulse {
-  0%, 100% { background-color: transparent; }
-  50% { background-color: color-mix(in srgb, var(--primary) 5%, transparent); }
+  0%,
+  100% {
+    background-color: transparent;
+  }
+  50% {
+    background-color: color-mix(in srgb, var(--primary) 5%, transparent);
+  }
 }
 
 .animate-tool-pulse {
@@ -106,13 +115,21 @@ body {
 }
 
 @keyframes accordion-down {
-  from { height: 0; }
-  to { height: var(--radix-accordion-content-height); }
+  from {
+    height: 0;
+  }
+  to {
+    height: var(--radix-accordion-content-height);
+  }
 }
 
 @keyframes accordion-up {
-  from { height: var(--radix-accordion-content-height); }
-  to { height: 0; }
+  from {
+    height: var(--radix-accordion-content-height);
+  }
+  to {
+    height: 0;
+  }
 }
 
 .animate-accordion-down {
