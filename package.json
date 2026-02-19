@@ -12,7 +12,7 @@
     "platform/*"
   ],
   "scripts": {
-    "dev": "bun run build && bun --hot platform/mcp-server/dist/index.js",
+    "dev": "bun scripts/dev.ts",
     "build": "tsc --build --force && bun run --cwd platform/browser-extension build:bundle && bun run --cwd platform/browser-extension build:side-panel && bun run build:install-extension",
     "build:install-extension": "bun scripts/install-extension.ts",
     "type-check": "tsc --build",
