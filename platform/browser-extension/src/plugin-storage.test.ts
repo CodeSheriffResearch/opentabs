@@ -253,6 +253,39 @@ describe('write serialization', () => {
     expect(result['c']).toBeDefined();
     expect(result['d']).toBeDefined();
   });
+
+  test('failing write does not break the mutex chain', async () => {
+    const originalSet = mockChromeStorage.set;
+
+    // First call to set will reject (simulating a storage error)
+    let callCount = 0;
+    mockChromeStorage.set = (items: Record<string, unknown>): Promise<void> => {
+      callCount++;
+      if (callCount === 1) {
+        return Promise.reject(new Error('storage quota exceeded'));
+      }
+      return originalSet(items);
+    };
+
+    // Fire two concurrent writes — the first fails, the second should still succeed
+    const p1 = storePluginsBatch([makeMeta('will-fail')]);
+    const p2 = storePluginsBatch([makeMeta('should-succeed')]);
+
+    const [r1, r2] = await Promise.allSettled([p1, p2]);
+    // The first write rejects
+    expect(r1.status).toBe('rejected');
+    // The second write succeeds despite the first failure
+    expect(r2.status).toBe('fulfilled');
+
+    // Invalidate cache since the failed write left it in an unknown state
+    invalidatePluginCache();
+    const result = await getAllPluginMeta();
+    expect(result['should-succeed']).toBeDefined();
+    expect(result['will-fail']).toBeUndefined();
+
+    // Restore original mock
+    mockChromeStorage.set = originalSet;
+  });
 });
 
 describe('invalidatePluginCache', () => {
