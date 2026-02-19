@@ -6,7 +6,7 @@ const DisconnectedState = () => (
   <Empty>
     <Empty.Content>
       <Empty.Icon>
-        <Unplug className="h-10 w-10" />
+        <Unplug className="text-muted-foreground h-12 w-12" />
       </Empty.Icon>
       <Empty.Title>Not Connected</Empty.Title>
       <Empty.Separator />
@@ -28,7 +28,7 @@ const EmptyState = () => (
   <Empty>
     <Empty.Content>
       <Empty.Icon>
-        <Zap className="h-10 w-10" />
+        <Zap className="text-muted-foreground h-12 w-12" />
       </Empty.Icon>
       <Empty.Title>No Plugins</Empty.Title>
       <Empty.Separator />
