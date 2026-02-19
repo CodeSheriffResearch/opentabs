@@ -142,9 +142,9 @@ const PluginCard = ({
 
       <TabStateHint plugin={plugin} />
 
-      <Accordion.Content>
+      <Accordion.Content className="px-0">
         {toolFilter && (
-          <div className="text-muted-foreground mb-1 text-xs">
+          <div className="text-muted-foreground mb-1 px-3 text-xs">
             {visibleTools.length} of {plugin.tools.length} tools
           </div>
         )}
