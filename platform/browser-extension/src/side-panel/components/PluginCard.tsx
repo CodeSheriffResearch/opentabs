@@ -1,15 +1,14 @@
 import { PluginIcon } from './PluginIcon.js';
 import { Accordion } from './retro/Accordion.js';
 import { Alert } from './retro/Alert.js';
-import { Badge } from './retro/Badge.js';
 import { Switch } from './retro/Switch.js';
+import { Tooltip } from './retro/Tooltip.js';
 import { ToolRow } from './ToolRow.js';
 import { setToolEnabled, setAllToolsEnabled } from '../bridge.js';
 import * as AccordionPrimitive from '@radix-ui/react-accordion';
 import { ChevronDown } from 'lucide-react';
 import { useState, useEffect, useRef } from 'react';
 import type { PluginState } from '../bridge.js';
-import type { TrustTier } from '@opentabs-dev/shared';
 import type { Dispatch, SetStateAction } from 'react';
 
 const extractDomain = (urlPatterns: string[]): string | null => {
@@ -20,18 +19,6 @@ const extractDomain = (urlPatterns: string[]): string | null => {
     }
   }
   return null;
-};
-
-const tabStateBadgeVariant = (tabState: string) => {
-  if (tabState === 'ready') return 'surface' as const;
-  if (tabState === 'unavailable') return 'default' as const;
-  return 'outline' as const;
-};
-
-const trustBadgeVariant = (tier: TrustTier) => {
-  if (tier === 'official') return 'solid' as const;
-  if (tier === 'community') return 'surface' as const;
-  return 'outline' as const;
 };
 
 const TabStateHint = ({ plugin }: { plugin: PluginState }) => {
@@ -113,27 +100,23 @@ const PluginCard = ({
       )
     : plugin.tools;
 
-  const trustLabel = plugin.trustTier.charAt(0).toUpperCase() + plugin.trustTier.slice(1);
-
   return (
     <Accordion.Item value={plugin.name}>
       <AccordionPrimitive.Header className="flex">
         <AccordionPrimitive.Trigger className="font-head flex flex-1 cursor-pointer items-center gap-2 px-3 py-2 focus:outline-hidden [&[data-state=open]>svg]:rotate-180">
-          <PluginIcon pluginName={plugin.name} ready={plugin.tabState === 'ready'} size={32} />
-          <div className="min-w-0 flex-1">
-            <div className="font-head text-foreground truncate text-sm">{plugin.displayName}</div>
-            <div className="flex flex-wrap items-center gap-1">
-              <Badge variant="outline" size="sm">
-                v{plugin.version}
-              </Badge>
-              <Badge variant={tabStateBadgeVariant(plugin.tabState)} size="sm">
-                {plugin.tabState}
-              </Badge>
-              <Badge variant={trustBadgeVariant(plugin.trustTier)} size="sm">
-                {trustLabel}
-              </Badge>
-            </div>
-          </div>
+          <Tooltip.Provider>
+            <Tooltip>
+              <Tooltip.Trigger asChild>
+                <div>
+                  <PluginIcon pluginName={plugin.name} ready={plugin.tabState === 'ready'} size={32} />
+                </div>
+              </Tooltip.Trigger>
+              <Tooltip.Content>
+                v{plugin.version} &middot; {plugin.trustTier}
+              </Tooltip.Content>
+            </Tooltip>
+          </Tooltip.Provider>
+          <div className="font-head text-foreground min-w-0 flex-1 truncate text-sm">{plugin.displayName}</div>
           <ChevronDown className="h-4 w-4 shrink-0 transition-transform duration-200" />
         </AccordionPrimitive.Trigger>
         <div

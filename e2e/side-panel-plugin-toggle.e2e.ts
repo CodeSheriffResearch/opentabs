@@ -2,7 +2,7 @@
  * Side panel plugin list and tool toggle E2E tests.
  *
  * Verifies:
- *   1. Plugin cards display correct name, version, and tab state
+ *   1. Plugin cards display correct name and icon state
  *   2. Clicking a tool toggle sends config.setToolEnabled to the MCP server
  *   3. MCP server receives the tool config change and updates its state
  *   4. Side panel reflects the updated tool enabled/disabled state
@@ -37,21 +37,12 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 
-/**
- * Read the e2e-test plugin version from its manifest.
- */
-const readPluginVersion = (): string => {
-  const manifestPath = path.join(E2E_TEST_PLUGIN_DIR, 'opentabs-plugin.json');
-  const manifest = JSON.parse(fs.readFileSync(manifestPath, 'utf-8')) as { version: string };
-  return manifest.version;
-};
-
 // ---------------------------------------------------------------------------
-// Plugin list rendering — name, version, tab state
+// Plugin list rendering — name and icon state
 // ---------------------------------------------------------------------------
 
 test.describe('Side panel — plugin list rendering', () => {
-  test('plugin card displays correct name, version, and tab state after connecting', async () => {
+  test('plugin card displays correct name and icon state after connecting', async () => {
     const absPluginPath = path.resolve(E2E_TEST_PLUGIN_DIR);
     const prefixedToolNames = readPluginToolNames();
     const tools: Record<string, boolean> = {};
@@ -77,14 +68,13 @@ test.describe('Side panel — plugin list rendering', () => {
       // Verify plugin card shows display name
       await expect(sidePanelPage.getByText('E2E Test')).toBeVisible({ timeout: 30_000 });
 
-      // Verify version is displayed
-      const expectedVersion = readPluginVersion();
-      await expect(sidePanelPage.getByText(`v${expectedVersion}`)).toBeVisible({ timeout: 5_000 });
+      // With no matching tab open, the PluginIcon shows an outlined (not-ready) state.
+      // The SVG element has fill="none" for not-ready.
+      await expect(sidePanelPage.locator('.bg-muted svg').first()).toHaveAttribute('fill', 'none', {
+        timeout: 5_000,
+      });
 
-      // With no matching tab open, tab state should be 'closed' (red dot)
-      await expect(sidePanelPage.getByText('closed', { exact: true })).toBeVisible({ timeout: 5_000 });
-
-      // Open a matching tab → tab state transitions to 'ready' (green dot)
+      // Open a matching tab → tab state transitions to 'ready'
       const appTab = await context.newPage();
       await appTab.goto(testServer.url, { waitUntil: 'load' });
 
@@ -106,8 +96,10 @@ test.describe('Side panel — plugin list rendering', () => {
       await sidePanelPage.reload({ waitUntil: 'load' });
       await expect(sidePanelPage.getByText('E2E Test')).toBeVisible({ timeout: 15_000 });
 
-      // Verify the green dot (ready state)
-      await expect(sidePanelPage.getByText('ready', { exact: true })).toBeVisible({ timeout: 15_000 });
+      // The PluginIcon now shows a filled (ready) state — fill="currentColor"
+      await expect(sidePanelPage.locator('.bg-muted svg').first()).toHaveAttribute('fill', 'currentColor', {
+        timeout: 15_000,
+      });
 
       await sidePanelPage.close();
       await appTab.close();
