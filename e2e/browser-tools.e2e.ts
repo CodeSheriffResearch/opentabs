@@ -1664,11 +1664,18 @@ test.describe('Browser tools — network capture lifecycle', () => {
     const data1 = parseToolResult(getResult1.content);
     expect((data1.requests as Array<unknown>).length).toBeGreaterThan(0);
 
-    // Get again — buffer should be empty
-    const getResult2 = await mcpClient.callTool('browser_get_network_requests', { tabId });
-    expect(getResult2.isError).toBe(false);
-    const data2 = parseToolResult(getResult2.content);
-    expect((data2.requests as Array<unknown>).length).toBe(0);
+    // Poll with clear=true until the buffer stays empty (drains any in-flight sub-resource requests)
+    await waitFor(
+      async () => {
+        const result = await mcpClient.callTool('browser_get_network_requests', { tabId, clear: true });
+        if (result.isError) return false;
+        const data = parseToolResult(result.content);
+        return (data.requests as Array<unknown>).length === 0;
+      },
+      5_000,
+      200,
+      'network buffer drained after clear',
+    );
 
     // Clean up
     await mcpClient.callTool('browser_disable_network_capture', { tabId });

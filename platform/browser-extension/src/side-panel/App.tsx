@@ -198,22 +198,24 @@ const App = () => {
       <Header connected={connected} />
       {versionMismatch && <VersionMismatchBanner />}
       {connected && !loading && totalTools > 5 && (
-        <div className="relative px-3 pt-2">
-          <Search className="text-muted-foreground pointer-events-none absolute top-1/2 left-5 h-4 w-4 -translate-y-1/2 translate-y-[4px]" />
-          <Input
-            value={toolFilter}
-            onChange={e => setToolFilter(e.target.value)}
-            placeholder="Filter tools..."
-            className="pr-8 pl-9"
-          />
-          {toolFilter && (
-            <button
-              type="button"
-              onClick={() => setToolFilter('')}
-              className="text-muted-foreground hover:text-foreground absolute top-1/2 right-5 -translate-y-1/2 translate-y-[4px]">
-              <X className="h-4 w-4" />
-            </button>
-          )}
+        <div className="px-3 pt-2">
+          <div className="relative">
+            <Search className="text-muted-foreground pointer-events-none absolute top-1/2 left-2 h-4 w-4 -translate-y-1/2" />
+            <Input
+              value={toolFilter}
+              onChange={e => setToolFilter(e.target.value)}
+              placeholder="Filter tools..."
+              className="pr-8 pl-9"
+            />
+            {toolFilter && (
+              <button
+                type="button"
+                onClick={() => setToolFilter('')}
+                className="text-muted-foreground hover:text-foreground absolute top-1/2 right-2 -translate-y-1/2">
+                <X className="h-4 w-4" />
+              </button>
+            )}
+          </div>
         </div>
       )}
       <main className="flex-1 px-3 py-2">
