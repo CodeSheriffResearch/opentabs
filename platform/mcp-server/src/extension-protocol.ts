@@ -372,14 +372,23 @@ const handleExtensionMessage = (
     return;
   }
 
+  // Validate params: must be a plain object (or undefined/null) per JSON-RPC spec.
+  // Reject arrays, primitives, and other non-object types before method handlers.
+  const rawParams = parsed.params;
+  if (rawParams !== undefined && rawParams !== null && (typeof rawParams !== 'object' || Array.isArray(rawParams))) {
+    log.warn(`Dropping message with non-object params: ${method ?? '(no method)'}`);
+    return;
+  }
+  const params = rawParams as Record<string, unknown> | undefined;
+
   // Handle notifications/requests from extension
   if (method === 'tab.syncAll') {
-    handleTabSyncAll(state, parsed.params as Record<string, unknown>);
+    handleTabSyncAll(state, params);
     return;
   }
 
   if (method === 'tab.stateChanged') {
-    handleTabStateChanged(state, parsed.params as Record<string, unknown>, id);
+    handleTabStateChanged(state, params, id);
     return;
   }
 
@@ -390,12 +399,12 @@ const handleExtensionMessage = (
   }
 
   if (method === 'config.setToolEnabled' && id !== undefined) {
-    handleConfigSetToolEnabled(state, parsed.params as Record<string, unknown>, id, callbacks);
+    handleConfigSetToolEnabled(state, params, id, callbacks);
     return;
   }
 
   if (method === 'config.setAllToolsEnabled' && id !== undefined) {
-    handleConfigSetAllToolsEnabled(state, parsed.params as Record<string, unknown>, id, callbacks);
+    handleConfigSetAllToolsEnabled(state, params, id, callbacks);
     return;
   }
 
