@@ -6,7 +6,7 @@
 @import 'tw-animate-css';
 
 /* RetroUI NeoBrutalism Theme — exact values from RetroUI vite.mdx */
-@theme {
+@theme inline {
   --font-head: 'Archivo Black', sans-serif;
   --font-sans: 'Space Grotesk', sans-serif;
   --radius: var(--radius);
@@ -35,6 +35,12 @@
   --color-destructive: var(--destructive);
   --color-destructive-foreground: var(--destructive-foreground);
   --color-border: var(--border);
+  --background-image: var(--background-image);
+  --chart-1: var(--chart-1);
+  --chart-2: var(--chart-2);
+  --chart-3: var(--chart-3);
+  --chart-4: var(--chart-4);
+  --chart-5: var(--chart-5);
 }
 
 :root {
