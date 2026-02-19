@@ -18,17 +18,16 @@ const ToolRow = ({
   <div
     className={`border-border hover:bg-muted/10 flex items-center gap-2 border-b px-3 py-2 transition-colors last:border-b-0 ${active ? 'border-primary border-l-2' : ''}`}>
     <ToolIcon toolName={name} />
-    <div className="min-w-0 flex-1">
-      <div className="text-foreground truncate text-xs font-medium">{name}</div>
-      <Tooltip.Provider>
-        <Tooltip>
-          <Tooltip.Trigger asChild>
-            <div className="text-muted-foreground truncate text-[11px]">{description}</div>
-          </Tooltip.Trigger>
-          <Tooltip.Content>{description}</Tooltip.Content>
-        </Tooltip>
-      </Tooltip.Provider>
-    </div>
+    <Tooltip.Provider>
+      <Tooltip>
+        <Tooltip.Trigger asChild>
+          <div className="min-w-0 flex-1">
+            <div className="text-foreground truncate text-xs font-medium">{description}</div>
+          </div>
+        </Tooltip.Trigger>
+        <Tooltip.Content>{name}</Tooltip.Content>
+      </Tooltip>
+    </Tooltip.Provider>
     <div className="flex shrink-0 items-center gap-2">
       {active && <div className="border-muted border-t-primary h-3 w-3 animate-spin rounded-full border-2" />}
       <Switch
