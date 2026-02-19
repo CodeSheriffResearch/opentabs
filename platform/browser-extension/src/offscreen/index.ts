@@ -13,6 +13,7 @@
  * here because offscreen documents do not have access to chrome.storage APIs.
  */
 
+import { ALL_ALLOWED_METHODS } from '../known-methods.js';
 import type { InternalMessage, WsStateMessage, WsDataMessage } from '../types.js';
 
 const DEFAULT_MCP_SERVER_URL = 'ws://localhost:9515/ws';
@@ -28,46 +29,11 @@ const PONG_TIMEOUT_MS = 5_000; // Expect pong within 5s or connection is dead
  * Allowlist of expected JSON-RPC methods from the MCP server.
  * Messages with methods not in this set (and without an `id` response field)
  * are dropped to prevent forwarding unexpected payloads to the background script.
+ *
+ * Derived from ALL_ALLOWED_METHODS in known-methods.ts — the single source of
+ * truth for all recognized WebSocket methods.
  */
-const ALLOWED_METHODS = new Set([
-  'pong',
-  'sync.full',
-  'plugin.update',
-  'plugin.uninstall',
-  'tool.dispatch',
-  'tool.invocationStart',
-  'tool.invocationEnd',
-  'browser.listTabs',
-  'browser.openTab',
-  'browser.closeTab',
-  'browser.navigateTab',
-  'browser.focusTab',
-  'browser.getTabInfo',
-  'browser.screenshotTab',
-  'browser.getTabContent',
-  'browser.getPageHtml',
-  'browser.getStorage',
-  'browser.clickElement',
-  'browser.typeText',
-  'browser.selectOption',
-  'browser.waitForElement',
-  'browser.queryElements',
-  'browser.getCookies',
-  'browser.setCookie',
-  'browser.deleteCookies',
-  'browser.enableNetworkCapture',
-  'browser.getNetworkRequests',
-  'browser.disableNetworkCapture',
-  'browser.getConsoleLogs',
-  'browser.clearConsoleLogs',
-  'browser.executeScript',
-  'browser.listResources',
-  'browser.getResourceContent',
-  'browser.pressKey',
-  'browser.scroll',
-  'browser.hoverElement',
-  'extension.reload',
-]);
+const ALLOWED_METHODS = new Set<string>(ALL_ALLOWED_METHODS);
 
 /**
  * Validate that a WebSocket URL from /ws-info has the expected origin.

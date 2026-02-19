@@ -691,5 +691,8 @@ const handleServerMessage = (message: Record<string, unknown>): void => {
   }
 };
 
-export { handleServerMessage, validatePluginPayload };
+/** Method names registered in the dispatch table, exported for test verification */
+const methodHandlerNames = Array.from(methodHandlers.keys());
+
+export { handleServerMessage, methodHandlerNames, validatePluginPayload };
 export type { ValidatedPluginPayload };
