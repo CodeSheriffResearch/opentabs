@@ -27,7 +27,7 @@
 
 **MCP Server** (`platform/mcp-server`): Discovers plugins, registers their tools as MCP tools, dispatches tool calls to the Chrome extension via WebSocket, and serves health/config endpoints.
 
-**Chrome Extension** (`platform/browser-extension`): Receives plugin definitions from the MCP server via `sync.full`, dynamically registers content scripts for URL patterns, injects adapter IIFEs into matching tabs, and dispatches tool calls to the correct tab's adapter.
+**Chrome Extension** (`platform/browser-extension`): Receives plugin definitions from the MCP server via `sync.full`, dynamically registers content scripts for URL patterns, injects adapter IIFEs into matching tabs, and dispatches tool calls to the correct tab's adapter. The `debugger` permission in the manifest is required for network capture via the Chrome DevTools Protocol (`chrome.debugger.attach`, `Network.enable`, `Runtime.enable`) in `network-capture.ts`.
 
 **Plugin SDK** (`platform/plugin-sdk`): Provides the `OpenTabsPlugin` base class, `defineTool` factory, and `opentabs build` CLI. Plugins extend `OpenTabsPlugin` and define tools with Zod schemas; the CLI bundles the adapter into an IIFE and generates `opentabs-plugin.json`.
 
