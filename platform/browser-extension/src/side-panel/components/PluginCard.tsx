@@ -119,7 +119,7 @@ const PluginCard = ({
     <Accordion.Item value={plugin.name}>
       <AccordionPrimitive.Header className="flex">
         <AccordionPrimitive.Trigger className="font-head flex flex-1 cursor-pointer items-center gap-2 px-3 py-2 focus:outline-hidden [&[data-state=open]>svg]:rotate-180">
-          <PluginIcon pluginName={plugin.name} size={32} />
+          <PluginIcon pluginName={plugin.name} ready={plugin.tabState === 'ready'} size={32} />
           <div className="min-w-0 flex-1">
             <div className="font-head text-foreground truncate text-sm">{plugin.displayName}</div>
             <div className="flex flex-wrap items-center gap-1">
