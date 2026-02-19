@@ -1,3 +1,4 @@
+import { Loader } from './retro/Loader.js';
 import { Switch } from './retro/Switch.js';
 import { Tooltip } from './retro/Tooltip.js';
 import { ToolIcon } from './ToolIcon.js';
@@ -29,7 +30,7 @@ const ToolRow = ({
       </Tooltip>
     </Tooltip.Provider>
     <div className="flex shrink-0 items-center gap-2">
-      {active && <div className="border-muted border-t-primary h-3 w-3 animate-spin rounded-full border-2" />}
+      {active && <Loader size="sm" count={2} duration={0.4} delayStep={80} />}
       <Switch
         checked={enabled}
         onCheckedChange={() => onToggle()}
