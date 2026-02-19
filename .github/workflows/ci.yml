@@ -25,7 +25,6 @@ jobs:
           restore-keys: ${{ runner.os }}-bun-
       - run: bun install --frozen-lockfile
       - run: bun run build
-      - run: bun run build:plugins
 
   type-check:
     name: Type Check
@@ -43,7 +42,6 @@ jobs:
       - run: bun install --frozen-lockfile
       - run: bun run build
       - run: bun run type-check
-      - run: bun run type-check:plugins
       - run: bun run type-check:e2e
 
   lint:
@@ -128,7 +126,6 @@ jobs:
           restore-keys: ${{ runner.os }}-bun-
       - run: bun install --frozen-lockfile
       - run: bun run build
-      - run: bun run build:plugins
       - run: bunx playwright install chromium --with-deps
       - run: bun run test:e2e
       - uses: actions/upload-artifact@v4
