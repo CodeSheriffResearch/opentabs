@@ -121,7 +121,7 @@ export const getMDXComponents = (components?: MDXComponents): MDXComponents => (
     <ol className={cn('mb-5 list-outside list-decimal space-y-2 pl-6 font-sans', className)} {...props} />
   ),
   li: ({ className, ...props }: ComponentPropsWithoutRef<'li'>) => (
-    <li className={cn('font-sans text-base leading-relaxed', className)} {...props} />
+    <li className={cn('font-sans text-base leading-relaxed [&>p]:mb-2', className)} {...props} />
   ),
   blockquote: ({ className, ...props }: ComponentPropsWithoutRef<'blockquote'>) => (
     <blockquote
