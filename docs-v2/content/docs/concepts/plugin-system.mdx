@@ -1,0 +1,198 @@
+---
+title: Plugin System
+description: How OpenTabs discovers, registers, and injects plugins — from npm packages to adapter IIFEs running in browser tabs.
+lastUpdated: 2026-02-20
+---
+
+OpenTabs uses a plugin-based architecture where each plugin is a standalone npm package. The MCP server discovers plugins at startup, registers their tools, and the Chrome extension dynamically injects plugin adapters into matching browser tabs.
+
+## Plugin Anatomy
+
+A plugin consists of two build artifacts:
+
+| File | Purpose |
+| --- | --- |
+| `opentabs-plugin.json` | Manifest declaring the plugin's name, URL patterns, and tool definitions with JSON Schema |
+| `dist/adapter.iife.js` | Self-contained IIFE bundle that runs in the browser page's MAIN world context |
+
+Plugins extend the `OpenTabsPlugin` base class from `@opentabs-dev/plugin-sdk` and define tools using the `defineTool()` factory. The `opentabs build` CLI compiles the plugin source into these two artifacts.
+
+## Discovery
+
+The MCP server discovers plugins from two sources on startup:
+
+### Local Plugins
+
+Paths listed in the `plugins` array of `~/.opentabs/config.json`:
+
+```json
+{
+  "plugins": ["../plugins/slack", "/Users/me/my-plugin"]
+}
+```
+
+Paths can be relative (resolved from the config directory) or absolute. For security, all paths must resolve under the user's home directory (`$HOME`) or system temp directory (`$TMPDIR`). Symlinks are resolved via `realpath()` to prevent directory traversal. Paths outside allowed roots are rejected and logged.
+
+### npm Plugins
+
+The server scans `node_modules` for packages matching these patterns:
+
+- `opentabs-plugin-*` (unscoped)
+- `@scope/opentabs-plugin-*` (scoped)
+- Any package with the `opentabs-plugin` keyword in its `package.json`
+
+Discovered npm packages are only loaded if they appear in the `npmPlugins` allowlist in `config.json`:
+
+```json
+{
+  "npmPlugins": ["opentabs-plugin-github", "@myorg/opentabs-plugin-jira"]
+}
+```
+
+Packages not in the allowlist are logged as skipped with instructions to enable them.
+
+### Precedence
+
+Local and npm discovery run in parallel. If the same plugin name appears in both sources, the local copy takes precedence.
+
+## Plugin Manifest
+
+The `opentabs-plugin.json` manifest is validated against a Zod schema at discovery time:
+
+```json
+{
+  "name": "slack",
+  "version": "0.0.1",
+  "displayName": "Slack",
+  "description": "Give AI agents access to Slack workspaces",
+  "url_patterns": ["*://*.slack.com/*"],
+  "tools": [
+    {
+      "name": "send_message",
+      "displayName": "Send Message",
+      "description": "Send a message to a Slack channel or thread",
+      "icon": "send",
+      "input_schema": { "type": "object", "properties": { "...": {} } },
+      "output_schema": { "type": "object", "properties": { "...": {} } }
+    }
+  ],
+  "adapterHash": "a1b2c3..."
+}
+```
+
+### Validation Rules
+
+- **Plugin name**: lowercase alphanumeric with hyphens (`^[a-z0-9]+(-[a-z0-9]+)*$`). Reserved names are rejected: `system`, `browser`, `opentabs`, `extension`, `config`, `plugin`, `tool`, `mcp`.
+- **URL patterns**: Chrome match patterns (e.g., `*://*.slack.com/*`). Overly broad patterns like `*://*/*` or `<all_urls>` are rejected. Bare TLD wildcards like `*.com` are rejected — patterns must include a specific domain (e.g., `*.example.com`). Maximum 5 path wildcards per pattern.
+- **Tools**: At least one tool is required. Tool descriptions are capped at 1000 characters. Each tool has `input_schema` and `output_schema` in JSON Schema format (serialized from Zod via `z.toJSONSchema()`).
+- **Adapter hash**: SHA-256 of the adapter IIFE content, set by the `opentabs build` CLI.
+- **IIFE size**: Maximum 5 MB per adapter.
+
+## Tool Prefixing
+
+Plugin tools are exposed to MCP clients with a `<plugin>_<tool>` prefix to prevent name collisions:
+
+| Plugin | Tool | MCP Name |
+| --- | --- | --- |
+| `slack` | `send_message` | `slack_send_message` |
+| `slack` | `read_messages` | `slack_read_messages` |
+| `github` | `create_issue` | `github_create_issue` |
+
+Individual tools can be disabled via the `tools` field in `config.json`:
+
+```json
+{
+  "tools": {
+    "slack_send_message": false
+  }
+}
+```
+
+## Trust Tiers
+
+Each plugin is assigned a trust tier based on its source. The tier is prefixed to tool descriptions in the MCP tool list so AI agents can assess trust:
+
+| Tier | Source | MCP Description Prefix |
+| --- | --- | --- |
+| Official | `@opentabs-dev/*` npm packages | `[Official]` |
+| Community | Other npm packages | `[Community plugin — unverified]` |
+| Local | File paths from `config.plugins` | `[Local plugin]` |
+
+Official plugins are published by the OpenTabs team. Community plugins are published to npm by third parties and are not verified. Local plugins run from the developer's machine.
+
+## Adapter Injection
+
+When a user opens a tab that matches a plugin's URL patterns, the Chrome extension injects the plugin's adapter into the page.
+
+### How Injection Works
+
+1. The extension detects a matching tab via `chrome.tabs.query({url: pattern})`
+2. It injects the adapter IIFE using file-based injection:
+
+```typescript
+chrome.scripting.executeScript({
+  target: { tabId },
+  world: 'MAIN',
+  files: [`adapters/${pluginName}.js`]
+});
+```
+
+3. The IIFE executes immediately and registers itself:
+
+```javascript
+globalThis.__openTabs = globalThis.__openTabs || { adapters: {} };
+globalThis.__openTabs.adapters["slack"] = {
+  version: "0.0.1",
+  __adapterHash: "a1b2c3...",
+  handle: async (tool, input) => { /* ... */ },
+  teardown: () => { /* ... */ }
+};
+```
+
+### Why File-Based Injection
+
+File-based injection (`files:` array) bypasses page Content Security Policy (CSP) restrictions. Inline script injection would be blocked by strict CSP headers on sites like Slack and GitHub. Because adapter files are bundled with the extension, Chrome treats them as extension resources exempt from page CSP.
+
+### MAIN World
+
+Adapters run in the page's MAIN world — the same JavaScript context as the page itself. This gives adapters full access to the page's DOM, cookies, `localStorage`, `fetch` (with the page's session cookies), and any global variables.
+
+### Hash Verification
+
+After injection, the extension reads the adapter's `__adapterHash` property and compares it to the expected hash from the manifest. If the hashes don't match (e.g., due to a partial file write), injection is retried once after 200 ms. A persistent mismatch raises an error.
+
+## File Watcher
+
+The MCP server watches local plugin directories for changes to `opentabs-plugin.json` and `dist/adapter.iife.js`. Changes are debounced at 200 ms.
+
+When the **manifest** changes:
+
+1. Manifest is re-read and validated
+2. IIFE is also re-read (builds typically update both)
+3. MCP tool list is rebuilt and sent to connected MCP clients
+4. Extension is notified via `plugin.update` to re-inject the adapter
+
+When the **IIFE** changes:
+
+1. IIFE is re-read from disk
+2. Embedded adapter hash is extracted
+3. Extension is notified via `plugin.update`
+
+The file watcher also monitors paths for plugins that failed initial discovery (e.g., manifest not yet built). When those files appear, the plugin is loaded and registered automatically.
+
+### Stale Watcher Detection
+
+A fallback mtime-based poller runs every 30 seconds to detect stale `fs.watch()` instances (a known issue on macOS with long-running processes). If file modifications are detected by polling but not by the watcher, the same change handlers are triggered as a safety net.
+
+## Tool Dispatch
+
+When an AI agent calls a plugin tool:
+
+1. MCP server receives the tool call via Streamable HTTP at `/mcp`
+2. Input is validated against the tool's JSON Schema
+3. Server enforces a concurrency limit (max 5 concurrent dispatches per plugin)
+4. Server sends a `tool.dispatch` JSON-RPC message over WebSocket to the extension
+5. Extension finds the best matching tab by URL pattern and [tab ranking](/docs/concepts/tab-state-machine)
+6. Extension executes the adapter's `handle()` function in the matching tab's MAIN world
+7. Result flows back through WebSocket to the MCP server
+8. Server validates the output and returns it to the AI agent
