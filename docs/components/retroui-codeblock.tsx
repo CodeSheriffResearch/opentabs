@@ -109,7 +109,7 @@ export function RetroCodeBlock({
       ) : (
         allowCopy && (
           // Floating copy button when no title — top-right corner
-          <div className="absolute top-2 right-2 z-10">
+          <div className="absolute top-3 right-3 z-10">
             <RetroCopyButton
               containerRef={areaRef}
               className="border-border bg-background text-muted-foreground hover:text-foreground"
