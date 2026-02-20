@@ -97,7 +97,7 @@ export const getMDXComponents = (components?: MDXComponents): MDXComponents => (
     </h2>
   ),
   h3: ({ className, children, ...props }: ComponentPropsWithoutRef<'h3'>) => (
-    <h3 className={cn('font-head mt-8 mb-3 text-lg font-medium md:text-2xl', className)} {...props}>
+    <h3 className={cn('font-head mt-8 mb-3 text-xl font-medium md:text-2xl', className)} {...props}>
       {children}
     </h3>
   ),
@@ -175,13 +175,10 @@ export const getMDXComponents = (components?: MDXComponents): MDXComponents => (
     <tr className={cn('hover:bg-primary/15 border-b-2 transition-colors', className)} {...props} />
   ),
   th: ({ className, ...props }: ComponentPropsWithoutRef<'th'>) => (
-    <th
-      className={cn('text-primary-foreground h-12 px-2 text-left align-middle font-medium md:px-4', className)}
-      {...props}
-    />
+    <th className={cn('text-primary-foreground h-12 px-4 text-left align-middle font-medium', className)} {...props} />
   ),
   td: ({ className, ...props }: ComponentPropsWithoutRef<'td'>) => (
-    <td className={cn('px-2 py-2 align-middle md:px-4 md:py-3', className)} {...props} />
+    <td className={cn('px-4 py-3 align-middle', className)} {...props} />
   ),
   // Fumadocs MDX special components — overridden with RetroUI styling
   Callout: RetroCallout,

@@ -91,7 +91,7 @@ export default function HomePage() {
       <section className="border-border bg-muted/30 border-b-2 px-4 py-20 sm:px-6">
         <div className="mx-auto max-w-5xl">
           <h2 className="font-head mb-12 text-3xl font-semibold">How it works</h2>
-          <div className="grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-3">
+          <div className="grid grid-cols-1 gap-6 md:grid-cols-3">
             {[
               {
                 step: '01',
