@@ -76,7 +76,7 @@ const RetroCodeBlock = ({
     // Override shiki line padding — the viewport div handles padding uniformly on all sides.
     // Without title, add extra right padding for the floating copy button.
     ['--padding-left' as string]: '0',
-    ['--padding-right' as string]: !title ? 'calc(var(--spacing) * 8)' : '0',
+    ['--padding-right' as string]: !title ? 'calc(var(--spacing) * 10)' : '0',
     ...viewportProps.style,
   };
 
@@ -96,7 +96,7 @@ const RetroCodeBlock = ({
       {title ? (
         // Title bar — mirrors RetroUI Dialog.Header: bg-primary, border-b-2, px-4, min-h-10
         <div className="bg-primary font-head text-primary-foreground border-border flex min-h-10 items-center justify-between border-b-2 px-4">
-          <div className="flex items-center gap-2">
+          <div className="flex min-w-0 items-center gap-2">
             {typeof icon === 'string' ? (
               <div className="[&_svg]:size-3.5" dangerouslySetInnerHTML={{ __html: icon }} />
             ) : (
