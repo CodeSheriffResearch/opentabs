@@ -187,7 +187,9 @@ body {
   --fd-header-height: 3.5rem;
 }
 
-#nd-docs-layout #nd-sidebar,
+/* The sidebar placeholder ([data-sidebar-placeholder]) is the actual sticky element —
+ * #nd-sidebar is position:absolute inside it. Target both the placeholder and the TOC. */
+#nd-docs-layout [data-sidebar-placeholder],
 #nd-docs-layout #nd-toc {
   top: var(--fd-docs-row-2);
   height: calc(var(--fd-docs-height) - var(--fd-docs-row-2));
@@ -286,13 +288,13 @@ body {
     padding-left 150ms;
 }
 
-/* Active TOC heading: foreground text on primary tint background, bold left accent border */
+/* Active TOC heading: foreground text with bold primary left border accent.
+ * No border-radius — TOC items are stacked in a flex column with a continuous left border,
+ * so rounding individual items creates saw-tooth edges between adjacent items. */
 #nd-toc [data-active='true'] {
   color: var(--foreground);
   font-weight: 600;
-  background-color: color-mix(in srgb, var(--primary) 20%, transparent);
   border-inline-start-color: var(--primary);
-  border-radius: var(--radius);
 }
 
 /* Inactive TOC headings: hover to foreground */
