@@ -13,6 +13,9 @@ export default function Layout({ children }: { children: ReactNode }) {
         ...baseOptions.nav,
         component: <GlobalHeader showSidebarTrigger />,
       }}
+      sidebar={{
+        collapsible: false,
+      }}
       containerProps={{
         style: {
           gridTemplate: `"header header header header header"

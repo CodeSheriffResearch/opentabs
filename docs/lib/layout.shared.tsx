@@ -1,5 +1,4 @@
 import { GlobalHeader } from '@/components/global-header';
-import { RetroSearchToggleLg } from '@/components/retro-search-toggle';
 import type { BaseLayoutProps } from 'fumadocs-ui/layouts/shared';
 
 export const baseOptions: BaseLayoutProps = {
@@ -8,10 +7,9 @@ export const baseOptions: BaseLayoutProps = {
     title: () => null,
     component: <GlobalHeader />,
   },
+  /* Search is in the GlobalHeader, not the sidebar. */
   searchToggle: {
-    components: {
-      lg: <RetroSearchToggleLg hideIfDisabled />,
-    },
+    enabled: false,
   },
   /* Disable the default theme switch — GlobalHeader renders its own RetroThemeToggle. */
   themeSwitch: {

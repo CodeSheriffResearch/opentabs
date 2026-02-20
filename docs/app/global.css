@@ -201,9 +201,11 @@ body {
   background-color: var(--background);
 }
 
-/* Sidebar collapse panel button: 2px border to match RetroUI */
-[data-sidebar-panel] {
-  border-width: 2px;
+/* Sidebar top padding: Fumadocs renders a header area (title + search + collapse) inside
+ * a div with p-4 pb-2. With search and collapse disabled, this area is nearly empty but
+ * still takes up space. Reduce it to a minimal top margin for the page tree. */
+#nd-sidebar aside > div > div:first-child {
+  padding: 0.5rem 0 0;
 }
 
 /* Active sidebar link: full primary yellow bg with black text (RetroUI active state).
@@ -247,9 +249,11 @@ body {
 
 /* ===== RetroUI Table of Contents Overrides ===== */
 
-/* TOC container: left border separates it from page content */
+/* TOC container: left border separates it from page content.
+ * Reduce Fumadocs' default pt-12 (48px) to match the sidebar and content area. */
 #nd-toc {
   border-left: 2px solid var(--border);
+  padding-top: 1.25rem;
 }
 
 /* TOC title ("On this page"): Archivo Black, uppercase */
@@ -331,7 +335,14 @@ body {
   transform: translateY(2px);
 }
 
-/* ===== RetroUI Final Polish (US-019) ===== */
+/* ===== RetroUI Final Polish ===== */
+
+/* Reduce top padding on docs page content area. Fumadocs defaults to py-6 / md:pt-8 / xl:pt-14,
+ * which creates a large blank gap between the header and the breadcrumb. Use a consistent
+ * compact top padding so the breadcrumb sits close to the header border. */
+#nd-page {
+  padding-top: 1.25rem;
+}
 
 /* DocsTitle (page.data.title rendered by DocsPage): enforce font-head since this h1 is outside
  * the MDX prose context and doesn't receive the getMDXComponents() h1 override. */
