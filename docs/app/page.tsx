@@ -95,7 +95,7 @@ export default function HomePage() {
       {/* How it works */}
       <section className="border-border bg-muted/30 border-b-2 px-6 py-20">
         <div className="mx-auto max-w-5xl">
-          <h2 className="font-head mb-10 text-3xl font-semibold">How it works</h2>
+          <h2 className="font-head mb-12 text-3xl font-semibold">How it works</h2>
           <div className="grid grid-cols-1 gap-6 md:grid-cols-3">
             {[
               {
