@@ -82,12 +82,12 @@ const RetroCards = ({ className, ...props }: ComponentPropsWithoutRef<'div'>) =>
 export const getMDXComponents = (components?: MDXComponents): MDXComponents => ({
   ...defaultMdxComponents,
   h1: ({ className, children, ...props }: ComponentPropsWithoutRef<'h1'>) => (
-    <h1 className={cn('font-head mt-8 mb-4 text-2xl font-bold md:text-4xl lg:text-5xl', className)} {...props}>
+    <h1 className={cn('font-head mt-12 mb-5 text-2xl font-bold md:text-4xl lg:text-5xl', className)} {...props}>
       {children}
     </h1>
   ),
   h2: ({ className, children, ...props }: ComponentPropsWithoutRef<'h2'>) => (
-    <h2 className={cn('font-head mt-12 mb-4 text-xl font-semibold md:text-3xl lg:text-4xl', className)} {...props}>
+    <h2 className={cn('font-head mt-10 mb-4 text-xl font-semibold md:text-3xl lg:text-4xl', className)} {...props}>
       {children}
     </h2>
   ),
@@ -97,12 +97,12 @@ export const getMDXComponents = (components?: MDXComponents): MDXComponents => (
     </h3>
   ),
   h4: ({ className, children, ...props }: ComponentPropsWithoutRef<'h4'>) => (
-    <h4 className={cn('font-head mt-4 mb-2 text-xl font-normal', className)} {...props}>
+    <h4 className={cn('font-head mt-6 mb-2 text-xl font-normal', className)} {...props}>
       {children}
     </h4>
   ),
   h5: ({ className, children, ...props }: ComponentPropsWithoutRef<'h5'>) => (
-    <h5 className={cn('font-head mt-4 mb-2 text-lg font-normal', className)} {...props}>
+    <h5 className={cn('font-head mt-6 mb-2 text-lg font-normal', className)} {...props}>
       {children}
     </h5>
   ),
