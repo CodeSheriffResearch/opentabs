@@ -279,13 +279,21 @@ body {
   font-family: var(--font-head);
 }
 
-/* Sidebar and mobile drawer links/buttons: sharp corners, transparent left border reserve (prevents
- * layout shift when active state adds a solid left border). */
+/* Sidebar and mobile drawer: sharp corners on all interactive elements. */
 #nd-sidebar a,
 #nd-sidebar button,
 #nd-sidebar-mobile a,
 #nd-sidebar-mobile button {
   border-radius: 0;
+}
+
+/* Page tree nav links/buttons: transparent left border reserve (prevents layout shift when
+ * active state adds a solid left border). Scoped to the scroll viewport so the search bar
+ * and theme toggle buttons outside the page tree keep their full border. */
+#nd-sidebar [data-radix-scroll-area-viewport] a,
+#nd-sidebar [data-radix-scroll-area-viewport] button,
+#nd-sidebar-mobile a,
+#nd-sidebar-mobile button {
   border-left: 4px solid transparent;
 }
 
