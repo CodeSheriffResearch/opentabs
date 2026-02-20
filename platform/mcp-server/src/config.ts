@@ -66,79 +66,120 @@ const generateSecret = (): string => {
   return Array.from(bytes, b => b.toString(16).padStart(2, '0')).join('');
 };
 
-/** Returned when config cannot be loaded (file corrupted, permissions error, etc.) */
-const FALLBACK_CONFIG: OpentabsConfig = {
-  plugins: [],
-  tools: {},
-  secret: undefined,
-  npmPlugins: [],
+/**
+ * Read and parse config.json with retry and exponential backoff.
+ *
+ * Handles transient file unavailability during non-atomic writes from
+ * external processes (CLI commands, manual edits). Retries up to 3 times
+ * with 100ms / 200ms / 400ms delays before giving up.
+ *
+ * Returns the raw parsed JSON or null if the file cannot be read after
+ * all retries. Callers decide how to handle the failure.
+ */
+const readConfigWithRetry = async (
+  configPath: string,
+  maxRetries = 3,
+  initialDelayMs = 100,
+): Promise<Record<string, unknown> | null> => {
+  let delay = initialDelayMs;
+  for (let attempt = 0; attempt <= maxRetries; attempt++) {
+    try {
+      const raw = await Bun.file(configPath).text();
+      const parsed: unknown = JSON.parse(raw);
+
+      if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) {
+        if (attempt === maxRetries) {
+          log.warn(`Config at ${configPath} is not a JSON object after ${maxRetries + 1} attempt(s)`);
+          return null;
+        }
+        log.debug(`Config at ${configPath} is not a JSON object — retrying (attempt ${attempt + 1})`);
+        await new Promise(r => setTimeout(r, delay));
+        delay *= 2;
+        continue;
+      }
+
+      return parsed as Record<string, unknown>;
+    } catch (err) {
+      if (attempt === maxRetries) {
+        log.warn(`Failed to read config from ${configPath} after ${maxRetries + 1} attempt(s):`, err);
+        return null;
+      }
+      log.debug(`Config read attempt ${attempt + 1} failed, retrying in ${delay}ms`);
+      await new Promise(r => setTimeout(r, delay));
+      delay *= 2;
+    }
+  }
+  return null;
+};
+
+/**
+ * Parse a raw config record into an OpentabsConfig.
+ * Validates and normalizes field types to prevent downstream errors.
+ */
+const parseConfigRecord = (record: Record<string, unknown>): Omit<OpentabsConfig, 'secret'> & { secret?: string } => {
+  const plugins = Array.isArray(record.plugins)
+    ? (record.plugins as unknown[]).filter((p): p is string => typeof p === 'string')
+    : [];
+  const tools: Record<string, boolean> = {};
+  if (record.tools && typeof record.tools === 'object' && !Array.isArray(record.tools)) {
+    for (const [key, value] of Object.entries(record.tools as Record<string, unknown>)) {
+      if (typeof value === 'boolean') {
+        tools[key] = value;
+      }
+    }
+  }
+  const npmPlugins = Array.isArray(record.npmPlugins)
+    ? (record.npmPlugins as unknown[]).filter((p): p is string => typeof p === 'string')
+    : undefined;
+  const secret = typeof record.secret === 'string' ? record.secret : undefined;
+
+  return { plugins, tools, secret, npmPlugins };
 };
 
 /**
  * Load config from ~/.opentabs/config.json.
  * Creates the directory and file with defaults if they don't exist.
- * Catches file read/parse errors — returns defaults and logs a warning.
+ *
+ * On transient read/parse errors (corrupted file, mid-write from another
+ * process), retries with exponential backoff. If all retries fail, throws
+ * an error so the caller (reloadCore) can preserve previous state instead
+ * of replacing it with an empty config.
  */
 const loadConfig = async (): Promise<OpentabsConfig> => {
   const configDir = getConfigDir();
   const configPath = getConfigPath();
-  try {
-    await mkdir(configDir, { recursive: true, mode: 0o700 });
 
-    const configFile = Bun.file(configPath);
-    if (!(await configFile.exists())) {
-      // First run — create default config with a fresh shared secret
-      const config: OpentabsConfig = { plugins: [], tools: {}, secret: generateSecret(), npmPlugins: [] };
-      await atomicWriteConfig(configPath, JSON.stringify(config, null, 2) + '\n');
-      log.info(`Created default config at ${configPath}`);
-      return config;
-    }
+  await mkdir(configDir, { recursive: true, mode: 0o700 });
 
-    const raw = await configFile.text();
-
-    const parsed: unknown = JSON.parse(raw);
-
-    // Guard against non-object JSON values (arrays, primitives, null)
-    if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) {
-      log.warn(`Config at ${configPath} is not a JSON object — using fallback`);
-      return { ...FALLBACK_CONFIG, secret: generateSecret() };
-    }
-
-    const record = parsed as Record<string, unknown>;
-
-    // Validate and normalize — filter invalid types to prevent downstream errors.
-    // Paths are stored as-is (raw) so relative paths survive round-trips through saveConfig.
-    // Callers that need absolute paths (e.g., discoverPlugins) resolve them at the call site.
-    const plugins = Array.isArray(record.plugins)
-      ? (record.plugins as unknown[]).filter((p): p is string => typeof p === 'string')
-      : [];
-    const tools: Record<string, boolean> = {};
-    if (record.tools && typeof record.tools === 'object' && !Array.isArray(record.tools)) {
-      for (const [key, value] of Object.entries(record.tools as Record<string, unknown>)) {
-        if (typeof value === 'boolean') {
-          tools[key] = value;
-        }
-      }
-    }
-    const npmPlugins = Array.isArray(record.npmPlugins)
-      ? (record.npmPlugins as unknown[]).filter((p): p is string => typeof p === 'string')
-      : undefined;
-
-    let secret = typeof record.secret === 'string' ? record.secret : undefined;
-
-    // Generate secret if missing (upgrade from older config)
-    if (!secret) {
-      secret = generateSecret();
-      const updated: OpentabsConfig = { plugins, tools, secret, npmPlugins };
-      await atomicWriteConfig(configPath, JSON.stringify(updated, null, 2) + '\n');
-      log.info(`Generated WebSocket authentication secret in ${configPath}`);
-    }
-
-    return { plugins, tools, secret, npmPlugins };
-  } catch (err) {
-    log.warn(`Failed to load config from ${configPath}, using fallback:`, err);
-    return { ...FALLBACK_CONFIG, secret: generateSecret() };
+  const configFile = Bun.file(configPath);
+  if (!(await configFile.exists())) {
+    // First run — create default config with a fresh shared secret
+    const config: OpentabsConfig = { plugins: [], tools: {}, secret: generateSecret(), npmPlugins: [] };
+    await atomicWriteConfig(configPath, JSON.stringify(config, null, 2) + '\n');
+    log.info(`Created default config at ${configPath}`);
+    return config;
   }
+
+  const record = await readConfigWithRetry(configPath);
+  if (!record) {
+    // All retries exhausted — throw so the caller can preserve previous state.
+    // This prevents the old behavior of returning an empty fallback config
+    // which would wipe all plugins from state on any transient read error.
+    throw new Error(`Config at ${configPath} is unreadable after retries`);
+  }
+
+  const config = parseConfigRecord(record);
+  let { secret } = config;
+
+  // Generate secret if missing (upgrade from older config)
+  if (!secret) {
+    secret = generateSecret();
+    const updated: OpentabsConfig = { ...config, secret };
+    await atomicWriteConfig(configPath, JSON.stringify(updated, null, 2) + '\n');
+    log.info(`Generated WebSocket authentication secret in ${configPath}`);
+  }
+
+  return { ...config, secret };
 };
 
 /**
@@ -164,5 +205,57 @@ const saveConfig = async (state: { configWriteMutex: Promise<void> }, config: Op
   await state.configWriteMutex;
 };
 
+/**
+ * Persist only the tool enabled/disabled state to config.json.
+ *
+ * Reads the current config from disk, updates only the `tools` field,
+ * and writes it back atomically. This prevents stale in-memory plugin
+ * paths from overwriting externally-added plugins — the root cause of
+ * the "plugin disappears during development" bug.
+ *
+ * The read-modify-write is serialized via state.configWriteMutex.
+ */
+const saveToolConfig = async (
+  state: { configWriteMutex: Promise<void> },
+  tools: Record<string, boolean>,
+): Promise<void> => {
+  const configDir = getConfigDir();
+  const configPath = getConfigPath();
+  const prev = state.configWriteMutex;
+  state.configWriteMutex = (async () => {
+    await prev;
+    await mkdir(configDir, { recursive: true, mode: 0o700 });
+
+    // Read current config from disk to preserve plugins, secret, npmPlugins
+    const record = await readConfigWithRetry(configPath, 2, 50);
+    if (!record) {
+      log.warn('Cannot persist tool config — config file unreadable');
+      return;
+    }
+
+    const current = parseConfigRecord(record);
+    const updated: OpentabsConfig = {
+      plugins: current.plugins,
+      tools,
+      secret: current.secret,
+      npmPlugins: current.npmPlugins,
+    };
+    await atomicWriteConfig(configPath, JSON.stringify(updated, null, 2) + '\n');
+  })().catch((err: unknown) => {
+    state.configWriteMutex = Promise.resolve();
+    log.warn(`Failed to save tool config to ${configPath}:`, err);
+    throw err;
+  });
+  await state.configWriteMutex;
+};
+
 export type { OpentabsConfig };
-export { loadConfig, saveConfig, getConfigDir, getExtensionDir, getExtensionVersionFile, getAdaptersDir };
+export {
+  loadConfig,
+  saveConfig,
+  saveToolConfig,
+  getConfigDir,
+  getExtensionDir,
+  getExtensionVersionFile,
+  getAdaptersDir,
+};

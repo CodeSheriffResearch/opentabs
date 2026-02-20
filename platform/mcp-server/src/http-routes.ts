@@ -12,7 +12,7 @@
  * hot reload and removes entries whose transport is no longer in the map.
  */
 
-import { saveConfig } from './config.js';
+import { saveToolConfig } from './config.js';
 import { handleExtensionMessage, sendSyncFull } from './extension-protocol.js';
 import { log } from './logger.js';
 import { createMcpServer, notifyToolListChanged } from './mcp-setup.js';
@@ -46,13 +46,8 @@ const createMcpCallbacks = (state: ServerState, sessionServers: McpServerInstanc
     }
   },
   onToolConfigPersist: () => {
-    saveConfig(state, {
-      plugins: state.pluginPaths,
-      tools: { ...state.toolConfig },
-      secret: state.wsSecret ?? undefined,
-      npmPlugins: state.npmPlugins.length > 0 ? state.npmPlugins : undefined,
-    }).catch(() => {
-      // Error already logged by saveConfig
+    saveToolConfig(state, { ...state.toolConfig }).catch(() => {
+      // Error already logged by saveToolConfig
     });
   },
 });
