@@ -33,5 +33,7 @@ export default function Layout({ children }: { children: ReactNode }) {
 }
 
 export const viewport: Viewport = {
+  width: 'device-width',
+  initialScale: 1,
   viewportFit: 'cover',
 };
