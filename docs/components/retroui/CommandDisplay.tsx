@@ -20,11 +20,11 @@ export function CommandDisplay({ command }: CommandDisplayProps) {
     }
   };
 
-  const defaultColors = ['text-blue-300', 'text-yellow-300', 'text-green-300', 'text-purple-300'];
+  const syntaxColors = ['text-blue-300', 'text-yellow-300', 'text-green-300', 'text-purple-300'];
 
   // Split the command into parts for syntax highlighting
   const parts = command.split(' ').map((part, index) => {
-    const color = defaultColors[index % defaultColors.length];
+    const color = syntaxColors[index % syntaxColors.length];
     return (
       <span key={index} className={color}>
         {part}
@@ -46,7 +46,7 @@ export function CommandDisplay({ command }: CommandDisplayProps) {
       </div>
       <button
         onClick={copyToClipboard}
-        className="mr-2 shrink-0 p-1 text-gray-400 transition-colors hover:text-white"
+        className="text-muted-foreground hover:text-foreground mr-2 shrink-0 p-1 transition-colors"
         aria-label="Copy command">
         {copied ? <CheckIcon className="h-4 w-4 text-green-400" /> : <ClipboardIcon className="h-4 w-4" />}
       </button>

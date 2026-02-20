@@ -45,7 +45,7 @@ function RetroCopyButton({
       aria-label={checked ? 'Copied Text' : 'Copy Text'}
       onClick={onClick}
       className={cn(
-        'inline-flex cursor-pointer items-center justify-center rounded border-2 p-1.5 transition-all',
+        'inline-flex cursor-pointer items-center justify-center border-2 p-1.5 transition-all',
         'shadow-sm hover:shadow-none active:translate-x-0.5 active:translate-y-0.5',
         className,
       )}>
@@ -72,7 +72,10 @@ export function RetroCodeBlock({
 
   const viewportStyle: React.CSSProperties = {
     ...(lineNumbers ? { counterSet: `line ${Number(lineNumbersStart ?? 1) - 1}` } : {}),
-    ...(!title ? { ['--padding-right' as string]: 'calc(var(--spacing) * 8)' } : {}),
+    // Override shiki line padding — the viewport div handles padding uniformly on all sides.
+    // Without title, add extra right padding for the floating copy button.
+    ['--padding-left' as string]: '0',
+    ['--padding-right' as string]: !title ? 'calc(var(--spacing) * 8)' : '0',
     ...viewportProps.style,
   };
 
@@ -84,13 +87,13 @@ export function RetroCodeBlock({
       data-line-numbers-start={lineNumbersStart}
       {...props}
       className={cn(
-        'shiki not-prose relative my-6 overflow-hidden border-2 text-sm shadow-md',
+        'shiki not-prose border-border relative my-6 overflow-hidden border-2 text-sm shadow-md',
         keepBackground && 'bg-(--shiki-light-bg) dark:bg-(--shiki-dark-bg)',
         className,
       )}>
       {title ? (
         // Title bar — mirrors RetroUI Dialog.Header: bg-primary, border-b-2, px-4, min-h-10
-        <div className="bg-primary font-head text-primary-foreground flex min-h-10 items-center justify-between border-b-2 px-4">
+        <div className="bg-primary font-head text-primary-foreground border-border flex min-h-10 items-center justify-between border-b-2 px-4">
           <div className="flex items-center gap-2">
             {typeof icon === 'string' ? (
               <div className="[&_svg]:size-3.5" dangerouslySetInnerHTML={{ __html: icon }} />
@@ -123,7 +126,7 @@ export function RetroCodeBlock({
         role="region"
         tabIndex={0}
         className={cn(
-          'fd-scroll-container max-h-[600px] overflow-auto py-3.5 font-mono',
+          'fd-scroll-container max-h-[600px] overflow-auto bg-(--shiki-light-bg) p-4 font-mono dark:bg-(--shiki-dark-bg)',
           'focus-visible:ring-border focus-visible:ring-2 focus-visible:outline-none focus-visible:ring-inset',
           viewportProps.className,
         )}

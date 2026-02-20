@@ -112,7 +112,6 @@ body {
 .prose a,
 .nd-prose a {
   font-family: var(--font-sans);
-  font-size: 1rem;
   text-decoration-color: var(--primary);
   text-underline-offset: 2px;
 }

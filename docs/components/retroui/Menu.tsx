@@ -14,7 +14,7 @@ const Content = ({ className, ...props }: IMenuContent) => (
     <DropdownMenu.Content
       side="bottom"
       align="start"
-      className={cn('absolute top-2 min-w-20 border-2 bg-white shadow-md', className)}
+      className={cn('bg-card absolute top-2 min-w-20 border-2 shadow-md', className)}
       {...props}
     />
   </DropdownMenu.Portal>
@@ -25,7 +25,7 @@ const MenuItem = React.forwardRef<HTMLDivElement, ComponentPropsWithoutRef<typeo
     <DropdownMenu.Item
       ref={ref}
       className={cn(
-        'hover:bg-primary focus:bg-primary relative flex cursor-default items-center rounded-xs px-2 py-1.5 text-sm text-black outline-hidden transition-colors select-none data-disabled:pointer-events-none data-disabled:opacity-50',
+        'hover:bg-primary focus:bg-primary text-foreground relative flex cursor-default items-center px-2 py-1.5 text-sm outline-hidden transition-colors select-none data-disabled:pointer-events-none data-disabled:opacity-50',
         className,
       )}
       {...props}

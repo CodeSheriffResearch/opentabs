@@ -11,12 +11,14 @@ import { RetroFiles, RetroFile, RetroFolder } from '@/components/retro-files';
 
 // Mapping from Fumadocs callout type to RetroUI Alert status color classes
 const calloutStatusClasses: Record<string, string> = {
-  info: 'bg-blue-300 text-blue-800 border-blue-800',
-  warn: 'bg-yellow-300 text-yellow-800 border-yellow-800',
-  warning: 'bg-yellow-300 text-yellow-800 border-yellow-800',
-  error: 'bg-red-300 text-red-800 border-red-800',
-  success: 'bg-green-300 text-green-800 border-green-800',
-  idea: 'bg-blue-300 text-blue-800 border-blue-800',
+  info: 'bg-blue-300 text-blue-800 border-blue-800 dark:bg-blue-900/40 dark:text-blue-300 dark:border-blue-500',
+  warn: 'bg-yellow-300 text-yellow-800 border-yellow-800 dark:bg-yellow-900/40 dark:text-yellow-300 dark:border-yellow-500',
+  warning:
+    'bg-yellow-300 text-yellow-800 border-yellow-800 dark:bg-yellow-900/40 dark:text-yellow-300 dark:border-yellow-500',
+  error: 'bg-red-300 text-red-800 border-red-800 dark:bg-red-900/40 dark:text-red-300 dark:border-red-500',
+  success:
+    'bg-green-300 text-green-800 border-green-800 dark:bg-green-900/40 dark:text-green-300 dark:border-green-500',
+  idea: 'bg-blue-300 text-blue-800 border-blue-800 dark:bg-blue-900/40 dark:text-blue-300 dark:border-blue-500',
 };
 
 interface CalloutProps extends Omit<ComponentPropsWithoutRef<'div'>, 'title'> {
@@ -130,26 +132,30 @@ export function getMDXComponents(components?: MDXComponents): MDXComponents {
         <Pre>{props.children}</Pre>
       </RetroCodeBlock>
     ),
-    // Inline code — does not affect fenced code blocks (those are handled by the pre override)
-    code: ({ className, ...props }: ComponentPropsWithoutRef<'code'>) => (
-      <code
-        className={cn('bg-muted border-border border-2 px-1.5 py-0.5 font-mono text-sm font-semibold', className)}
-        {...props}
-      />
-    ),
+    // Inline code — skips fenced code blocks (those have shiki style props from the rehype transform).
+    // The style prop presence distinguishes fenced blocks (shiki adds --shiki-* CSS variables) from inline `code`.
+    code: ({ className, style, ...props }: ComponentPropsWithoutRef<'code'>) =>
+      style ? (
+        <code className={className} style={style} {...props} />
+      ) : (
+        <code
+          className={cn('bg-muted border-border border-2 px-1.5 py-0.5 font-mono text-sm font-semibold', className)}
+          {...props}
+        />
+      ),
     table: ({ className, ...props }: ComponentPropsWithoutRef<'table'>) => (
       <div className="relative my-6 w-full overflow-auto">
         <table className={cn('w-full caption-bottom border-2 text-sm shadow-lg', className)} {...props} />
       </div>
     ),
     thead: ({ className, ...props }: ComponentPropsWithoutRef<'thead'>) => (
-      <thead className={cn('bg-primary text-primary-foreground font-head [&_tr]:border-b', className)} {...props} />
+      <thead className={cn('bg-primary text-primary-foreground font-head [&_tr]:border-b-2', className)} {...props} />
     ),
     tbody: ({ className, ...props }: ComponentPropsWithoutRef<'tbody'>) => (
       <tbody className={cn('[&_tr:last-child]:border-0', className)} {...props} />
     ),
     tr: ({ className, ...props }: ComponentPropsWithoutRef<'tr'>) => (
-      <tr className={cn('hover:bg-primary/15 border-b transition-colors', className)} {...props} />
+      <tr className={cn('hover:bg-primary/15 border-b-2 transition-colors', className)} {...props} />
     ),
     th: ({ className, ...props }: ComponentPropsWithoutRef<'th'>) => (
       <th

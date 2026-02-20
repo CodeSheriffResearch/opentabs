@@ -5,7 +5,12 @@ import { RetroThemeToggle } from '@/components/retro-theme-toggle';
 
 export const baseOptions: BaseLayoutProps = {
   nav: {
-    title: <span className="font-head text-xl">OpenTabs</span>,
+    title: (
+      <span className="font-head inline-flex items-center gap-2 text-xl">
+        <img src="/icon.svg" alt="" width={24} height={24} className="size-6" />
+        OpenTabs
+      </span>
+    ),
     component: <RetroNavbar />,
   },
   searchToggle: {

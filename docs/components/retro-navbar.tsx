@@ -10,7 +10,8 @@ export function RetroNavbar() {
     <header
       id="nd-subnav"
       className="border-border bg-background max-md:layout:[--fd-header-height:--spacing(14)] sticky top-(--fd-docs-row-1) z-30 flex h-(--fd-header-height) items-center gap-1 border-b-2 px-4 [grid-area:header] md:hidden">
-      <Link href="/" className="font-head mr-auto text-xl">
+      <Link href="/" className="font-head mr-auto inline-flex items-center gap-2 text-xl">
+        <img src="/icon.svg" alt="" width={24} height={24} className="size-6" />
         OpenTabs
       </Link>
       <RetroSearchToggleSm hideIfDisabled />

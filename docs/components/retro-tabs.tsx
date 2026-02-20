@@ -35,7 +35,7 @@ function useCollectionIndex(): number {
 
 // Escape whitespace in tab values (same as Fumadocs)
 function escapeValue(v: string): string {
-  return v.toLowerCase().replace(/\s/, '-');
+  return v.toLowerCase().replace(/\s/g, '-');
 }
 
 // ── RetroTabs (root) ────────────────────────────────────────────────────────

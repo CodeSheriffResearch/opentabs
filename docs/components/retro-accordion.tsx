@@ -24,7 +24,7 @@ const RetroAccordion = ({ className, title, id, value, children, ...props }: Ret
   return (
     <AccordionPrimitive.Item
       className={cn(
-        'bg-background text-foreground overflow-hidden rounded border-2 shadow-md transition-all hover:shadow-sm data-[state=open]:shadow-sm',
+        'bg-background text-foreground border-border overflow-hidden border-2 shadow-md transition-all hover:shadow-sm data-[state=open]:shadow-sm',
         className,
       )}
       value={resolvedValue}
