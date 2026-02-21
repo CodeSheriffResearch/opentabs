@@ -7,6 +7,31 @@ import { invalidatePluginCache } from './plugin-storage.js';
 import { checkTabStateChanges, clearTabStateCache, sendTabSyncAll } from './tab-state.js';
 import type { InternalMessage } from './types.js';
 
+// --- Side panel toggle ---
+
+// Take manual control of the side panel so we can open/close it on action click.
+chrome.sidePanel.setPanelBehavior({ openPanelOnActionClick: false }).catch(() => {});
+
+// Track per-window open state using Chrome's authoritative onOpened/onClosed
+// events (Chrome 141+) instead of guessing in the action click handler.
+const openWindows = new Set<number>();
+
+chrome.sidePanel.onOpened.addListener(({ windowId }) => {
+  openWindows.add(windowId);
+});
+
+chrome.sidePanel.onClosed.addListener(({ windowId }) => {
+  openWindows.delete(windowId);
+});
+
+chrome.action.onClicked.addListener(({ windowId }) => {
+  if (openWindows.has(windowId)) {
+    chrome.sidePanel.close({ windowId }).catch(() => {});
+  } else {
+    chrome.sidePanel.open({ windowId }).catch(() => {});
+  }
+});
+
 /**
  * In-memory cache of wsConnected. Authoritative state is in chrome.storage.session
  * so it survives MV3 service worker suspension. This cache avoids async reads
