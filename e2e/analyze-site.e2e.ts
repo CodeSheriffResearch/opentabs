@@ -640,3 +640,95 @@ test.describe('plugin_analyze_site — suggestion generation quality', () => {
     expect(analysis.title).toBe('Suggestions Quality Test App');
   });
 });
+
+test.describe('plugin_analyze_site — sessionStorage JWT auth', () => {
+  test('detects JWT in sessionStorage and Bearer header in API calls', async ({
+    mcpServer,
+    extensionContext: _extensionContext,
+    mcpClient,
+  }) => {
+    await waitForExtensionConnected(mcpServer);
+    await waitForLog(mcpServer, 'tab.syncAll received');
+
+    const siteUrl = `${analyzeSiteServer.url}/jwt-sessionstorage/`;
+    const analysis = await analyzeSite(mcpClient, siteUrl);
+
+    // --- Auth detection ---
+    expect(analysis.auth.authenticated).toBe(true);
+
+    // Verify JWT in sessionStorage detected
+    const jwtSessionMethods = analysis.auth.methods.filter(m => m.type === 'jwt-sessionstorage');
+    expect(jwtSessionMethods.length).toBeGreaterThanOrEqual(1);
+
+    // The auth_token key should be mentioned in details
+    const authTokenMethod = jwtSessionMethods.find(m => m.details.includes('auth_token'));
+    expect(authTokenMethod).toBeDefined();
+
+    // extractionHint should contain working JS code for sessionStorage access
+    expect(authTokenMethod?.extractionHint).toContain('sessionStorage');
+    expect(authTokenMethod?.extractionHint).toContain('auth_token');
+
+    // Verify Bearer header detected in network requests
+    const bearerMethods = analysis.auth.methods.filter(m => m.type === 'bearer-header');
+    expect(bearerMethods.length).toBeGreaterThanOrEqual(1);
+
+    // --- API detection ---
+    expect(analysis.apis.endpoints.length).toBeGreaterThanOrEqual(1);
+
+    // Should detect REST endpoints
+    const restEndpoints = analysis.apis.endpoints.filter(e => e.protocol === 'rest');
+    expect(restEndpoints.length).toBeGreaterThanOrEqual(1);
+
+    // --- Storage detection ---
+    // The JWT key should be reported in sessionStorage keys
+    const authStorageEntry = analysis.storage.sessionStorage.find(e => e.name === 'auth_token');
+    expect(authStorageEntry).toBeDefined();
+    expect(authStorageEntry?.isAuth).toBe(true);
+
+    // --- Title ---
+    expect(analysis.title).toBe('JWT SessionStorage Test App');
+  });
+});
+
+test.describe('plugin_analyze_site — Basic Auth', () => {
+  test('detects Basic Auth from Authorization: Basic header in network requests', async ({
+    mcpServer,
+    extensionContext: _extensionContext,
+    mcpClient,
+  }) => {
+    await waitForExtensionConnected(mcpServer);
+    await waitForLog(mcpServer, 'tab.syncAll received');
+
+    const siteUrl = `${analyzeSiteServer.url}/basicauth-app/`;
+    const analysis = await analyzeSite(mcpClient, siteUrl);
+
+    // --- Auth detection ---
+    expect(analysis.auth.authenticated).toBe(true);
+
+    // Verify basic-auth method detected
+    const basicMethods = analysis.auth.methods.filter(m => m.type === 'basic-auth');
+    expect(basicMethods.length).toBeGreaterThanOrEqual(1);
+
+    // The details should mention Basic Auth
+    const basicMethod = basicMethods[0];
+    expect(basicMethod).toBeDefined();
+    expect(basicMethod?.details).toContain('Basic Auth');
+
+    // extractionHint should mention btoa/username:password
+    expect(basicMethod?.extractionHint).toContain('btoa');
+
+    // Should NOT be classified as bearer-header (Basic Auth is distinct)
+    const bearerMethods = analysis.auth.methods.filter(m => m.type === 'bearer-header');
+    expect(bearerMethods.length).toBe(0);
+
+    // --- API detection ---
+    expect(analysis.apis.endpoints.length).toBeGreaterThanOrEqual(1);
+
+    // Should detect REST endpoints
+    const restEndpoints = analysis.apis.endpoints.filter(e => e.protocol === 'rest');
+    expect(restEndpoints.length).toBeGreaterThanOrEqual(1);
+
+    // --- Title ---
+    expect(analysis.title).toBe('Basic Auth Test App');
+  });
+});

@@ -421,7 +421,22 @@ describe('detectAuth', () => {
       expect(method.details).toContain('Basic Auth');
     });
 
-    test('does NOT detect Basic Auth when header is redacted', () => {
+    test('detects Basic Auth from scheme-preserving redacted header', () => {
+      const result = detectAuth({
+        ...emptyInput,
+        networkRequests: [
+          {
+            url: 'https://api.example.com/data',
+            method: 'GET',
+            requestHeaders: { Authorization: 'Basic [REDACTED]' },
+          },
+        ],
+      });
+      const method = findMethod(result.methods, 'basic-auth');
+      expect(method.details).toContain('Basic Auth');
+    });
+
+    test('does NOT detect Basic Auth when header is fully redacted', () => {
       const result = detectAuth({
         ...emptyInput,
         networkRequests: [

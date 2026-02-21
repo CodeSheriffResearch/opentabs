@@ -168,37 +168,41 @@ const detectJwtInStorage = (entries: StorageEntry[], storageType: 'local' | 'ses
 /**
  * Detects Authorization: Bearer headers in captured network requests.
  *
- * The network capture redacts the Authorization header value to '[REDACTED]',
- * so we detect bearer usage by cross-referencing: if an Authorization header
- * is present AND a JWT is found in storage, classify as bearer-header. If
- * no JWT is found in storage but Authorization header exists, we still report
- * it as bearer-header (the most common Authorization scheme).
+ * The network capture preserves the auth scheme prefix while redacting
+ * the credential (e.g., "Bearer [REDACTED]"), enabling reliable scheme
+ * detection. Falls back to cross-referencing with JWT in storage if
+ * the header is fully redacted (legacy "[REDACTED]" format).
  */
 const detectBearerHeaders = (requests: NetworkRequest[], hasJwtInStorage: boolean): AuthMethod[] => {
   const requestsWithAuth = requests.filter(r => r.requestHeaders && hasHeader(r.requestHeaders, 'authorization'));
   if (requestsWithAuth.length === 0) return [];
 
-  // Check if any unredacted Authorization header starts with "Bearer "
+  // Check if any Authorization header starts with "Bearer"
   const hasBearerPrefix = requestsWithAuth.some(r => {
     if (!r.requestHeaders) return false;
     const val = getHeaderValue(r.requestHeaders, 'authorization');
-    return val && val !== '[REDACTED]' && val.startsWith('Bearer ');
+    return val !== undefined && val.startsWith('Bearer ');
   });
 
-  // Check if any unredacted Authorization header starts with "Basic "
+  // Check if any Authorization header starts with "Basic"
   const hasBasicPrefix = requestsWithAuth.some(r => {
     if (!r.requestHeaders) return false;
     const val = getHeaderValue(r.requestHeaders, 'authorization');
-    return val && val !== '[REDACTED]' && val.startsWith('Basic ');
+    return val !== undefined && val.startsWith('Basic ');
   });
 
-  // If we can see "Basic " in the value, this is not Bearer
+  // If all auth headers are Basic (no Bearer), skip bearer detection
   if (hasBasicPrefix && !hasBearerPrefix && !hasJwtInStorage) return [];
 
-  // If we see "Bearer " explicitly, or JWT is in storage, or the header
-  // is redacted (most common use is Bearer), classify as bearer-header
+  // Classify as bearer-header if: explicit Bearer prefix, JWT in storage,
+  // or fully-redacted header with no Basic prefix (default assumption)
   const firstWithAuth = requestsWithAuth[0];
-  if (firstWithAuth && (hasBearerPrefix || hasJwtInStorage || (!hasBasicPrefix && requestsWithAuth.length > 0))) {
+  const hasFullyRedacted = requestsWithAuth.some(r => {
+    const val = r.requestHeaders ? getHeaderValue(r.requestHeaders, 'authorization') : undefined;
+    return val === '[REDACTED]';
+  });
+
+  if (firstWithAuth && (hasBearerPrefix || hasJwtInStorage || (hasFullyRedacted && !hasBasicPrefix))) {
     const sampleUrl = firstWithAuth.url;
     return [
       {
@@ -275,14 +279,17 @@ const detectCsrfTokens = (csrfDomTokens: CsrfDomToken[], requests: NetworkReques
   return methods;
 };
 
-/** Detects Basic Auth (Authorization: Basic) headers in network requests. */
+/**
+ * Detects Basic Auth (Authorization: Basic) headers in network requests.
+ * The header value is scrubbed to "Basic [REDACTED]", preserving the scheme prefix.
+ */
 const detectBasicAuth = (requests: NetworkRequest[]): AuthMethod[] => {
   const requestsWithAuth = requests.filter(r => r.requestHeaders && hasHeader(r.requestHeaders, 'authorization'));
 
   const hasBasicPrefix = requestsWithAuth.some(r => {
     if (!r.requestHeaders) return false;
     const val = getHeaderValue(r.requestHeaders, 'authorization');
-    return val && val !== '[REDACTED]' && val.startsWith('Basic ');
+    return val !== undefined && val.startsWith('Basic ');
   });
 
   if (!hasBasicPrefix) return [];

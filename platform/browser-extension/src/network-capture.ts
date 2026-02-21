@@ -15,12 +15,27 @@ const SENSITIVE_HEADERS = new Set([
   'proxy-authorization',
 ]);
 
-/** Replace sensitive header values with '[REDACTED]', preserving keys. */
+/**
+ * Replace sensitive header values with '[REDACTED]', preserving keys.
+ * For Authorization/Proxy-Authorization headers, the scheme prefix (e.g.,
+ * "Basic", "Bearer") is preserved so downstream detection can distinguish
+ * auth methods: "Bearer [REDACTED]" vs "Basic [REDACTED]".
+ */
 const scrubHeaders = (headers?: Record<string, string>): Record<string, string> | undefined => {
   if (!headers) return undefined;
   const scrubbed: Record<string, string> = {};
   for (const [k, v] of Object.entries(headers)) {
-    scrubbed[k] = SENSITIVE_HEADERS.has(k.toLowerCase()) ? '[REDACTED]' : v;
+    const lower = k.toLowerCase();
+    if (!SENSITIVE_HEADERS.has(lower)) {
+      scrubbed[k] = v;
+    } else if (lower === 'authorization' || lower === 'proxy-authorization') {
+      // Preserve the auth scheme (text before the first space) so that
+      // detect-auth can tell Basic from Bearer without seeing credentials.
+      const spaceIdx = v.indexOf(' ');
+      scrubbed[k] = spaceIdx > 0 ? `${v.slice(0, spaceIdx)} [REDACTED]` : '[REDACTED]';
+    } else {
+      scrubbed[k] = '[REDACTED]';
+    }
   }
   return scrubbed;
 };

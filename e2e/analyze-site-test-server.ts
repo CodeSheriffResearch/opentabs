@@ -20,6 +20,8 @@
  *   /websocket-app/     — WebSocket real-time connection with auth token in URL
  *   /spa-app/           — SPA with client-side pushState routing and simulated React globals
  *   /suggestions-app/   — REST API app with forms and search for suggestion quality testing
+ *   /jwt-sessionstorage/ — JWT token in sessionStorage with Bearer header API calls
+ *   /basicauth-app/     — Basic Auth (Authorization: Basic) header on API calls
  *
  * Start: `bun e2e/analyze-site-test-server.ts`
  * Default port: 0 (dynamic, override with PORT env var)
@@ -847,6 +849,128 @@ const SUGGESTIONS_HTML = `<!DOCTYPE html>
 </html>`;
 
 // ---------------------------------------------------------------------------
+// JWT sessionStorage scenario HTML
+// ---------------------------------------------------------------------------
+
+/**
+ * Simulates a logged-in SPA with JWT in sessionStorage:
+ * - JWT stored in sessionStorage (key: "auth_token")
+ * - API calls with Authorization: Bearer <jwt> header
+ * - REST API endpoints for notes
+ */
+const JWT_SESSIONSTORAGE_HTML = `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>JWT SessionStorage Test App</title>
+</head>
+<body>
+  <div id="app">
+    <h1>JWT Session Dashboard</h1>
+    <p id="status">Loading...</p>
+  </div>
+
+  <script>
+    // Simulate post-login state: store JWT in sessionStorage
+    var jwtToken = '${JWT_TOKEN}';
+    sessionStorage.setItem('auth_token', jwtToken);
+
+    // Delay API calls to allow the orchestrator to enable network capture
+    setTimeout(function() {
+      (async function() {
+        try {
+          var notesRes = await fetch('/jwt-sessionstorage/api/notes', {
+            method: 'GET',
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': 'Bearer ' + jwtToken
+            }
+          });
+          var notes = await notesRes.json();
+
+          document.getElementById('status').textContent =
+            'Loaded: ' + notes.notes.length + ' notes';
+
+          // POST request with Bearer auth
+          await fetch('/jwt-sessionstorage/api/notes', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': 'Bearer ' + jwtToken
+            },
+            body: JSON.stringify({ title: 'New Note', content: 'Test content' })
+          });
+        } catch (e) {
+          document.getElementById('status').textContent = 'Error: ' + e.message;
+        }
+      })();
+    }, 1500);
+  </script>
+</body>
+</html>`;
+
+// ---------------------------------------------------------------------------
+// Basic Auth scenario HTML
+// ---------------------------------------------------------------------------
+
+/**
+ * Simulates a web app using HTTP Basic Auth:
+ * - API calls include Authorization: Basic <base64> header
+ * - Server returns 401 without valid Basic Auth header
+ */
+const BASICAUTH_HTML = `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Basic Auth Test App</title>
+</head>
+<body>
+  <div id="app">
+    <h1>Basic Auth Dashboard</h1>
+    <p id="status">Loading...</p>
+  </div>
+
+  <script>
+    // Simulate Basic Auth credentials (username:password encoded as base64)
+    var credentials = btoa('testuser:testpass123');
+
+    // Delay API calls to allow the orchestrator to enable network capture
+    setTimeout(function() {
+      (async function() {
+        try {
+          var filesRes = await fetch('/basicauth-app/api/files', {
+            method: 'GET',
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': 'Basic ' + credentials
+            }
+          });
+          var files = await filesRes.json();
+
+          document.getElementById('status').textContent =
+            'Loaded: ' + files.files.length + ' files';
+
+          // POST request with Basic Auth
+          await fetch('/basicauth-app/api/files', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': 'Basic ' + credentials
+            },
+            body: JSON.stringify({ name: 'new-file.txt', content: 'Hello' })
+          });
+        } catch (e) {
+          document.getElementById('status').textContent = 'Error: ' + e.message;
+        }
+      })();
+    }, 1500);
+  </script>
+</body>
+</html>`;
+
+// ---------------------------------------------------------------------------
 // Server
 // ---------------------------------------------------------------------------
 
@@ -1542,6 +1666,128 @@ const server = Bun.serve({
       return new Response(JSON.stringify({ ok: true }), {
         headers: { 'Content-Type': 'application/json' },
       });
+    }
+
+    // ===================================================================
+    // JWT sessionStorage scenario
+    // ===================================================================
+
+    // Page — serves HTML (JWT is stored client-side via sessionStorage)
+    if (path === '/jwt-sessionstorage/' || path === '/jwt-sessionstorage') {
+      return new Response(JWT_SESSIONSTORAGE_HTML, {
+        headers: { 'Content-Type': 'text/html' },
+      });
+    }
+
+    // REST API — GET /jwt-sessionstorage/api/notes (requires Bearer token)
+    if (path === '/jwt-sessionstorage/api/notes' && req.method === 'GET') {
+      const authHeader = req.headers.get('authorization');
+      if (!authHeader?.startsWith('Bearer ')) {
+        return new Response(JSON.stringify({ error: 'Unauthorized' }), {
+          status: 401,
+          headers: { 'Content-Type': 'application/json' },
+        });
+      }
+      return new Response(
+        JSON.stringify({
+          ok: true,
+          notes: [
+            { id: 'note-1', title: 'Meeting notes', content: 'Discuss roadmap' },
+            { id: 'note-2', title: 'Ideas', content: 'New feature ideas' },
+          ],
+          total: 2,
+        }),
+        { headers: { 'Content-Type': 'application/json' } },
+      );
+    }
+
+    // REST API — POST /jwt-sessionstorage/api/notes
+    if (path === '/jwt-sessionstorage/api/notes' && req.method === 'POST') {
+      const authHeader = req.headers.get('authorization');
+      if (!authHeader?.startsWith('Bearer ')) {
+        return new Response(JSON.stringify({ error: 'Unauthorized' }), {
+          status: 401,
+          headers: { 'Content-Type': 'application/json' },
+        });
+      }
+      let body: Record<string, unknown> = {};
+      try {
+        body = (await req.json()) as Record<string, unknown>;
+      } catch {
+        // ignore parse errors
+      }
+      return new Response(
+        JSON.stringify({
+          ok: true,
+          note: {
+            id: 'note-new',
+            title: body.title ?? 'Untitled',
+            content: body.content ?? '',
+          },
+        }),
+        { headers: { 'Content-Type': 'application/json' } },
+      );
+    }
+
+    // ===================================================================
+    // Basic Auth scenario
+    // ===================================================================
+
+    // Page — serves HTML
+    if (path === '/basicauth-app/' || path === '/basicauth-app') {
+      return new Response(BASICAUTH_HTML, {
+        headers: { 'Content-Type': 'text/html' },
+      });
+    }
+
+    // REST API — GET /basicauth-app/api/files (requires Basic Auth)
+    if (path === '/basicauth-app/api/files' && req.method === 'GET') {
+      const authHeader = req.headers.get('authorization');
+      if (!authHeader?.startsWith('Basic ')) {
+        return new Response(JSON.stringify({ error: 'Unauthorized' }), {
+          status: 401,
+          headers: { 'Content-Type': 'application/json', 'WWW-Authenticate': 'Basic realm="files"' },
+        });
+      }
+      return new Response(
+        JSON.stringify({
+          ok: true,
+          files: [
+            { id: 'file-1', name: 'readme.md', size: 1024 },
+            { id: 'file-2', name: 'config.json', size: 256 },
+          ],
+          total: 2,
+        }),
+        { headers: { 'Content-Type': 'application/json' } },
+      );
+    }
+
+    // REST API — POST /basicauth-app/api/files (requires Basic Auth)
+    if (path === '/basicauth-app/api/files' && req.method === 'POST') {
+      const authHeader = req.headers.get('authorization');
+      if (!authHeader?.startsWith('Basic ')) {
+        return new Response(JSON.stringify({ error: 'Unauthorized' }), {
+          status: 401,
+          headers: { 'Content-Type': 'application/json', 'WWW-Authenticate': 'Basic realm="files"' },
+        });
+      }
+      let body: Record<string, unknown> = {};
+      try {
+        body = (await req.json()) as Record<string, unknown>;
+      } catch {
+        // ignore parse errors
+      }
+      return new Response(
+        JSON.stringify({
+          ok: true,
+          file: {
+            id: 'file-new',
+            name: body.name ?? 'unnamed.txt',
+            size: typeof body.content === 'string' ? body.content.length : 0,
+          },
+        }),
+        { headers: { 'Content-Type': 'application/json' } },
+      );
     }
 
     // ===================================================================
