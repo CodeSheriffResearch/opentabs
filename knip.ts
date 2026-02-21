@@ -20,6 +20,9 @@ const config: KnipConfig = {
     'platform/cli': {
       entry: ['src/**/*.test.ts'],
     },
+    'platform/plugin-tools': {
+      entry: ['src/**/*.test.ts'],
+    },
     'platform/browser-extension': {
       entry: [
         'src/background.ts',

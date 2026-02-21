@@ -22,6 +22,8 @@
     { "path": "platform/plugin-sdk/tsconfig.scripts.json" },
     { "path": "platform/cli" },
     { "path": "platform/cli/tsconfig.test.json" },
+    { "path": "platform/plugin-tools" },
+    { "path": "platform/plugin-tools/tsconfig.test.json" },
     { "path": "platform/browser-extension" },
     { "path": "platform/browser-extension/tsconfig.test.json" },
     { "path": "platform/browser-extension/tsconfig.build-scripts.json" },

@@ -140,6 +140,7 @@ const config: Linter.Config[] = [
     files: [
       'platform/mcp-server/**/*.ts',
       'platform/cli/**/*.ts',
+      'platform/plugin-tools/**/*.ts',
       'platform/create-plugin/**/*.ts',
       'platform/shared/**/*.ts',
       'platform/plugin-sdk/**/*.ts',
