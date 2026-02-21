@@ -18,8 +18,37 @@ import { sdkGetPageGlobal } from './tools/sdk-get-page-global.js';
 import { sdkRetry } from './tools/sdk-retry.js';
 import { slowWithProgress } from './tools/slow-with-progress.js';
 import { sdkWaitForSelector } from './tools/sdk-wait-for-selector.js';
-import { OpenTabsPlugin } from '@opentabs-dev/plugin-sdk';
-import type { ToolDefinition } from '@opentabs-dev/plugin-sdk';
+import { OpenTabsPlugin, defineResource, definePrompt } from '@opentabs-dev/plugin-sdk';
+import type { ToolDefinition, ResourceDefinition, PromptDefinition } from '@opentabs-dev/plugin-sdk';
+
+const testResource = defineResource({
+  uri: 'test://items',
+  name: 'Test Items',
+  description: 'Returns the list of items from the test server page',
+  mimeType: 'application/json',
+  async read() {
+    const data = await testApi<{ items: Array<{ id: string; name: string }>; total: number }>('/api/list-items', {});
+    return {
+      uri: 'test://items',
+      text: JSON.stringify({ items: data.items, total: data.total }),
+      mimeType: 'application/json',
+    };
+  },
+});
+
+const testPrompt = definePrompt({
+  name: 'greet',
+  description: 'Generates a greeting message',
+  arguments: [
+    { name: 'name', description: 'The name to greet', required: true },
+  ],
+  async render(args) {
+    const name = args['name'] ?? 'World';
+    return [
+      { role: 'user' as const, content: { type: 'text' as const, text: `Hello, ${name}!` } },
+    ];
+  },
+});
 
 class E2eTestPlugin extends OpenTabsPlugin {
   readonly name = 'e2e-test';
@@ -48,6 +77,8 @@ class E2eTestPlugin extends OpenTabsPlugin {
     sdkRetry,
     slowWithProgress,
   ];
+  override readonly resources: ResourceDefinition[] = [testResource];
+  override readonly prompts: PromptDefinition[] = [testPrompt];
 
   constructor() {
     super();

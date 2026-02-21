@@ -47,6 +47,38 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 
+/** Tool entry shape in dist/tools.json */
+interface ManifestToolEntry {
+  name: string;
+  displayName?: string;
+  description: string;
+  icon?: string;
+  input_schema?: Record<string, unknown>;
+  output_schema?: Record<string, unknown>;
+}
+
+/**
+ * Read the tools array from a tools.json file, handling both the legacy plain
+ * array format and the current `{ tools: [...], resources: [...], prompts: [...] }`
+ * object format. Also writes back in the correct format.
+ */
+const readToolsFromManifest = (toolsJsonPath: string): ManifestToolEntry[] => {
+  const raw: unknown = JSON.parse(fs.readFileSync(toolsJsonPath, 'utf-8'));
+  if (Array.isArray(raw)) return raw as ManifestToolEntry[];
+  return (raw as { tools: ManifestToolEntry[] }).tools;
+};
+
+const writeToolsToManifest = (toolsJsonPath: string, tools: ManifestToolEntry[]): void => {
+  const raw: unknown = JSON.parse(fs.readFileSync(toolsJsonPath, 'utf-8'));
+  if (Array.isArray(raw)) {
+    fs.writeFileSync(toolsJsonPath, JSON.stringify(tools, null, 2), 'utf-8');
+  } else {
+    const manifest = raw as Record<string, unknown>;
+    manifest.tools = tools;
+    fs.writeFileSync(toolsJsonPath, JSON.stringify(manifest, null, 2), 'utf-8');
+  }
+};
+
 // ---------------------------------------------------------------------------
 // Plugin installation via config change + hot reload
 // ---------------------------------------------------------------------------
@@ -272,14 +304,7 @@ test.describe.serial('File watcher — manifest changes', () => {
 
       // Modify dist/tools.json to add a new tool
       const toolsJsonPath = path.join(pluginDir, 'dist', 'tools.json');
-      const tools = JSON.parse(fs.readFileSync(toolsJsonPath, 'utf-8')) as Array<{
-        name: string;
-        displayName: string;
-        description: string;
-        icon: string;
-        input_schema: Record<string, unknown>;
-        output_schema: Record<string, unknown>;
-      }>;
+      const tools = readToolsFromManifest(toolsJsonPath);
       tools.push({
         name: 'dynamic_tool',
         displayName: 'Dynamic Tool',
@@ -293,7 +318,7 @@ test.describe.serial('File watcher — manifest changes', () => {
           additionalProperties: false,
         },
       });
-      fs.writeFileSync(toolsJsonPath, JSON.stringify(tools, null, 2), 'utf-8');
+      writeToolsToManifest(toolsJsonPath, tools);
 
       // Poll until the new tool appears in tools/list (replaces waitForLog + sleep)
       const toolsAfter = await waitForToolList(
@@ -334,9 +359,9 @@ test.describe.serial('File watcher — manifest changes', () => {
 
       // Remove the echo tool from dist/tools.json
       const toolsJsonPath = path.join(pluginDir, 'dist', 'tools.json');
-      const tools = JSON.parse(fs.readFileSync(toolsJsonPath, 'utf-8')) as Array<{ name: string }>;
+      const tools = readToolsFromManifest(toolsJsonPath);
       const filteredTools = tools.filter(t => t.name !== 'echo');
-      fs.writeFileSync(toolsJsonPath, JSON.stringify(filteredTools, null, 2), 'utf-8');
+      writeToolsToManifest(toolsJsonPath, filteredTools);
 
       // Poll until echo tool disappears from tools/list
       const toolsAfter = await waitForToolList(
@@ -627,14 +652,7 @@ test.describe('File watcher + hot reload combined', () => {
 
       // 1. File watcher change: add a tool via dist/tools.json
       const toolsJsonPath = path.join(pluginDir, 'dist', 'tools.json');
-      const tools = JSON.parse(fs.readFileSync(toolsJsonPath, 'utf-8')) as Array<{
-        name: string;
-        displayName: string;
-        description: string;
-        icon: string;
-        input_schema: Record<string, unknown>;
-        output_schema: Record<string, unknown>;
-      }>;
+      const tools = readToolsFromManifest(toolsJsonPath);
       tools.push({
         name: 'fw_tool',
         displayName: 'Fw Tool',
@@ -648,7 +666,7 @@ test.describe('File watcher + hot reload combined', () => {
           additionalProperties: false,
         },
       });
-      fs.writeFileSync(toolsJsonPath, JSON.stringify(tools, null, 2), 'utf-8');
+      writeToolsToManifest(toolsJsonPath, tools);
 
       // Poll until fw_tool appears in tools/list
       await waitForToolList(
@@ -822,12 +840,12 @@ test.describe.serial('File watcher — tool metadata changes', () => {
 
       // Modify the echo tool's description in dist/tools.json
       const toolsJsonPath = path.join(pluginDir, 'dist', 'tools.json');
-      const tools = JSON.parse(fs.readFileSync(toolsJsonPath, 'utf-8')) as Array<{ name: string; description: string }>;
+      const tools = readToolsFromManifest(toolsJsonPath);
       const echoTool = tools.find(t => t.name === 'echo');
       expect(echoTool).toBeDefined();
       if (!echoTool) throw new Error('echo tool not found in tools.json');
       echoTool.description = 'UPDATED: Echo a message back with new description';
-      fs.writeFileSync(toolsJsonPath, JSON.stringify(tools, null, 2), 'utf-8');
+      writeToolsToManifest(toolsJsonPath, tools);
 
       // Poll until the description changes in tools/list
       const toolsAfter = await waitForToolList(
@@ -1023,19 +1041,16 @@ test.describe.serial('File watcher — input_schema changes', () => {
 
       // Modify the echo tool's input_schema in dist/tools.json — add a new property
       const toolsJsonPath = path.join(pluginDir, 'dist', 'tools.json');
-      const tools = JSON.parse(fs.readFileSync(toolsJsonPath, 'utf-8')) as Array<{
-        name: string;
-        input_schema: Record<string, unknown>;
-      }>;
+      const tools = readToolsFromManifest(toolsJsonPath);
       const echoTool = tools.find(t => t.name === 'echo');
       expect(echoTool).toBeDefined();
       if (!echoTool) throw new Error('echo tool not found in tools.json');
 
       // Add a new optional "prefix" property to the schema
-      const props = (echoTool.input_schema.properties ?? {}) as Record<string, unknown>;
+      const props = ((echoTool.input_schema ?? {}).properties ?? {}) as Record<string, unknown>;
       props['prefix'] = { type: 'string', description: 'Optional prefix for the echo' };
-      echoTool.input_schema.properties = props;
-      fs.writeFileSync(toolsJsonPath, JSON.stringify(tools, null, 2), 'utf-8');
+      (echoTool.input_schema ??= {}).properties = props;
+      writeToolsToManifest(toolsJsonPath, tools);
 
       // Poll until the input_schema changes in tools/list
       const toolsAfter = await waitForToolList(
@@ -1098,17 +1113,14 @@ test.describe.serial('File watcher — restart after hot reload', () => {
       await waitForLog(server, 'File watcher: Watching', 10_000);
 
       const toolsJsonPath = path.join(pluginDir, 'dist', 'tools.json');
-      const toolsBefore2 = JSON.parse(fs.readFileSync(toolsJsonPath, 'utf-8')) as Array<{
-        name: string;
-        description: string;
-      }>;
+      const toolsBefore2 = readToolsFromManifest(toolsJsonPath);
 
       // Modify description of echo tool — file watcher should detect it
       const echoTool = toolsBefore2.find(t => t.name === 'echo');
       expect(echoTool).toBeDefined();
       if (!echoTool) throw new Error('echo tool not found in tools.json');
       echoTool.description = 'BEFORE-RELOAD: modified description';
-      fs.writeFileSync(toolsJsonPath, JSON.stringify(toolsBefore2, null, 2), 'utf-8');
+      writeToolsToManifest(toolsJsonPath, toolsBefore2);
 
       // Poll until the description changes
       const toolsMid = await waitForToolList(
@@ -1136,14 +1148,7 @@ test.describe.serial('File watcher — restart after hot reload', () => {
       // 3. Modify tools.json AGAIN after hot reload — the new file watcher
       //    should detect this change. Add a new tool to be sure.
       server.logs.length = 0;
-      const toolsAfterReload = JSON.parse(fs.readFileSync(toolsJsonPath, 'utf-8')) as Array<{
-        name: string;
-        displayName: string;
-        description: string;
-        icon: string;
-        input_schema: Record<string, unknown>;
-        output_schema: Record<string, unknown>;
-      }>;
+      const toolsAfterReload = readToolsFromManifest(toolsJsonPath);
       toolsAfterReload.push({
         name: 'post_reload_tool',
         displayName: 'Post Reload Tool',
@@ -1157,7 +1162,7 @@ test.describe.serial('File watcher — restart after hot reload', () => {
           additionalProperties: false,
         },
       });
-      fs.writeFileSync(toolsJsonPath, JSON.stringify(toolsAfterReload, null, 2), 'utf-8');
+      writeToolsToManifest(toolsJsonPath, toolsAfterReload);
 
       // Poll until the new tool appears (new file watcher after hot reload should detect this)
       await waitForToolList(

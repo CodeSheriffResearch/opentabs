@@ -1,0 +1,134 @@
+/**
+ * E2E tests for MCP resources and prompts.
+ *
+ * Tests the full dispatch pipeline for resources/list, resources/read,
+ * prompts/list, and prompts/get — from MCP client through the MCP server,
+ * WebSocket, Chrome extension, and injected adapter running in page context.
+ *
+ * The e2e-test plugin defines:
+ *   - A test resource: URI 'test://items', returns JSON list of items
+ *   - A test prompt: name 'greet', takes a 'name' argument, returns a greeting
+ *
+ * Prerequisites:
+ *   - `bun run build` has been run (platform dist/ files exist)
+ *   - `plugins/e2e-test` has been built with resource/prompt support
+ *   - Chromium is installed for Playwright
+ */
+
+import { test, expect } from './fixtures.js';
+import { setupToolTest } from './helpers.js';
+
+// ---------------------------------------------------------------------------
+// Resources
+// ---------------------------------------------------------------------------
+
+test.describe('Resources — full stack', () => {
+  test('list resources includes the test resource with correct prefixed URI', async ({
+    mcpServer,
+    testServer,
+    extensionContext,
+    mcpClient,
+  }) => {
+    await setupToolTest(mcpServer, testServer, extensionContext, mcpClient);
+
+    const resources = await mcpClient.listResources();
+    const testResource = resources.find(r => r.name === 'Test Items');
+
+    expect(testResource).toBeDefined();
+    if (!testResource) throw new Error('Test resource not found');
+    expect(testResource.uri).toBe('opentabs+e2e-test://test://items');
+    expect(testResource.description).toBe('Returns the list of items from the test server page');
+    expect(testResource.mimeType).toBe('application/json');
+  });
+
+  test('read resource returns expected JSON data from the test server', async ({
+    mcpServer,
+    testServer,
+    extensionContext,
+    mcpClient,
+  }) => {
+    await setupToolTest(mcpServer, testServer, extensionContext, mcpClient);
+
+    const contents = await mcpClient.readResource('opentabs+e2e-test://test://items');
+
+    expect(contents.length).toBeGreaterThanOrEqual(1);
+    const content = contents[0];
+    if (!content) throw new Error('No content returned');
+    expect(content.uri).toBe('opentabs+e2e-test://test://items');
+    expect(content.mimeType).toBe('application/json');
+    expect(content.text).toBeDefined();
+
+    const parsed = JSON.parse(content.text as string) as { items: Array<{ id: string; name: string }>; total: number };
+    expect(Array.isArray(parsed.items)).toBe(true);
+    expect(parsed.items.length).toBeGreaterThan(0);
+    expect(typeof parsed.total).toBe('number');
+  });
+
+  test('read resource with nonexistent URI returns an error', async ({
+    mcpServer,
+    testServer,
+    extensionContext,
+    mcpClient,
+  }) => {
+    await setupToolTest(mcpServer, testServer, extensionContext, mcpClient);
+
+    await expect(mcpClient.readResource('opentabs+e2e-test://nonexistent://resource')).rejects.toThrow(/not found/i);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Prompts
+// ---------------------------------------------------------------------------
+
+test.describe('Prompts — full stack', () => {
+  test('list prompts includes the test prompt with correct prefixed name', async ({
+    mcpServer,
+    testServer,
+    extensionContext,
+    mcpClient,
+  }) => {
+    await setupToolTest(mcpServer, testServer, extensionContext, mcpClient);
+
+    const prompts = await mcpClient.listPrompts();
+    const testPrompt = prompts.find(p => p.name === 'e2e-test_greet');
+
+    expect(testPrompt).toBeDefined();
+    if (!testPrompt) throw new Error('Test prompt not found');
+    expect(testPrompt.description).toBe('Generates a greeting message');
+    expect(testPrompt.arguments).toBeDefined();
+    expect(testPrompt.arguments?.length).toBe(1);
+    const arg = testPrompt.arguments?.[0];
+    expect(arg?.name).toBe('name');
+    expect(arg?.description).toBe('The name to greet');
+    expect(arg?.required).toBe(true);
+  });
+
+  test('get prompt returns expected greeting messages', async ({
+    mcpServer,
+    testServer,
+    extensionContext,
+    mcpClient,
+  }) => {
+    await setupToolTest(mcpServer, testServer, extensionContext, mcpClient);
+
+    const messages = await mcpClient.getPrompt('e2e-test_greet', { name: 'World' });
+
+    expect(messages.length).toBeGreaterThanOrEqual(1);
+    const msg = messages[0];
+    if (!msg) throw new Error('No message returned');
+    expect(msg.role).toBe('user');
+    expect(msg.content.type).toBe('text');
+    expect(msg.content.text).toBe('Hello, World!');
+  });
+
+  test('get prompt with nonexistent name returns an error', async ({
+    mcpServer,
+    testServer,
+    extensionContext,
+    mcpClient,
+  }) => {
+    await setupToolTest(mcpServer, testServer, extensionContext, mcpClient);
+
+    await expect(mcpClient.getPrompt('nonexistent_prompt')).rejects.toThrow(/not found/i);
+  });
+});

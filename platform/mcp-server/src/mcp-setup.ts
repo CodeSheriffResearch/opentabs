@@ -233,7 +233,9 @@ const registerMcpHandlers = (server: McpServerInstance, state: ServerState): voi
         { plugin: plugin.name, uri: resource.uri },
         { label: `${plugin.name}/resource:${resource.uri}` },
       );
-      const contents = dispatchResult as { uri?: string; text?: string; blob?: string; mimeType?: string };
+      // Extension wraps adapter output in { output: ... } — unwrap it
+      const raw = dispatchResult as Record<string, unknown>;
+      const contents = (raw.output ?? raw) as { uri?: string; text?: string; blob?: string; mimeType?: string };
       return {
         contents: [
           {
@@ -288,7 +290,9 @@ const registerMcpHandlers = (server: McpServerInstance, state: ServerState): voi
         { plugin: plugin.name, prompt: prompt.name, arguments: args },
         { label: `${plugin.name}/prompt:${prompt.name}` },
       );
-      const messages = dispatchResult as Array<{ role: string; content: { type: string; text: string } }>;
+      // Extension wraps adapter output in { output: ... } — unwrap it
+      const raw = dispatchResult as Record<string, unknown>;
+      const messages = (raw.output ?? raw) as Array<{ role: string; content: { type: string; text: string } }>;
       return {
         messages: Array.isArray(messages) ? messages : [],
       };

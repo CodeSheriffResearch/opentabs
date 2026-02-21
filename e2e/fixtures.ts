@@ -745,6 +745,35 @@ interface ProgressNotification {
   message?: string;
 }
 
+/** A resource entry returned by resources/list */
+interface McpResource {
+  uri: string;
+  name: string;
+  description?: string;
+  mimeType?: string;
+}
+
+/** Content returned by resources/read */
+interface McpResourceContent {
+  uri: string;
+  text?: string;
+  blob?: string;
+  mimeType?: string;
+}
+
+/** A prompt entry returned by prompts/list */
+interface McpPrompt {
+  name: string;
+  description?: string;
+  arguments?: Array<{ name: string; description?: string; required?: boolean }>;
+}
+
+/** A prompt message returned by prompts/get */
+interface McpPromptMessage {
+  role: string;
+  content: { type: string; text: string };
+}
+
 interface McpClient {
   initialize: () => Promise<void>;
   listTools: () => Promise<Array<{ name: string; description: string; inputSchema?: unknown }>>;
@@ -759,6 +788,10 @@ interface McpClient {
     args?: Record<string, unknown>,
     options?: { timeout?: number },
   ) => Promise<{ content: string; isError: boolean; progressNotifications: ProgressNotification[] }>;
+  listResources: () => Promise<McpResource[]>;
+  readResource: (uri: string) => Promise<McpResourceContent[]>;
+  listPrompts: () => Promise<McpPrompt[]>;
+  getPrompt: (name: string, args?: Record<string, string>) => Promise<McpPromptMessage[]>;
   close: () => Promise<void>;
   /** Reset the session so the next initialize() creates a fresh session. */
   resetSession: () => void;
@@ -1019,6 +1052,72 @@ const createMcpClient = (port: number, secret?: string): McpClient => {
       return { content: text, isError: result.isError === true, progressNotifications };
     },
 
+    listResources: async () => {
+      const res = await request({
+        jsonrpc: '2.0',
+        method: 'resources/list',
+        params: {},
+        id: nextId++,
+      });
+      if (res.error) {
+        const err = res.error as { message: string };
+        throw new Error(`resources/list failed: ${err.message}`);
+      }
+      const result = res.result as { resources: McpResource[] };
+      return result.resources;
+    },
+
+    readResource: async uri => {
+      const res = await request(
+        {
+          jsonrpc: '2.0',
+          method: 'resources/read',
+          params: { uri },
+          id: nextId++,
+        },
+        60_000,
+      );
+      if (res.error) {
+        const err = res.error as { message: string };
+        throw new Error(`resources/read failed: ${err.message}`);
+      }
+      const result = res.result as { contents: McpResourceContent[] };
+      return result.contents;
+    },
+
+    listPrompts: async () => {
+      const res = await request({
+        jsonrpc: '2.0',
+        method: 'prompts/list',
+        params: {},
+        id: nextId++,
+      });
+      if (res.error) {
+        const err = res.error as { message: string };
+        throw new Error(`prompts/list failed: ${err.message}`);
+      }
+      const result = res.result as { prompts: McpPrompt[] };
+      return result.prompts;
+    },
+
+    getPrompt: async (name, args = {}) => {
+      const res = await request(
+        {
+          jsonrpc: '2.0',
+          method: 'prompts/get',
+          params: { name, arguments: args },
+          id: nextId++,
+        },
+        60_000,
+      );
+      if (res.error) {
+        const err = res.error as { message: string };
+        throw new Error(`prompts/get failed: ${err.message}`);
+      }
+      const result = res.result as { messages: McpPromptMessage[] };
+      return result.messages;
+    },
+
     close: async () => {
       if (!sessionId) return;
       try {
@@ -1219,4 +1318,15 @@ export {
   E2E_TEST_PLUGIN_DIR,
   ROOT,
 };
-export type { HealthResponse, McpServer, TestServer, McpClient, OpentabsConfig, ProgressNotification };
+export type {
+  HealthResponse,
+  McpServer,
+  TestServer,
+  McpClient,
+  OpentabsConfig,
+  ProgressNotification,
+  McpResource,
+  McpResourceContent,
+  McpPrompt,
+  McpPromptMessage,
+};
