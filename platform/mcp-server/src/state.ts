@@ -153,6 +153,33 @@ export interface PluginRegistry {
   readonly failures: readonly FailedPlugin[];
 }
 
+/** Record of a single tool invocation for audit logging */
+export interface AuditEntry {
+  /** ISO 8601 timestamp of the invocation */
+  timestamp: string;
+  /** Prefixed tool name (e.g., 'slack_send_message') */
+  tool: string;
+  /** Plugin name (e.g., 'slack') or 'browser' for browser tools */
+  plugin: string;
+  /** Whether the invocation completed successfully */
+  success: boolean;
+  /** Execution duration in milliseconds */
+  durationMs: number;
+  /** Error details, populated on failure */
+  error?: { code: string; message: string; category?: string };
+}
+
+/** Maximum entries retained in the audit log circular buffer */
+export const MAX_AUDIT_ENTRIES = 500;
+
+/** Append an entry to the audit log, trimming oldest entries beyond MAX_AUDIT_ENTRIES */
+export const appendAuditEntry = (state: ServerState, entry: AuditEntry): void => {
+  state.auditLog.push(entry);
+  if (state.auditLog.length > MAX_AUDIT_ENTRIES) {
+    state.auditLog.splice(0, state.auditLog.length - MAX_AUDIT_ENTRIES);
+  }
+};
+
 /** Server state singleton — shared across hot reloads via globalThis */
 export interface ServerState {
   /**
@@ -214,10 +241,12 @@ export interface ServerState {
   mtimePollDetectionTimestamps: number[];
   /** Discovery errors from the most recent reload — used by config.getState for the side panel */
   discoveryErrors: ReadonlyArray<{ specifier: string; error: string }>;
+  /** Circular buffer of recent tool invocations for diagnostics and monitoring */
+  auditLog: AuditEntry[];
 }
 
 /** Increment when changing the type of an existing ServerState field */
-export const STATE_SCHEMA_VERSION = 2;
+export const STATE_SCHEMA_VERSION = 3;
 
 /** Frozen empty registry for initializing ServerState */
 export const EMPTY_REGISTRY: PluginRegistry = Object.freeze({
@@ -255,6 +284,7 @@ export const createState = (): ServerState => ({
   mtimePollDetections: 0,
   mtimePollDetectionTimestamps: [],
   discoveryErrors: [],
+  auditLog: [],
 });
 
 /** Generate a cryptographically random JSON-RPC request ID */

@@ -24,7 +24,7 @@
 import { dispatchToExtension, isDispatchError, sendInvocationStart, sendInvocationEnd } from './extension-protocol.js';
 import { log } from './logger.js';
 import { getResource, getPrompt, listAllResources, listAllPrompts, trustTierPrefix } from './registry.js';
-import { prefixedToolName, isToolEnabled } from './state.js';
+import { prefixedToolName, isToolEnabled, appendAuditEntry } from './state.js';
 import { version } from './version.js';
 import {
   ListToolsRequestSchema,
@@ -37,7 +37,7 @@ import {
   ErrorCode,
 } from '@modelcontextprotocol/sdk/types.js';
 import { z } from 'zod';
-import type { ServerState, CachedBrowserTool, ToolLookupEntry } from './state.js';
+import type { ServerState, CachedBrowserTool, ToolLookupEntry, AuditEntry } from './state.js';
 import type { ZodError } from 'zod';
 
 /** Maximum concurrent tool dispatches per plugin to prevent tab performance degradation */
@@ -329,13 +329,18 @@ const registerMcpHandlers = (server: McpServerInstance, state: ServerState): voi
         };
       }
 
+      const btStartTs = Date.now();
+      let btSuccess = true;
+      let btErrorInfo: AuditEntry['error'] | undefined;
       try {
         const result = await cachedBt.tool.handler(parseResult.data, state);
         return {
           content: [{ type: 'text' as const, text: JSON.stringify(sanitizeOutput(result), null, 2) }],
         };
       } catch (err) {
+        btSuccess = false;
         const msg = err instanceof Error ? err.message : String(err);
+        btErrorInfo = { code: 'UNKNOWN', message: msg };
         return {
           content: [
             {
@@ -345,6 +350,15 @@ const registerMcpHandlers = (server: McpServerInstance, state: ServerState): voi
           ],
           isError: true,
         };
+      } finally {
+        appendAuditEntry(state, {
+          timestamp: new Date(btStartTs).toISOString(),
+          tool: toolName,
+          plugin: 'browser',
+          success: btSuccess,
+          durationMs: Date.now() - btStartTs,
+          error: btErrorInfo,
+        });
       }
     }
 
@@ -431,6 +445,7 @@ const registerMcpHandlers = (server: McpServerInstance, state: ServerState): voi
     sendInvocationStart(state, foundPlugin, foundTool);
     const startTs = Date.now();
     let success = true;
+    let errorInfo: AuditEntry['error'] | undefined;
 
     try {
       state.activeDispatches.set(foundPlugin, currentDispatches + 1);
@@ -487,8 +502,12 @@ const registerMcpHandlers = (server: McpServerInstance, state: ServerState): voi
         }
 
         const toolErrorCode = err.data?.code;
+        const category = typeof err.data?.category === 'string' ? err.data.category : undefined;
         if (typeof toolErrorCode === 'string') {
           errorMsg = formatStructuredError(toolErrorCode, errorMsg, err.data);
+          errorInfo = { code: toolErrorCode, message: err.message, category };
+        } else {
+          errorInfo = { code: String(code), message: err.message };
         }
 
         return {
@@ -498,6 +517,7 @@ const registerMcpHandlers = (server: McpServerInstance, state: ServerState): voi
       }
 
       const msg = err instanceof Error ? err.message : String(err);
+      errorInfo = { code: 'UNKNOWN', message: msg };
       return {
         content: [
           {
@@ -517,6 +537,14 @@ const registerMcpHandlers = (server: McpServerInstance, state: ServerState): voi
       const durationMs = Date.now() - startTs;
       log.debug('tool.call:', foundPlugin + '/' + foundTool, 'completed in', `${durationMs}ms`);
       sendInvocationEnd(state, foundPlugin, foundTool, durationMs, success);
+      appendAuditEntry(state, {
+        timestamp: new Date(startTs).toISOString(),
+        tool: toolName,
+        plugin: foundPlugin,
+        success,
+        durationMs,
+        error: errorInfo,
+      });
     }
   });
 };
