@@ -36,4 +36,34 @@ export class ToolError extends Error {
     this.retryAfterMs = opts?.retryAfterMs;
     this.category = opts?.category;
   }
+
+  /** Authentication or authorization error (not retryable). */
+  static auth(message: string): ToolError {
+    return new ToolError(message, 'AUTH_ERROR', { category: 'auth', retryable: false });
+  }
+
+  /** Resource not found (not retryable). Accepts an optional domain-specific code. */
+  static notFound(message: string, code?: string): ToolError {
+    return new ToolError(message, code ?? 'NOT_FOUND', { category: 'not_found', retryable: false });
+  }
+
+  /** Rate limited (retryable). Accepts an optional retry delay in milliseconds. */
+  static rateLimited(message: string, retryAfterMs?: number): ToolError {
+    return new ToolError(message, 'RATE_LIMITED', { category: 'rate_limit', retryable: true, retryAfterMs });
+  }
+
+  /** Input validation error (not retryable). */
+  static validation(message: string): ToolError {
+    return new ToolError(message, 'VALIDATION_ERROR', { category: 'validation', retryable: false });
+  }
+
+  /** Operation timed out (retryable). */
+  static timeout(message: string): ToolError {
+    return new ToolError(message, 'TIMEOUT', { category: 'timeout', retryable: true });
+  }
+
+  /** Internal/unexpected error (not retryable). */
+  static internal(message: string): ToolError {
+    return new ToolError(message, 'INTERNAL_ERROR', { category: 'internal', retryable: false });
+  }
 }

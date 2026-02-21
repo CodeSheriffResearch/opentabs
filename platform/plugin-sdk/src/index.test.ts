@@ -77,6 +77,81 @@ describe('ToolError', () => {
     expect(err.retryAfterMs).toBe(1000);
     expect(err.category).toBe('auth');
   });
+
+  describe('factory methods', () => {
+    test('ToolError.auth() creates an auth error', () => {
+      const err = ToolError.auth('Not authenticated');
+      expect(err).toBeInstanceOf(ToolError);
+      expect(err.message).toBe('Not authenticated');
+      expect(err.code).toBe('AUTH_ERROR');
+      expect(err.category).toBe('auth');
+      expect(err.retryable).toBe(false);
+      expect(err.retryAfterMs).toBeUndefined();
+    });
+
+    test('ToolError.notFound() creates a not-found error with default code', () => {
+      const err = ToolError.notFound('Channel does not exist');
+      expect(err).toBeInstanceOf(ToolError);
+      expect(err.message).toBe('Channel does not exist');
+      expect(err.code).toBe('NOT_FOUND');
+      expect(err.category).toBe('not_found');
+      expect(err.retryable).toBe(false);
+      expect(err.retryAfterMs).toBeUndefined();
+    });
+
+    test('ToolError.notFound() accepts a custom code', () => {
+      const err = ToolError.notFound('Channel does not exist', 'CHANNEL_NOT_FOUND');
+      expect(err.code).toBe('CHANNEL_NOT_FOUND');
+      expect(err.category).toBe('not_found');
+      expect(err.retryable).toBe(false);
+    });
+
+    test('ToolError.rateLimited() creates a retryable rate-limit error', () => {
+      const err = ToolError.rateLimited('Too many requests');
+      expect(err).toBeInstanceOf(ToolError);
+      expect(err.message).toBe('Too many requests');
+      expect(err.code).toBe('RATE_LIMITED');
+      expect(err.category).toBe('rate_limit');
+      expect(err.retryable).toBe(true);
+      expect(err.retryAfterMs).toBeUndefined();
+    });
+
+    test('ToolError.rateLimited() accepts retryAfterMs', () => {
+      const err = ToolError.rateLimited('Too many requests', 5000);
+      expect(err.retryAfterMs).toBe(5000);
+      expect(err.retryable).toBe(true);
+    });
+
+    test('ToolError.validation() creates a validation error', () => {
+      const err = ToolError.validation('Invalid input');
+      expect(err).toBeInstanceOf(ToolError);
+      expect(err.message).toBe('Invalid input');
+      expect(err.code).toBe('VALIDATION_ERROR');
+      expect(err.category).toBe('validation');
+      expect(err.retryable).toBe(false);
+      expect(err.retryAfterMs).toBeUndefined();
+    });
+
+    test('ToolError.timeout() creates a retryable timeout error', () => {
+      const err = ToolError.timeout('Request timed out');
+      expect(err).toBeInstanceOf(ToolError);
+      expect(err.message).toBe('Request timed out');
+      expect(err.code).toBe('TIMEOUT');
+      expect(err.category).toBe('timeout');
+      expect(err.retryable).toBe(true);
+      expect(err.retryAfterMs).toBeUndefined();
+    });
+
+    test('ToolError.internal() creates an internal error', () => {
+      const err = ToolError.internal('Unexpected failure');
+      expect(err).toBeInstanceOf(ToolError);
+      expect(err.message).toBe('Unexpected failure');
+      expect(err.code).toBe('INTERNAL_ERROR');
+      expect(err.category).toBe('internal');
+      expect(err.retryable).toBe(false);
+      expect(err.retryAfterMs).toBeUndefined();
+    });
+  });
 });
 
 describe('defineTool', () => {
