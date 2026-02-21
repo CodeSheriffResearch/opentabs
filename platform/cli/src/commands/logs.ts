@@ -3,6 +3,10 @@
  *
  * The log file is written by `opentabs start` at ~/.opentabs/server.log
  * (or $OPENTABS_CONFIG_DIR/server.log).
+ *
+ * When --plugin <name> is specified, only lines containing [plugin:<name>]
+ * are shown. This filters plugin log entries written by the MCP server's
+ * onPluginLog handler.
  */
 
 import { getLogFilePath } from '../config.js';
@@ -14,6 +18,7 @@ import type { Command } from 'commander';
 interface LogsOptions {
   lines?: number;
   follow?: boolean;
+  plugin?: string;
 }
 
 const DEFAULT_LINES = 50;
@@ -25,16 +30,26 @@ const TAIL_BUFFER_SIZE = 64 * 1024;
  * Read the last N lines from a file using a reverse-seek approach.
  * Reads at most TAIL_BUFFER_SIZE bytes from the end instead of the entire file.
  * Returns the tail content as a string and the file size (for follow offset).
+ *
+ * When a filter string is provided, only lines containing that string are
+ * included in the result. The line count applies to filtered lines.
  */
-const tailFile = async (filePath: string, lineCount: number): Promise<{ content: string; fileSize: number }> => {
+const tailFile = async (
+  filePath: string,
+  lineCount: number,
+  filter?: string,
+): Promise<{ content: string; fileSize: number }> => {
   const file = Bun.file(filePath);
   const fileSize = file.size;
   if (lineCount <= 0 || fileSize === 0) return { content: '', fileSize };
   const readStart = Math.max(0, fileSize - TAIL_BUFFER_SIZE);
   const chunk = await file.slice(readStart, fileSize).text();
-  const lines = chunk.split('\n');
+  let lines = chunk.split('\n');
   // If we didn't read from the start, the first line may be partial — skip it
   if (readStart > 0) lines.shift();
+  if (filter) {
+    lines = lines.filter(line => line.includes(filter));
+  }
   const tail = lines.slice(-lineCount);
   return { content: tail.join('\n'), fileSize };
 };
@@ -42,11 +57,16 @@ const tailFile = async (filePath: string, lineCount: number): Promise<{ content:
 /**
  * Follow (tail -f) a log file. Watches for changes and streams new content.
  * Returns a promise that never resolves (runs until the process exits).
+ *
+ * When a filter string is provided, only lines containing that string are
+ * written to stdout. Partial lines at the end of a chunk are buffered until
+ * the next read completes the line.
  */
-const followFile = async (filePath: string, initialOffset: number): Promise<never> => {
+const followFile = async (filePath: string, initialOffset: number, filter?: string): Promise<never> => {
   let offset = initialOffset;
   let reading = false;
   let readRequested = false;
+  let partialLine = '';
 
   const readNewContent = (): void => {
     if (reading) {
@@ -57,12 +77,27 @@ const followFile = async (filePath: string, initialOffset: number): Promise<neve
     if (currentSize < offset) {
       // File was truncated (e.g., new server start) — read from beginning
       offset = 0;
+      partialLine = '';
     }
     if (currentSize <= offset) return;
     reading = true;
     const stream = createReadStream(filePath, { start: offset, encoding: 'utf-8' });
     stream.on('data', (chunk: string | Buffer) => {
-      process.stdout.write(chunk);
+      const text = typeof chunk === 'string' ? chunk : chunk.toString('utf-8');
+      if (!filter) {
+        process.stdout.write(text);
+        return;
+      }
+      // Filter mode: split into lines and only output matching ones
+      const combined = partialLine + text;
+      const lines = combined.split('\n');
+      // Last element is either empty (if text ended with \n) or a partial line
+      partialLine = lines.pop() ?? '';
+      for (const line of lines) {
+        if (line.includes(filter)) {
+          process.stdout.write(line + '\n');
+        }
+      }
     });
     stream.on('end', () => {
       offset = currentSize;
@@ -111,12 +146,15 @@ const handleLogs = async (options: LogsOptions): Promise<void> => {
     process.exit(1);
   }
 
+  // Build the filter string for --plugin: match lines containing [plugin:<name>]
+  const filter = options.plugin ? `[plugin:${options.plugin}]` : undefined;
+
   const lineCount = options.lines ?? DEFAULT_LINES;
-  const { content, fileSize } = await tailFile(logFilePath, lineCount);
+  const { content, fileSize } = await tailFile(logFilePath, lineCount, filter);
   if (content) process.stdout.write(content);
 
   if (options.follow !== false) {
-    await followFile(logFilePath, fileSize);
+    await followFile(logFilePath, fileSize, filter);
   }
 };
 
@@ -126,13 +164,15 @@ const registerLogsCommand = (program: Command): void => {
     .description('Tail the MCP server log output')
     .option('--lines <n>', `Number of lines to show (default: ${DEFAULT_LINES})`, parseLines)
     .option('--no-follow', 'Print recent lines and exit (do not follow)')
+    .option('--plugin <name>', 'Show only logs from a specific plugin')
     .addHelpText(
       'after',
       `
 Examples:
-  $ opentabs logs                  # Tail logs (follows new output)
-  $ opentabs logs --lines 100      # Show last 100 lines then follow
-  $ opentabs logs --no-follow      # Show last 50 lines and exit`,
+  $ opentabs logs                       # Tail logs (follows new output)
+  $ opentabs logs --lines 100           # Show last 100 lines then follow
+  $ opentabs logs --no-follow           # Show last 50 lines and exit
+  $ opentabs logs --plugin slack        # Show only Slack plugin logs (follows)`,
     )
     .action((options: LogsOptions) => handleLogs(options));
 };

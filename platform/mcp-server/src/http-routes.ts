@@ -56,6 +56,12 @@ const createMcpCallbacks = (state: ServerState, sessionServers: McpServerInstanc
     const mcpLevel = entry.level;
     const logger = `plugin:${entry.plugin}`;
     const data = entry.data !== undefined ? `${entry.message} ${JSON.stringify(entry.data)}` : entry.message;
+
+    // Write to console (flows to server.log via start.ts tee pipeline)
+    const levelTag = entry.level.toUpperCase();
+    const dataStr = entry.data !== undefined ? ` ${JSON.stringify(entry.data)}` : '';
+    console.log(`[plugin:${entry.plugin}] ${entry.ts} ${levelTag} ${entry.message}${dataStr}`);
+
     for (const srv of sessionServers) {
       srv.sendLoggingMessage({ level: mcpLevel, logger, data }).catch(() => {
         // Best-effort — client may have disconnected
