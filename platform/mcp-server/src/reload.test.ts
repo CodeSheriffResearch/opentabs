@@ -27,6 +27,8 @@ const createMockServer = () => ({
   setRequestHandler: () => {},
   connect: () => Promise.resolve(),
   sendToolListChanged: () => Promise.resolve(),
+  sendResourceListChanged: () => Promise.resolve(),
+  sendPromptListChanged: () => Promise.resolve(),
   sendLoggingMessage: () => Promise.resolve(),
 });
 
@@ -207,8 +209,9 @@ describe('performReload', () => {
 
     await performReload(state, [srv], emptyTransports(), true);
 
-    // registerMcpHandlers calls setRequestHandler exactly twice (tools/list + tools/call)
-    expect(registerCalled).toBe(2);
+    // registerMcpHandlers calls setRequestHandler 6 times:
+    // resources/list, resources/read, prompts/list, prompts/get, tools/list, tools/call
+    expect(registerCalled).toBe(6);
   });
 
   test('does NOT re-register MCP handlers on initial load', async () => {

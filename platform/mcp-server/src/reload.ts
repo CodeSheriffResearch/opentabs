@@ -20,7 +20,13 @@ import { sendSyncFull, sendPluginUpdate, cleanupStaleExecFiles } from './extensi
 import { startConfigWatching, startFileWatching, stopFileWatching } from './file-watcher.js';
 import { sweepStaleSessions } from './http-routes.js';
 import { log } from './logger.js';
-import { registerMcpHandlers, rebuildCachedBrowserTools, notifyToolListChanged } from './mcp-setup.js';
+import {
+  registerMcpHandlers,
+  rebuildCachedBrowserTools,
+  notifyToolListChanged,
+  notifyResourceListChanged,
+  notifyPromptListChanged,
+} from './mcp-setup.js';
 import { buildRegistry } from './registry.js';
 import { prefixedToolName } from './state.js';
 import { checkForUpdates } from './version-check.js';
@@ -111,6 +117,8 @@ const createFileWatcherCallbacks = (
   const notifyAllClients = (): void => {
     for (const srv of sessionServers) {
       notifyToolListChanged(srv);
+      notifyResourceListChanged(srv);
+      notifyPromptListChanged(srv);
     }
   };
 
@@ -298,10 +306,12 @@ const performReload = async (
         }
       }
       log.info(
-        `Hot reload: re-registered ${reregistered}/${sessionServers.length} session(s), notifying of tool list change`,
+        `Hot reload: re-registered ${reregistered}/${sessionServers.length} session(s), notifying of list changes`,
       );
       for (const srv of sessionServers) {
         notifyToolListChanged(srv);
+        notifyResourceListChanged(srv);
+        notifyPromptListChanged(srv);
       }
     }
 
@@ -353,11 +363,13 @@ const performConfigReload = async (
 
     await reloadCore({ state, sessionServers, transports });
 
-    // Notify all MCP clients that the tool list changed after config reload.
+    // Notify all MCP clients that tool/resource/prompt lists changed after config reload.
     // (performReload handles its own notification after handler re-registration,
     // so reloadCore itself does not notify — each caller is responsible.)
     for (const srv of sessionServers) {
       notifyToolListChanged(srv);
+      notifyResourceListChanged(srv);
+      notifyPromptListChanged(srv);
     }
 
     log.info(`Config reload complete: ${state.registry.plugins.size} plugin(s) in ${Date.now() - startTs}ms`);

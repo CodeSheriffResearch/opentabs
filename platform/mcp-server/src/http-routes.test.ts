@@ -13,6 +13,8 @@ const createMockSession = (): McpServerInstance => ({
   setRequestHandler: () => {},
   connect: () => Promise.resolve(),
   sendToolListChanged: () => Promise.resolve(),
+  sendResourceListChanged: () => Promise.resolve(),
+  sendPromptListChanged: () => Promise.resolve(),
   sendLoggingMessage: () => Promise.resolve(),
 });
 
