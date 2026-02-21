@@ -17,6 +17,12 @@ interface PluginDetail {
   displayName: string;
   toolCount: number;
   tabState: string;
+  source?: string;
+}
+
+interface FailedPluginEntry {
+  path: string;
+  error: string;
 }
 
 const pad = (label: string) => `  ${pc.cyan(label.padEnd(14))}`;
@@ -80,7 +86,17 @@ const handleStatus = async (options: StatusOptions): Promise<void> => {
         for (const p of pluginDetails) {
           const state = colorTabState(p.tabState);
           const tools = pc.dim(`${p.toolCount} tool${p.toolCount === 1 ? '' : 's'}`);
-          console.log(`    ${p.displayName} ${pc.dim('—')} ${state} ${pc.dim('·')} ${tools}`);
+          const sourceLabel = p.source === 'local' ? ` ${pc.dim('(local)')}` : ` ${pc.dim('(npm)')}`;
+          console.log(`    ${p.displayName}${sourceLabel} ${pc.dim('—')} ${state} ${pc.dim('·')} ${tools}`);
+        }
+      }
+
+      const failedPlugins = Array.isArray(data.failedPlugins) ? (data.failedPlugins as FailedPluginEntry[]) : [];
+      if (failedPlugins.length > 0) {
+        console.log('');
+        console.log(pc.bold('  Failed Plugins'));
+        for (const f of failedPlugins) {
+          console.log(`    ${pc.red(f.path)} ${pc.dim('—')} ${f.error}`);
         }
       }
     }

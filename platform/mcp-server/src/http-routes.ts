@@ -170,6 +170,7 @@ const createHandleFetch =
         displayName: p.displayName,
         toolCount: p.tools.length,
         tabState: state.tabMapping.get(p.name)?.state ?? 'closed',
+        source: p.source,
       }));
 
       const toolCount = state.registry.toolLookup.size + state.cachedBrowserTools.length;

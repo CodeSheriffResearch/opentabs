@@ -193,7 +193,7 @@ interface HealthResponse {
   extensionConnected: boolean;
   mcpClients: number;
   plugins: number;
-  pluginDetails: { name: string; displayName: string; toolCount: number; tabState: string }[];
+  pluginDetails: { name: string; displayName: string; toolCount: number; tabState: string; source: string }[];
   toolCount: number;
   uptime: number;
   reloadCount: number;
@@ -275,6 +275,7 @@ describe('/health endpoint', () => {
     expect(body.pluginDetails[0]?.displayName).toBe('Test Plugin');
     expect(body.pluginDetails[0]?.toolCount).toBe(1);
     expect(body.pluginDetails[0]?.tabState).toBe('ready');
+    expect(body.pluginDetails[0]?.source).toBe('local');
   });
 
   test('uses fallback values when getHotState returns undefined', async () => {
