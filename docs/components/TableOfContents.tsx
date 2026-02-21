@@ -21,7 +21,8 @@ const renderTOCItems = (items: TOCItem[], level = 0): ReactElement | null => {
         <li key={index}>
           <a
             href={item.url}
-            className="hover:text-foreground hover:border-accent block border-l-2 border-transparent py-1 pl-2 text-sm transition-colors">
+            title={item.title}
+            className="hover:text-foreground hover:border-accent block truncate border-l-2 border-transparent py-1 pl-2 text-sm transition-colors">
             {item.title}
           </a>
           {item.items && renderTOCItems(item.items, level + 1)}
@@ -37,7 +38,7 @@ export default function TableOfContents({ toc }: TableOfContentsProps) {
   }
 
   return (
-    <div className="border-border rounded-(--radius) border-2 p-4">
+    <div className="border-border sidebar-scroll max-h-60 overflow-y-auto rounded-(--radius) border-2 p-4">
       <h3 className="border-border mb-3 border-b-2 pb-2">On this Page</h3>
       {renderTOCItems(toc.items as TOCItem[])}
     </div>
