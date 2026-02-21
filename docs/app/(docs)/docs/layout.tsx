@@ -12,7 +12,7 @@ export default function ComponentLayout({ children }: Readonly<{ children: React
       <div className="max-lg:px-4">
         <div className="flex items-start lg:gap-20">
           {/* Sidebar */}
-          <div className="sticky top-28 hidden w-60 flex-shrink-0 self-start lg:block">
+          <div className="sticky top-16 hidden w-60 flex-shrink-0 self-start lg:block">
             <SideNav />
           </div>
           {children}

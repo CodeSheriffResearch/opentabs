@@ -50,7 +50,7 @@ export default async function DocPage({ params }: IProps) {
       </div>
 
       {/* Table of Contents */}
-      <div className="sticky top-36 hidden flex-shrink-0 space-y-6 self-start lg:block lg:w-60">
+      <div className="sticky top-20 hidden flex-shrink-0 space-y-6 self-start lg:block lg:w-60">
         <TableOfContents toc={toc} />
       </div>
     </>

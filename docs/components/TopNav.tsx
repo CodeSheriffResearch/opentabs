@@ -13,7 +13,7 @@ export default function TopNav() {
   const { isDarkMode, toggleDarkMode } = useTheme();
 
   return (
-    <nav className="bg-background sticky top-0 right-0 z-1 w-full border-b-2">
+    <nav className="bg-background sticky top-0 right-0 z-50 w-full border-b-2">
       <div className="container mx-auto max-w-6xl px-4 lg:px-0">
         <div className="flex h-16 items-center justify-between">
           {/* Logo Section */}
