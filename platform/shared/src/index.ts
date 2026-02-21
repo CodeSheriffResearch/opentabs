@@ -13,6 +13,13 @@
 export { type Ok, type Err, type Result, ok, err, isOk, isErr, unwrap, unwrapOr, mapResult } from './result.js';
 
 // ---------------------------------------------------------------------------
+// Plugin package.json manifest — new plugin metadata format
+// ---------------------------------------------------------------------------
+
+export { parsePluginPackageJson } from './manifest.js';
+export type { PluginOpentabsField, PluginPackageJson } from './manifest.js';
+
+// ---------------------------------------------------------------------------
 // Domain types — shared between MCP server and Chrome extension
 // ---------------------------------------------------------------------------
 
