@@ -15,6 +15,7 @@
  *   /jsonrpc-app/       — JSON-RPC 2.0 API endpoint with methods
  *   /nextjs-app/        — Next.js-style SSR app with __NEXT_DATA__ and auth data in globals
  *   /apikey-app/        — API key header auth with X-API-Key on all API requests
+ *   /trpc-app/          — tRPC-style API with /api/trpc/<procedure> endpoints
  *
  * Start: `bun e2e/analyze-site-test-server.ts`
  * Default port: 0 (dynamic, override with PORT env var)
@@ -462,6 +463,69 @@ const APIKEY_HTML = `<!DOCTYPE html>
 </html>`;
 
 // ---------------------------------------------------------------------------
+// tRPC scenario HTML
+// ---------------------------------------------------------------------------
+
+/**
+ * Simulates a web app using tRPC-style API calls:
+ * - GET /api/trpc/<procedure> for queries (with input as query param)
+ * - POST /api/trpc/<procedure> for mutations (with JSON body)
+ * - Client-side JS fires 2 queries and 1 mutation on load
+ */
+const TRPC_HTML = `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>tRPC Test App</title>
+</head>
+<body>
+  <div id="app">
+    <h1>tRPC Dashboard</h1>
+    <p id="status">Loading...</p>
+  </div>
+
+  <script>
+    // Delay API calls so the orchestrator's network capture is active
+    setTimeout(function() {
+      (async function() {
+        try {
+          // Query 1: user.list (GET with input as query param)
+          var usersRes = await fetch(
+            '/api/trpc/user.list?input=' + encodeURIComponent(JSON.stringify({ limit: 10 })),
+            { method: 'GET', headers: { 'Content-Type': 'application/json' } }
+          );
+          var usersData = await usersRes.json();
+
+          // Query 2: item.list (GET with input as query param)
+          var itemsRes = await fetch(
+            '/api/trpc/item.list?input=' + encodeURIComponent(JSON.stringify({ limit: 20 })),
+            { method: 'GET', headers: { 'Content-Type': 'application/json' } }
+          );
+          var itemsData = await itemsRes.json();
+
+          // Mutation: item.create (POST with JSON body)
+          var createRes = await fetch('/api/trpc/item.create', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ title: 'New Widget', price: 19.99 })
+          });
+          var createData = await createRes.json();
+
+          document.getElementById('status').textContent =
+            'Loaded: ' + usersData.result.data.length + ' users, ' +
+            itemsData.result.data.length + ' items, created: ' +
+            createData.result.data.title;
+        } catch (e) {
+          document.getElementById('status').textContent = 'Error: ' + e.message;
+        }
+      })();
+    }, 1500);
+  </script>
+</body>
+</html>`;
+
+// ---------------------------------------------------------------------------
 // Server
 // ---------------------------------------------------------------------------
 
@@ -887,6 +951,70 @@ const server = Bun.serve({
             id: 'evt-new',
             name: body.name ?? 'unknown',
             timestamp: new Date().toISOString(),
+          },
+        }),
+        { headers: { 'Content-Type': 'application/json' } },
+      );
+    }
+
+    // ===================================================================
+    // tRPC scenario
+    // ===================================================================
+
+    // Page — serves HTML
+    if (path === '/trpc-app/' || path === '/trpc-app') {
+      return new Response(TRPC_HTML, {
+        headers: { 'Content-Type': 'text/html' },
+      });
+    }
+
+    // tRPC query — GET /api/trpc/user.list
+    if (path === '/api/trpc/user.list' && req.method === 'GET') {
+      return new Response(
+        JSON.stringify({
+          result: {
+            data: [
+              { id: 'user-1', name: 'Alice', email: 'alice@example.com' },
+              { id: 'user-2', name: 'Bob', email: 'bob@example.com' },
+              { id: 'user-3', name: 'Charlie', email: 'charlie@example.com' },
+            ],
+          },
+        }),
+        { headers: { 'Content-Type': 'application/json' } },
+      );
+    }
+
+    // tRPC query — GET /api/trpc/item.list
+    if (path === '/api/trpc/item.list' && req.method === 'GET') {
+      return new Response(
+        JSON.stringify({
+          result: {
+            data: [
+              { id: 'item-1', title: 'Widget A', price: 9.99 },
+              { id: 'item-2', title: 'Widget B', price: 19.99 },
+            ],
+          },
+        }),
+        { headers: { 'Content-Type': 'application/json' } },
+      );
+    }
+
+    // tRPC mutation — POST /api/trpc/item.create
+    if (path === '/api/trpc/item.create' && req.method === 'POST') {
+      let body: Record<string, unknown> = {};
+      try {
+        body = (await req.json()) as Record<string, unknown>;
+      } catch {
+        // ignore parse errors
+      }
+      return new Response(
+        JSON.stringify({
+          result: {
+            data: {
+              id: 'item-new',
+              title: body.title ?? 'Unnamed',
+              price: body.price ?? 0,
+            },
           },
         }),
         { headers: { 'Content-Type': 'application/json' } },

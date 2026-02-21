@@ -398,3 +398,35 @@ test.describe('plugin_analyze_site — Next.js SSR app', () => {
     expect(analysis.title).toBe('Next.js SSR Test App');
   });
 });
+
+test.describe('plugin_analyze_site — tRPC API', () => {
+  test('detects tRPC protocol in API calls', async ({ mcpServer, extensionContext: _extensionContext, mcpClient }) => {
+    await waitForExtensionConnected(mcpServer);
+    await waitForLog(mcpServer, 'tab.syncAll received');
+
+    const siteUrl = `${analyzeSiteServer.url}/trpc-app/`;
+    const analysis = await analyzeSite(mcpClient, siteUrl);
+
+    // --- API detection ---
+    // The page makes requests to /api/trpc/<procedure> paths — should be classified as trpc
+    const trpcEndpoints = analysis.apis.endpoints.filter(e => e.protocol === 'trpc');
+    expect(trpcEndpoints.length).toBeGreaterThanOrEqual(1);
+
+    // Should detect tRPC endpoints with /api/trpc/ in the URL
+    const trpcEndpoint = trpcEndpoints.find(e => e.url.includes('/api/trpc/'));
+    expect(trpcEndpoint).toBeDefined();
+
+    // Should detect both GET (query) and POST (mutation) tRPC calls
+    const trpcMethods = new Set(trpcEndpoints.map(e => e.method));
+    expect(trpcMethods.has('GET')).toBe(true);
+    expect(trpcMethods.has('POST')).toBe(true);
+
+    // --- Suggestions ---
+    // tRPC endpoints should generate procedure-based suggestions (trpc_<procedure>)
+    const trpcSuggestions = analysis.suggestions.filter(s => s.toolName.startsWith('trpc_'));
+    expect(trpcSuggestions.length).toBeGreaterThanOrEqual(1);
+
+    // --- Title ---
+    expect(analysis.title).toBe('tRPC Test App');
+  });
+});
