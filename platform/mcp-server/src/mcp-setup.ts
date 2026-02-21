@@ -24,6 +24,7 @@
 import { dispatchToExtension, isDispatchError, sendInvocationStart, sendInvocationEnd } from './extension-protocol.js';
 import { log } from './logger.js';
 import { getResource, getPrompt, listAllResources, listAllPrompts, trustTierPrefix } from './registry.js';
+import { sanitizeErrorMessage } from './sanitize-error.js';
 import { prefixedToolName, isToolEnabled, appendAuditEntry } from './state.js';
 import { version } from './version.js';
 import {
@@ -516,7 +517,7 @@ const registerMcpHandlers = (server: McpServerInstance, state: ServerState): voi
         };
       }
 
-      const msg = err instanceof Error ? err.message : String(err);
+      const msg = sanitizeErrorMessage(err instanceof Error ? err.message : String(err));
       errorInfo = { code: 'UNKNOWN', message: msg };
       return {
         content: [

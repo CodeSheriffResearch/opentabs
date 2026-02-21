@@ -8,6 +8,7 @@ import {
 import { buildRegistry, trustTierPrefix } from './registry.js';
 import { createState } from './state.js';
 import {
+  CallToolRequestSchema,
   ListResourcesRequestSchema,
   ReadResourceRequestSchema,
   ListPromptsRequestSchema,
@@ -856,5 +857,34 @@ describe('registerMcpHandlers — prompts/get', () => {
     } catch (err) {
       expect((err as { message: string }).message).toContain('Extension not connected');
     }
+  });
+});
+
+describe('registerMcpHandlers — generic dispatch error sanitization', () => {
+  test('file paths in generic dispatch errors are sanitized to [PATH]', async () => {
+    const state = createState();
+    state.registry = buildRegistry([createPlugin('test', ['ping'])], []);
+
+    // Fake WebSocket whose send() throws with a message containing a file path
+    state.extensionWs = {
+      send: () => {
+        throw new Error('ENOENT: /home/user/.opentabs/plugins/test/dist/adapter.iife.js');
+      },
+      close: () => {},
+    };
+
+    const { server, handlers } = createMockServer();
+    registerMcpHandlers(server, state);
+
+    const handler = getHandler(handlers, CallToolRequestSchema);
+    const result = (await handler({ params: { name: 'test_ping', arguments: {} } }, mockExtra)) as {
+      content: Array<{ text: string }>;
+      isError: boolean;
+    };
+
+    expect(result.isError).toBe(true);
+    const text = result.content[0]?.text ?? '';
+    expect(text).toContain('[PATH]');
+    expect(text).not.toContain('/home/user/.opentabs');
   });
 });
