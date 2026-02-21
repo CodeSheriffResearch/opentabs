@@ -102,7 +102,6 @@ interface OpentabsConfig {
   plugins: string[];
   tools: Record<string, boolean>;
   secret?: string;
-  npmPlugins?: string[];
 }
 
 /**

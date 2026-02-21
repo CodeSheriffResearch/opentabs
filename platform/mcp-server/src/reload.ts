@@ -98,38 +98,23 @@ interface ReloadCoreArgs {
 }
 
 /**
- * Shared reload core: discovery, state swap, pruning, file watcher restart,
- * and extension sync. Both performReload and performConfigReload delegate to
- * this function. Callers are responsible for notifying MCP clients of tool
- * list changes after this function returns.
- *
- * Wraps discovery in an inner try/catch so file watchers are always restarted
- * regardless of discovery success or failure.
+ * Build file watcher callbacks that close over the current state and sessions.
+ * Extracted from reloadCore so the core function stays focused on the
+ * config → discover → swap → prune pipeline.
  */
-const reloadCore = async ({ state, sessionServers, transports }: ReloadCoreArgs): Promise<void> => {
-  // Stop previous file watchers so they can be restarted with fresh callbacks
-  stopFileWatching(state);
-
-  // Sweep stale MCP session entries whose transport has been removed.
-  // This prevents unbounded growth of sessionServers when clients
-  // disconnect ungracefully (network partition, OOM kill).
-  sweepStaleSessions(state, transports, sessionServers);
-
-  // Shared helper: notify all connected MCP client sessions that the tool
-  // list changed. Used by file watcher callbacks that persist until the
-  // next reload.
+const createFileWatcherCallbacks = (
+  state: ServerState,
+  sessionServers: McpServerInstance[],
+  transports: Map<string, WebStandardStreamableHTTPServerTransport>,
+) => {
   const notifyAllClients = (): void => {
     for (const srv of sessionServers) {
       notifyToolListChanged(srv);
     }
   };
 
-  // File watcher callbacks — defined once and reused for both the success
-  // path and the error recovery path (where we restart watchers on the
-  // previous state so they aren't left dead).
-  const fileWatcherCallbacks = {
+  return {
     onManifestChanged: (pluginName: string) => {
-      // Rebuild registry from current plugins to recompile Ajv validators
       state.registry = buildRegistry(Array.from(state.registry.plugins.values()), [...state.registry.failures]);
       notifyAllClients();
       const plugin = state.registry.plugins.get(pluginName);
@@ -151,7 +136,6 @@ const reloadCore = async ({ state, sessionServers, transports }: ReloadCoreArgs)
     },
     onPluginDiscovered: (pluginName: string) => {
       log.info(`Plugin "${pluginName}" discovered by file watcher — rebuilding tools and syncing extension`);
-      // Rebuild registry from current plugins to include the newly discovered plugin
       state.registry = buildRegistry(Array.from(state.registry.plugins.values()), [...state.registry.failures]);
       notifyAllClients();
       if (state.extensionWs) {
@@ -161,14 +145,25 @@ const reloadCore = async ({ state, sessionServers, transports }: ReloadCoreArgs)
       }
     },
   };
+};
+
+/**
+ * Shared reload core: discovery, state swap, pruning, file watcher restart,
+ * and extension sync. Callers notify MCP clients of tool list changes after
+ * this returns. File watchers are always restarted regardless of discovery
+ * success or failure.
+ */
+const reloadCore = async ({ state, sessionServers, transports }: ReloadCoreArgs): Promise<void> => {
+  stopFileWatching(state);
+  sweepStaleSessions(state, transports, sessionServers);
+
+  const callbacks = createFileWatcherCallbacks(state, sessionServers, transports);
 
   try {
-    // Load config, discover plugins, and swap state atomically
     const config = await loadConfig();
     const configDir = getConfigDir();
     const { registry, errors } = await discoverPlugins(config.plugins, configDir);
 
-    // Atomic state swap
     state.registry = registry;
     state.toolConfig = { ...config.tools };
     state.pluginPaths = [...config.plugins];
@@ -189,18 +184,13 @@ const reloadCore = async ({ state, sessionServers, transports }: ReloadCoreArgs)
     rebuildCachedBrowserTools(state);
     pruneStaleState(state);
   } catch (err) {
-    // Config loading or discovery failed entirely. State retains whatever
-    // plugins it had before. File watchers are still restarted below.
     log.error('Reload failed, keeping previous state:', err);
   }
 
-  // File watching — always restart regardless of success/failure.
-  // Pass failed plugin paths so the watcher can monitor them for recovery.
   const failedPaths = state.registry.failures.map(f => f.path);
-  startFileWatching(state, fileWatcherCallbacks, failedPaths);
-  startConfigWatching(state, fileWatcherCallbacks);
+  startFileWatching(state, callbacks, failedPaths);
+  startConfigWatching(state, callbacks);
 
-  // Re-sync extension if connected
   if (state.extensionWs) {
     await sendSyncFull(state);
   }

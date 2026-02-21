@@ -1,11 +1,4 @@
-/**
- * Plugin discovery orchestrator.
- *
- * Composes the resolve → load → register pipeline into a single function.
- * Each specifier from config.plugins is resolved to an absolute path,
- * loaded into a LoadedPlugin, and assembled into an immutable PluginRegistry.
- * Errors at any phase are collected and returned alongside successful results.
- */
+/** Plugin discovery orchestrator: resolve → load → register pipeline. */
 
 import { loadPlugin } from './loader.js';
 import { log } from './logger.js';
@@ -16,40 +9,24 @@ import type { LoadedPlugin } from './loader.js';
 import type { FailedPlugin, PluginRegistry } from './state.js';
 import type { TrustTier } from '@opentabs-dev/shared';
 
-/** Result of full plugin discovery */
 interface DiscoveryResult {
   readonly registry: PluginRegistry;
   readonly errors: readonly DiscoveryError[];
 }
 
-/** A single discovery failure, tied to the specifier that caused it */
 interface DiscoveryError {
   readonly specifier: string;
   readonly error: string;
 }
 
-/**
- * Determine trust tier from a plugin specifier.
- * Local paths are 'local', @opentabs-dev/ packages are 'official',
- * all other npm packages are 'community'.
- */
+/** Local paths → 'local', @opentabs-dev/ → 'official', else → 'community'. */
 const determineTrustTier = (specifier: string): TrustTier => {
   if (isLocalPath(specifier)) return 'local';
   if (specifier.startsWith('@opentabs-dev/')) return 'official';
   return 'community';
 };
 
-/**
- * Discover plugins from an array of specifiers (npm package names or local paths).
- *
- * Phase 1: Resolve all specifiers to absolute directory paths in parallel.
- * Phase 2: Load all resolved directories in parallel.
- * Phase 3: Determine trust tier for each from the original specifier.
- * Phase 4: Build an immutable PluginRegistry from loaded plugins.
- *
- * Errors from any phase are collected and returned — successful plugins
- * continue even if some fail.
- */
+/** Discover plugins from config specifiers (npm names or local paths). */
 const discoverPlugins = async (specifiers: string[], configDir: string): Promise<DiscoveryResult> => {
   log.info('Starting plugin discovery...');
 
