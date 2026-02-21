@@ -57,7 +57,10 @@ describe('opentabs-plugin build E2E', () => {
 
       const { exitCode, stdout, stderr } = runBuild(pluginDir);
 
-      expect(stderr).toBe('');
+      // stderr may contain the isReady() warning when the plugin is built outside a browser
+      if (stderr.length > 0) {
+        expect(stderr).toContain('isReady()');
+      }
       expect(exitCode).toBe(0);
       expect(stdout).toContain('Build complete');
 

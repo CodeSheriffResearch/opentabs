@@ -640,6 +640,20 @@ const runBuild = async (projectDir: string): Promise<void> => {
     throw new Error(`Validation failed:\n${errors.map(e => `  - ${e}`).join('\n')}`);
   }
 
+  // Hint: warn if isReady() unconditionally returns false (default scaffold value)
+  try {
+    const ready = await plugin.isReady();
+    if (!ready) {
+      console.warn(
+        pc.yellow(
+          'Warning: isReady() returned false. The plugin will report as "unavailable" until isReady() is implemented.',
+        ),
+      );
+    }
+  } catch {
+    // isReady() may throw if it depends on a browser environment — skip the check
+  }
+
   // Step 4: Bundle IIFE (before manifest, so adapterHash can be included)
   console.log(pc.dim('Bundling adapter IIFE...'));
   const distDir = join(projectDir, 'dist');

@@ -281,13 +281,14 @@ class ${toPascalCase(args.name)}Plugin extends OpenTabsPlugin {
   readonly urlPatterns = [${JSON.stringify(urlPattern)}];
   readonly tools: ToolDefinition[] = [exampleTool];
 
-  // Check if the user is authenticated on the target page.
-  // Example: look for a session cookie, a logged-in DOM element, or a
-  // global variable set by the application after login.
-  //   return document.cookie.includes('session=')
-  //   return document.querySelector('[data-user-id]') !== null
+  // IMPORTANT: Implement this method to check if the user is authenticated.
+  // The plugin reports 'unavailable' until this returns true.
+  // Examples:
+  //   return document.cookie.includes('session=');
+  //   return document.querySelector('[data-user-id]') !== null;
+  //   return getPageGlobal('APP.currentUser') !== undefined;
   async isReady(): Promise<boolean> {
-    return true;
+    return false;
   }
 }
 
