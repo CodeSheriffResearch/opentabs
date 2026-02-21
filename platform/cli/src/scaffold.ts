@@ -264,6 +264,44 @@ export const myTool = defineTool({
 \`\`\`
 
 Then register it in \`src/index.ts\` by adding it to the \`tools\` array.
+
+## Shared Schemas
+
+When 3 or more tools share the same input or output shape, extract common Zod schemas into a shared file to avoid duplication:
+
+\`\`\`ts
+// src/schemas/channel.ts
+import { z } from 'zod';
+
+export const channelSchema = z.object({
+  id: z.string().describe('Channel ID'),
+  name: z.string().describe('Channel name'),
+});
+
+export type Channel = z.infer<typeof channelSchema>;
+\`\`\`
+
+Then import and reuse in your tools:
+
+\`\`\`ts
+// src/tools/list-channels.ts
+import { channelSchema } from '../schemas/channel.js';
+
+export const listChannels = defineTool({
+  name: 'list_channels',
+  displayName: 'List Channels',
+  description: 'List all available channels',
+  icon: 'list',
+  input: z.object({}),
+  output: z.object({ channels: z.array(channelSchema) }),
+  handle: async () => {
+    // ...
+    return { channels: [] };
+  },
+});
+\`\`\`
+
+This keeps your tool schemas DRY and makes it easy to evolve shared types in one place.
 `;
 };
 
