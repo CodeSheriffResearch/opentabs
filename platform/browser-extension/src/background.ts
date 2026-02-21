@@ -121,6 +121,24 @@ chrome.tabs.onRemoved.addListener(tabId => {
   );
 });
 
+chrome.tabs.onReplaced.addListener((addedTabId, removedTabId) => {
+  // Chrome fires onReplaced when a prerendered page promotes to a visible tab.
+  // Handle the removed tab as closed, then inject adapters into the replacement
+  // and recompute state — same sequencing as the onUpdated status=complete path.
+  checkTabStateChanges(removedTabId, undefined, true).catch((err: unknown) =>
+    console.warn('[opentabs] tab state check failed for replaced tab:', err),
+  );
+  chrome.tabs
+    .get(addedTabId)
+    .then(async tab => {
+      if (tab.url) {
+        await injectPluginsIntoTab(addedTabId, tab.url);
+      }
+      await checkTabStateChanges(addedTabId, { status: 'complete' });
+    })
+    .catch((err: unknown) => console.warn('[opentabs] tab replacement handling failed:', err));
+});
+
 // --- Message routing (offscreen, side panel, content scripts) ---
 
 chrome.runtime.onMessage.addListener((message: InternalMessage, _sender, sendResponse) => {
