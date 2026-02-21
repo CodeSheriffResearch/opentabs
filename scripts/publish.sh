@@ -40,18 +40,18 @@ bun run build
 echo ""
 echo "==> Bumping versions to $VERSION..."
 for pkg in platform/shared platform/plugin-sdk platform/plugin-tools platform/cli; do
-  sed -i '' "s/\"version\": \"[^\"]*\"/\"version\": \"$VERSION\"/" "$pkg/package.json"
+  sed -i.bak "s/\"version\": \"[^\"]*\"/\"version\": \"$VERSION\"/" "$pkg/package.json" && rm "$pkg/package.json.bak"
   echo "  $pkg/package.json → $VERSION"
 done
 
 # Update cross-references to new version
 for pkg in platform/plugin-sdk platform/plugin-tools platform/cli; do
-  sed -i '' "s/\"@opentabs-dev\/shared\": \"\\^[^\"]*\"/\"@opentabs-dev\/shared\": \"^$VERSION\"/" "$pkg/package.json"
+  sed -i.bak "s/\"@opentabs-dev\/shared\": \"\\^[^\"]*\"/\"@opentabs-dev\/shared\": \"^$VERSION\"/" "$pkg/package.json" && rm "$pkg/package.json.bak"
 done
 for pkg in platform/plugin-tools platform/cli; do
-  sed -i '' "s/\"@opentabs-dev\/plugin-sdk\": \"\\^[^\"]*\"/\"@opentabs-dev\/plugin-sdk\": \"^$VERSION\"/" "$pkg/package.json"
+  sed -i.bak "s/\"@opentabs-dev\/plugin-sdk\": \"\\^[^\"]*\"/\"@opentabs-dev\/plugin-sdk\": \"^$VERSION\"/" "$pkg/package.json" && rm "$pkg/package.json.bak"
 done
-sed -i '' "s/\"@opentabs-dev\/plugin-tools\": \"\\^[^\"]*\"/\"@opentabs-dev\/plugin-tools\": \"^$VERSION\"/" platform/cli/package.json
+sed -i.bak "s/\"@opentabs-dev\/plugin-tools\": \"\\^[^\"]*\"/\"@opentabs-dev\/plugin-tools\": \"^$VERSION\"/" platform/cli/package.json && rm platform/cli/package.json.bak
 
 echo ""
 echo "==> Rebuilding with new versions..."
@@ -77,6 +77,6 @@ echo ""
 echo "==> Published all packages at v$VERSION"
 echo ""
 echo "Next steps:"
-echo "  1. Update plugin dependencies: sed -i '' 's/\"\\^[0-9.]*\"/\"^$VERSION\"/' plugins/*/package.json"
+echo "  1. Update plugin dependencies: sed -i.bak 's/\"\\^[0-9.]*\"/\"^$VERSION\"/' plugins/*/package.json && rm plugins/*/package.json.bak"
 echo "  2. Rebuild plugins: cd plugins/slack && bun install && bun run build"
 echo "  3. Commit the version bump"
