@@ -44,6 +44,15 @@ const E2E_TEST_PLUGIN_DIR = path.join(ROOT, 'plugins/e2e-test');
 // Health helper (MCP server)
 // ---------------------------------------------------------------------------
 
+interface PluginDetail {
+  name: string;
+  displayName: string;
+  toolCount: number;
+  tabState: string;
+  source: string;
+  logBufferSize: number;
+}
+
 interface HealthResponse {
   status: string;
   version: string;
@@ -52,6 +61,7 @@ interface HealthResponse {
   mcpClients: number;
   plugins: number;
   reloadCount: number;
+  pluginDetails?: PluginDetail[];
 }
 
 const fetchHealth = async (port: number): Promise<HealthResponse | null> => {

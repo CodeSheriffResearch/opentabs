@@ -163,6 +163,7 @@ const log = Object.freeze({
 const ot = ((globalThis as Record<string, unknown>).__openTabs ?? {}) as Record<string, unknown>;
 (globalThis as Record<string, unknown>).__openTabs = ot;
 ot._setLogTransport = _setLogTransport;
+ot.log = log;
 
 // ---------------------------------------------------------------------------
 // Exports

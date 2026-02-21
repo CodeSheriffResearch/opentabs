@@ -5,6 +5,7 @@ import { failingTool } from './tools/failing-tool.js';
 import { getStatus } from './tools/get-status.js';
 import { greet } from './tools/greet.js';
 import { listItems } from './tools/list-items.js';
+import { logLevels } from './tools/log-levels.js';
 import { sdkFetchJson } from './tools/sdk-fetch-json.js';
 import { sdkGetLocalStorage } from './tools/sdk-get-local-storage.js';
 import { sdkGetPageGlobal } from './tools/sdk-get-page-global.js';
@@ -26,6 +27,7 @@ class E2eTestPlugin extends OpenTabsPlugin {
     getStatus,
     createItem,
     failingTool,
+    logLevels,
     sdkWaitForSelector,
     sdkFetchJson,
     sdkGetLocalStorage,
