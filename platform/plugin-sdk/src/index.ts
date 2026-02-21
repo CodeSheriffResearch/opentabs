@@ -275,7 +275,14 @@ export type { RetryOptions, WaitUntilOptions } from './timing.js';
 // SDK utilities — Storage
 // ---------------------------------------------------------------------------
 
-export { getLocalStorage, setLocalStorage, getSessionStorage, getCookie } from './storage.js';
+export {
+  getLocalStorage,
+  setLocalStorage,
+  removeLocalStorage,
+  getSessionStorage,
+  removeSessionStorage,
+  getCookie,
+} from './storage.js';
 
 // ---------------------------------------------------------------------------
 // SDK utilities — Page State

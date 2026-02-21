@@ -39,6 +39,30 @@ export const getSessionStorage = (key: string): string | null => {
 };
 
 /**
+ * Removes a key from localStorage. Silently fails if storage access throws
+ * (e.g., SecurityError in sandboxed iframes).
+ */
+export const removeLocalStorage = (key: string): void => {
+  try {
+    localStorage.removeItem(key);
+  } catch {
+    // Silently fail on SecurityError
+  }
+};
+
+/**
+ * Removes a key from sessionStorage. Silently fails if storage access throws
+ * (e.g., SecurityError in sandboxed iframes).
+ */
+export const removeSessionStorage = (key: string): void => {
+  try {
+    sessionStorage.removeItem(key);
+  } catch {
+    // Silently fail on SecurityError
+  }
+};
+
+/**
  * Reads a cookie by name from `document.cookie`. Handles URI-encoded values.
  * Returns null if the cookie is not found.
  */

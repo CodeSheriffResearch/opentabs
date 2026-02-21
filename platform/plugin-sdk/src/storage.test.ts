@@ -1,4 +1,11 @@
-import { getCookie, getLocalStorage, getSessionStorage, setLocalStorage } from './storage.js';
+import {
+  getCookie,
+  getLocalStorage,
+  getSessionStorage,
+  removeLocalStorage,
+  removeSessionStorage,
+  setLocalStorage,
+} from './storage.js';
 import { afterEach, beforeEach, describe, expect, test } from 'bun:test';
 import { GlobalWindow } from 'happy-dom';
 
@@ -80,6 +87,37 @@ describe('setLocalStorage', () => {
 });
 
 // ---------------------------------------------------------------------------
+// removeLocalStorage
+// ---------------------------------------------------------------------------
+
+describe('removeLocalStorage', () => {
+  test('removes an existing key', () => {
+    localStorage.setItem('to-remove', 'value');
+    removeLocalStorage('to-remove');
+    expect(localStorage.getItem('to-remove')).toBeNull();
+  });
+
+  test('does nothing for a missing key', () => {
+    expect(() => removeLocalStorage('nonexistent')).not.toThrow();
+  });
+
+  test('silently fails when localStorage throws', () => {
+    Object.defineProperty(globalThis, 'localStorage', {
+      get: () => {
+        throw new DOMException('Access denied', 'SecurityError');
+      },
+      configurable: true,
+    });
+    expect(() => removeLocalStorage('key')).not.toThrow();
+    Object.defineProperty(globalThis, 'localStorage', {
+      value: win.localStorage as unknown as Storage,
+      configurable: true,
+      writable: true,
+    });
+  });
+});
+
+// ---------------------------------------------------------------------------
 // getSessionStorage
 // ---------------------------------------------------------------------------
 
@@ -101,6 +139,37 @@ describe('getSessionStorage', () => {
       configurable: true,
     });
     expect(getSessionStorage('key')).toBeNull();
+    Object.defineProperty(globalThis, 'sessionStorage', {
+      value: win.sessionStorage as unknown as Storage,
+      configurable: true,
+      writable: true,
+    });
+  });
+});
+
+// ---------------------------------------------------------------------------
+// removeSessionStorage
+// ---------------------------------------------------------------------------
+
+describe('removeSessionStorage', () => {
+  test('removes an existing key', () => {
+    sessionStorage.setItem('to-remove', 'value');
+    removeSessionStorage('to-remove');
+    expect(sessionStorage.getItem('to-remove')).toBeNull();
+  });
+
+  test('does nothing for a missing key', () => {
+    expect(() => removeSessionStorage('nonexistent')).not.toThrow();
+  });
+
+  test('silently fails when sessionStorage throws', () => {
+    Object.defineProperty(globalThis, 'sessionStorage', {
+      get: () => {
+        throw new DOMException('Access denied', 'SecurityError');
+      },
+      configurable: true,
+    });
+    expect(() => removeSessionStorage('key')).not.toThrow();
     Object.defineProperty(globalThis, 'sessionStorage', {
       value: win.sessionStorage as unknown as Storage,
       configurable: true,
