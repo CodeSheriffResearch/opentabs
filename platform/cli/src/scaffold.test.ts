@@ -44,7 +44,7 @@ describe('scaffoldPlugin', () => {
 
     // Change cwd so scaffoldPlugin creates projects in the temp dir
     process.chdir(tmpDir);
-    // Point config to temp dir so auto-registration doesn't touch real config
+    // Point config to temp dir for test isolation
     Bun.env.OPENTABS_CONFIG_DIR = join(tmpDir, '.opentabs');
   });
 
