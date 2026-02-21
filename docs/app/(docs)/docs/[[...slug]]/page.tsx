@@ -41,7 +41,7 @@ export default async function DocPage({ params }: IProps) {
   return (
     <>
       {/* Main Content */}
-      <div className="mx-auto w-full max-w-2xl flex-1 space-y-12 px-4 py-12">
+      <div className="mx-auto w-full max-w-2xl min-w-0 flex-1 space-y-12 overflow-hidden px-4 py-12">
         <div>
           <MDX code={doc.body} />
         </div>
