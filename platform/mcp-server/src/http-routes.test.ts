@@ -189,6 +189,7 @@ const mockBunServer = {
 interface HealthResponse {
   status: string;
   version: string;
+  mode: 'dev' | 'production';
   extensionConnected: boolean;
   mcpClients: number;
   plugins: number;
@@ -285,6 +286,14 @@ describe('/health endpoint', () => {
     expect(body.lastReloadDurationMs).toBe(0);
   });
 
+  test('includes mode field (production when tests run without --dev)', async () => {
+    const { handlers } = createTestHandlers();
+
+    const body = await fetchJson<HealthResponse>(handlers, 'http://localhost:9876/health');
+
+    expect(body.mode).toBe('production');
+  });
+
   test('includes browser tools in toolCount', async () => {
     const { handlers, state } = createTestHandlers();
 
@@ -376,6 +385,21 @@ describe('/ws-info endpoint', () => {
     expect((res as Response).status).toBe(200);
     const body = (await (res as Response).json()) as WsInfoResponse;
     expect(body.wsSecret).toBe('my-test-secret');
+  });
+});
+
+describe('POST /reload endpoint', () => {
+  test('returns 405 in production mode with descriptive error message', async () => {
+    const { handlers } = createTestHandlers();
+
+    const req = new Request('http://localhost:9876/reload', { method: 'POST' });
+    const res = await handlers.fetch(req, mockBunServer);
+
+    expect(res).toBeInstanceOf(Response);
+    expect((res as Response).status).toBe(405);
+    const body = (await (res as Response).json()) as { ok: boolean; error: string };
+    expect(body.ok).toBe(false);
+    expect(body.error).toBe('Reload is only available in dev mode. Restart the server to pick up plugin changes.');
   });
 });
 

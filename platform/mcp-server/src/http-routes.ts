@@ -13,6 +13,7 @@
  */
 
 import { saveToolConfig } from './config.js';
+import { isDev } from './dev-mode.js';
 import { handleExtensionMessage, sendSyncFull } from './extension-protocol.js';
 import { log } from './logger.js';
 import { createMcpServer, notifyToolListChanged } from './mcp-setup.js';
@@ -180,6 +181,7 @@ const createHandleFetch =
       return Response.json({
         status: 'ok',
         version,
+        mode: isDev() ? 'dev' : 'production',
         extensionConnected: state.extensionWs !== null,
         mcpClients: transports.size,
         plugins: state.registry.plugins.size,
@@ -201,8 +203,14 @@ const createHandleFetch =
       });
     }
 
-    // --- Config/plugin rediscovery endpoint ---
+    // --- Config/plugin rediscovery endpoint (dev mode only) ---
     if (url.pathname === '/reload' && req.method === 'POST') {
+      if (!isDev()) {
+        return Response.json(
+          { ok: false, error: 'Reload is only available in dev mode. Restart the server to pick up plugin changes.' },
+          { status: 405 },
+        );
+      }
       const authError = checkBearerAuth(req, state.wsSecret);
       if (authError) return authError;
       if (!checkEndpointRateLimit('/reload', 10)) {
