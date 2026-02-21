@@ -90,6 +90,8 @@ const autoInitialize = async (configDir: string): Promise<boolean> => {
 };
 
 const printFirstTimeInstructions = (extensionDest: string, port: number): void => {
+  const mcpUrl = `http://127.0.0.1:${port}/mcp`;
+
   console.log('');
   console.log(pc.bold('First-time setup:'));
   console.log('');
@@ -98,12 +100,23 @@ const printFirstTimeInstructions = (extensionDest: string, port: number): void =
   console.log(`     b. Enable "Developer mode" (top-right toggle)`);
   console.log(`     c. Click "Load unpacked" and select: ${pc.cyan(extensionDest)}`);
   console.log('');
-  console.log('  2. Configure your MCP client (~/.claude/settings/mcp.json):');
-  console.log(
-    pc.dim(
-      `     { "mcpServers": { "opentabs": { "type": "streamable-http", "url": "http://127.0.0.1:${port}/mcp" } } }`,
-    ),
-  );
+  console.log('  2. Configure your MCP client:');
+  console.log('');
+  printMcpClientConfigs(mcpUrl);
+};
+
+const printMcpClientConfigs = (mcpUrl: string): void => {
+  console.log(pc.dim(`     ${pc.bold('Claude Code')} (~/.claude/settings/mcp.json):`));
+  console.log(pc.dim(`     { "mcpServers": { "opentabs": { "type": "streamable-http", "url": "${mcpUrl}" } } }`));
+  console.log('');
+  console.log(pc.dim(`     ${pc.bold('Cursor')} (.cursor/mcp.json):`));
+  console.log(pc.dim(`     { "mcpServers": { "opentabs": { "type": "http", "url": "${mcpUrl}" } } }`));
+  console.log('');
+  console.log(pc.dim(`     ${pc.bold('Windsurf')} (~/.codeium/windsurf/mcp_config.json):`));
+  console.log(pc.dim(`     { "mcpServers": { "opentabs": { "serverUrl": "${mcpUrl}" } } }`));
+  console.log('');
+  console.log(pc.dim('     For other MCP clients, consult their documentation for adding a Streamable HTTP server'));
+  console.log(pc.dim(`     pointing to ${mcpUrl}`));
   console.log('');
 };
 
@@ -148,13 +161,9 @@ const handleStart = async (options: StartOptions): Promise<void> => {
     const extensionDest = resolve(configDir, 'extension');
     printFirstTimeInstructions(extensionDest, port);
   } else {
-    console.log(pc.dim('  MCP client config (~/.claude/settings/mcp.json):'));
-    console.log(
-      pc.dim(
-        `  { "mcpServers": { "opentabs": { "type": "streamable-http", "url": "http://127.0.0.1:${port}/mcp" } } }`,
-      ),
-    );
+    console.log(pc.dim('  MCP client config (add to your client):'));
     console.log('');
+    printMcpClientConfigs(`http://127.0.0.1:${port}/mcp`);
   }
 
   console.log(pc.dim('  Press Ctrl+C to stop'));
