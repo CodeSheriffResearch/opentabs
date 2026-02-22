@@ -1,3 +1,5 @@
+import { sanitizeSvg } from '../../sanitize-svg.js';
+
 const AVATAR_PALETTE_SIZE = 10;
 
 /** djb2 string hash to unsigned 32-bit integer. */
@@ -37,7 +39,8 @@ const PluginIcon = ({
   iconInactiveSvg,
 }: PluginIconProps) => {
   const hasSvg = !!iconSvg;
-  const svgToRender = ready ? iconSvg : iconInactiveSvg;
+  const rawSvg = ready ? iconSvg : iconInactiveSvg;
+  const svgToRender = rawSvg ? sanitizeSvg(rawSvg) : undefined;
   const innerSize = Math.round(size * 0.6);
 
   if (hasSvg && svgToRender) {
