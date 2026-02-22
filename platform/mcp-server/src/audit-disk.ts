@@ -67,7 +67,11 @@ const appendAuditEntryToDisk = async (entry: AuditEntry): Promise<void> => {
 
     // Set permissions on first write this session
     if (!initialized) {
-      await chmod(auditPath, 0o600).catch(() => {});
+      await chmod(auditPath, 0o600).catch((err: unknown) => {
+        log.warn(
+          `Warning: Could not set file permissions on ${auditPath}: ${err instanceof Error ? err.message : String(err)}. The audit file may be readable by other users.`,
+        );
+      });
       initialized = true;
     }
   } catch (err) {

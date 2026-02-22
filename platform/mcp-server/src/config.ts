@@ -76,7 +76,11 @@ const atomicWriteConfig = async (configPath: string, content: string): Promise<v
   const tmpPath = configPath + '.tmp';
   try {
     await Bun.write(tmpPath, content);
-    await chmod(tmpPath, 0o600).catch(() => {});
+    await chmod(tmpPath, 0o600).catch((err: unknown) => {
+      log.warn(
+        `Warning: Could not set file permissions on ${tmpPath}: ${err instanceof Error ? err.message : String(err)}. The config file may be readable by other users.`,
+      );
+    });
     await rename(tmpPath, configPath);
   } catch (err) {
     await unlink(tmpPath).catch(() => {});
