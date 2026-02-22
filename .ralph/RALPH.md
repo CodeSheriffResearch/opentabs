@@ -2,14 +2,16 @@
 
 You are an autonomous coding agent. Your work targets a specific project within the OpenTabs repository. The PRD file tells you which project and how to verify your work.
 
+You are running inside a **git worktree** — an isolated copy of the repository with its own branch. Other agents may be running in parallel in separate worktrees. Your changes are isolated until ralph merges your branch after you finish.
+
 ## Your Task
 
-1. Find the active PRD: look for the file in `.ralph/` whose name matches `prd-*~running.json` — there is exactly one at any time
+1. Find the active PRD: look for the file in `.ralph/` whose name matches `prd-*~running.json`
 2. Find the matching progress file: replace the `prd-` prefix with `progress-`, strip `~running`, and change the extension to `.txt` (e.g., `prd-2026-02-17-143000-improve-sdk~running.json` → `progress-2026-02-17-143000-improve-sdk.txt`)
 3. Read the progress file's Codebase Patterns section first (if it exists)
 4. **Read the PRD and determine the target project** (see "Determining Your Target Project" below)
 5. **Read the target project's CLAUDE.md** (if one exists) for project-specific conventions and patterns
-6. Work on the current branch (do NOT create or switch branches)
+6. Work on the current branch (do NOT create or switch branches — you are already on your worktree branch)
 7. Pick the **highest priority** user story where `passes: false` — you will implement **only this one story** and then stop
 8. Implement that single user story (do NOT continue to the next story after this one)
 9. **Run ALL quality checks using the PRD's verification command** (see "Quality Checks" below)
@@ -19,6 +21,19 @@ You are an autonomous coding agent. Your work targets a specific project within 
 13. **After committing**, update the PRD to set `passes: true` for the completed story
 14. **After committing**, append your progress to the matching progress file
 15. **STOP.** Do not pick up another story. Your invocation is done. End your response.
+
+## Worktree Context
+
+You are running in a git worktree, not the main working directory. Key implications:
+
+- **Your branch is isolated.** Commits you make are on your worktree branch. Ralph merges them into the main branch after you finish.
+- **Other agents cannot see your changes** and you cannot see theirs. There are no type-check, lint, or build cross-contamination issues.
+- **Dependencies are installed.** Ralph runs `bun install` in your worktree before launching you. You do not need to run `bun install` unless you modify `package.json`.
+- **The `.ralph/` directory** contains your PRD and progress files. These are copies managed by ralph — update them normally.
+- **Merge conflicts are possible.** After you finish, ralph merges your branch into main. If another agent's branch was merged first and touched the same files, a merge conflict occurs. Ralph preserves your branch for manual resolution and moves on. To minimize conflicts:
+  - **Keep changes focused.** Only modify files relevant to your story. Do not refactor unrelated code.
+  - **Prefer small, surgical edits** over large rewrites of shared files.
+  - **Avoid reformatting entire files** — whitespace-only changes to lines you didn't functionally change cause unnecessary conflicts.
 
 ## Determining Your Target Project
 

@@ -442,15 +442,21 @@ bun run type-check    # TypeScript check (must pass from clean checkout)
 bun run lint          # Check for lint errors
 bun run knip          # Check for unused code
 bun run test          # Unit tests
+bun run test:e2e      # E2E tests (Playwright)
 ```
 
-**Every command must exit 0.** A task is not done until all five pass. No exceptions.
+**Every command must exit 0.** A task is not done until all six pass. No exceptions.
 
 - If a check fails, **fix it** — even if the failure looks pre-existing or unrelated to your change. You own the codebase.
 - Do not rationalize failures ("that's a known issue", "the build is the real type-check", "this was broken before I started"). If it fails, it is your problem. Fix it or explain to the user why you cannot.
 - Do not skip a check because a different check covers "the same thing". Each command tests something distinct. Run all of them.
 
-**NEVER run `bun run test:e2e` or `bunx playwright test` in automated/delegated contexts.** E2E tests spawn Chromium browsers, MCP server processes, and test servers that become orphaned when the parent process is killed or times out. Only run E2E tests when the user explicitly asks. The verification checklist above intentionally excludes E2E tests.
+**E2E test process cleanup:** E2E tests spawn Chromium browsers, MCP server processes, and test servers. You MUST clean up processes you create without killing processes created by other agents running in parallel. Rules:
+
+- **Track PIDs you create.** Before running `bun run test:e2e`, note your own PID (`$$` in bash). After the test run completes (pass or fail), kill only the process tree rooted at the PID you spawned — never `pkill` or `killall` by process name, which would kill other agents' processes too.
+- **Playwright handles its own cleanup** in the normal case. The concern is abnormal exits (timeout, crash, `kill -9`). If your test run is interrupted, orphaned Chromium and server processes may survive.
+- **Port conflicts are already handled.** All test fixtures use `PORT=0` (ephemeral ports) and Playwright runs with `fullyParallel: true`. Multiple agents running E2E tests simultaneously will not collide on ports.
+- **In ralph workers**, process isolation is automatic — ralph runs each worker in its own process group (`set -m`) and kills the entire group (`kill -- -PID`) when the worker finishes, catching any orphaned Chromium/server processes without affecting other workers.
 
 ### ESLint
 

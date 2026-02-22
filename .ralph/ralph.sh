@@ -1,10 +1,11 @@
 #!/bin/bash
-# Ralph — Continuous PRD consumer daemon
+# Ralph — Parallel PRD consumer daemon using git worktrees
 #
-# Usage: .ralph/ralph.sh [--tool amp|claude] [--once] [--poll N]
+# Usage: .ralph/ralph.sh [--tool amp|claude] [--once] [--poll N] [--workers N]
 #
-# Watches .ralph/ for PRD files and processes them in timestamp order.
-# Runs as a long-lived daemon by default; use --once to process one PRD and exit.
+# Watches .ralph/ for PRD files and processes them in parallel using git worktrees.
+# Each PRD gets its own worktree so agents run in full isolation — no type-check,
+# lint, or build conflicts between concurrent agents.
 #
 # PRD file name state machine:
 #   prd-YYYY-MM-DD-HHMMSS-objective~draft.json    — being written, ignored
@@ -13,9 +14,17 @@
 #   prd-YYYY-MM-DD-HHMMSS-objective~done.json      — completed, pending archive
 #   archived to .ralph/archive/                     — final resting place
 #
-# At any given time there is at most ONE file with ~running in its name.
+# Multiple PRDs can be ~running simultaneously (one per worker).
+#
+# Log format — every line in ralph.log:
+#   HH:MM:SS [W<slot>:<objective>] <message>
+#   e.g. 14:32:05 [W0:fix-bugs] ▸ Read    platform/mcp-server/src/index.ts
 
-set -e
+# NOTE: set -e is intentionally NOT used. This is a long-running daemon that
+# must be resilient to individual command failures (git operations, file copies,
+# jq parsing). Each failure is handled explicitly with || guards. Using set -e
+# in a daemon causes cascading failures where a single transient error (e.g.,
+# a missing temp file) kills the entire process tree.
 
 # --- Argument Parsing ---
 
@@ -23,6 +32,7 @@ TOOL="claude"
 MODEL=""
 ONCE=false
 POLL_INTERVAL=5
+MAX_WORKERS=3
 
 while [[ $# -gt 0 ]]; do
   case $1 in
@@ -54,6 +64,14 @@ while [[ $# -gt 0 ]]; do
       POLL_INTERVAL="${1#*=}"
       shift
       ;;
+    --workers)
+      MAX_WORKERS="$2"
+      shift 2
+      ;;
+    --workers=*)
+      MAX_WORKERS="${1#*=}"
+      shift
+      ;;
     *)
       shift
       ;;
@@ -62,6 +80,11 @@ done
 
 if [[ "$TOOL" != "amp" && "$TOOL" != "claude" ]]; then
   echo "Error: Invalid tool '$TOOL'. Must be 'amp' or 'claude'."
+  exit 1
+fi
+
+if ! [[ "$MAX_WORKERS" =~ ^[0-9]+$ ]] || [ "$MAX_WORKERS" -lt 1 ]; then
+  echo "Error: --workers must be a positive integer (got '$MAX_WORKERS')."
   exit 1
 fi
 
@@ -77,7 +100,8 @@ cd "$PROJECT_DIR"
 unset CLAUDECODE
 
 ARCHIVE_DIR="$SCRIPT_DIR/archive"
-mkdir -p "$ARCHIVE_DIR"
+WORKTREE_BASE="$SCRIPT_DIR/worktrees"
+mkdir -p "$ARCHIVE_DIR" "$WORKTREE_BASE"
 
 # --- Auto-Logging ---
 # Always tee output to .ralph/ralph.log so diagnostics are never lost,
@@ -112,7 +136,6 @@ if [ -f "$PIDFILE" ]; then
 fi
 
 echo $$ > "$PIDFILE"
-trap 'rm -f "$PIDFILE"' EXIT
 
 # Colors
 RED='\033[31m'
@@ -123,44 +146,225 @@ BOLD='\033[1m'
 DIM='\033[2m'
 RESET='\033[0m'
 
+# --- Timestamp helper ---
+# Short PST timestamp for log lines.
+ts() {
+  TZ=America/Los_Angeles date +'%H:%M:%S'
+}
+
+# Check if there are any remaining ready PRDs to dispatch.
+has_ready_prds() {
+  local count
+  count=$(find "$SCRIPT_DIR" -maxdepth 1 -name 'prd-*.json' -type f \
+    ! -name '*~draft*' \
+    ! -name '*~running*' \
+    ! -name '*~done*' \
+    2>/dev/null | wc -l | tr -d ' ')
+  [ "$count" -gt 0 ]
+}
+
+# --- Worker Tracking ---
+# Parallel arrays indexed by slot number (0..MAX_WORKERS-1).
+# Empty string means the slot is free.
+
+declare -a WORKER_PIDS=()
+declare -a WORKER_PRDS=()
+declare -a WORKER_WORKTREES=()
+declare -a WORKER_BRANCHES=()
+declare -a WORKER_RESULT_FILES=()
+declare -a WORKER_TAGS=()
+
+for (( s=0; s<MAX_WORKERS; s++ )); do
+  WORKER_PIDS[$s]=""
+  WORKER_PRDS[$s]=""
+  WORKER_WORKTREES[$s]=""
+  WORKER_BRANCHES[$s]=""
+  WORKER_RESULT_FILES[$s]=""
+  WORKER_TAGS[$s]=""
+done
+
+# --- Cleanup ---
+# On exit, kill all running workers and remove worktrees.
+
+cleanup() {
+  echo ""
+  echo -e "$(ts) ${YELLOW}Shutting down ralph...${RESET}"
+
+  # Abort any in-progress git merge on the main worktree.
+  # If SIGTERM arrives while reap_workers is running git merge, the main
+  # worktree could be left in a partial merge state.
+  git merge --abort 2>/dev/null || true
+
+  for (( s=0; s<MAX_WORKERS; s++ )); do
+    local pid="${WORKER_PIDS[$s]}"
+    if [ -n "$pid" ] && kill -0 "$pid" 2>/dev/null; then
+      echo -e "$(ts) ${DIM}Killing worker $s (PID $pid) and child processes...${RESET}"
+      # Kill the entire process group rooted at the worker subshell.
+      # This ensures claude, stream_filter, and any other child processes
+      # (Chromium, MCP servers, test servers from e2e) spawned by the worker
+      # are terminated — not just the subshell itself.
+      kill -- -"$pid" 2>/dev/null || kill "$pid" 2>/dev/null || true
+      wait "$pid" 2>/dev/null || true
+    fi
+
+    local wt="${WORKER_WORKTREES[$s]}"
+    local br="${WORKER_BRANCHES[$s]}"
+    if [ -n "$wt" ] && [ -d "$wt" ]; then
+      echo -e "$(ts) ${DIM}Removing worktree: $wt${RESET}"
+      remove_worktree "$wt"
+    fi
+    if [ -n "$br" ]; then
+      git branch -D "$br" 2>/dev/null || true
+    fi
+
+    # Clean up temp files
+    [ -n "${WORKER_RESULT_FILES[$s]}" ] && rm -f "${WORKER_RESULT_FILES[$s]}"
+    [ -n "${WORKER_RESULT_FILES[$s]}" ] && rm -f "${WORKER_RESULT_FILES[$s]}.exit"
+  done
+
+  # Prune stale worktree references
+  git worktree prune 2>/dev/null || true
+
+  rm -f "$PIDFILE"
+  echo -e "$(ts) ${GREEN}Ralph stopped.${RESET}"
+}
+
+# Use set -m to enable job control so background subshells get their own
+# process groups. This allows cleanup to kill entire process trees via
+# kill -- -PID (negative PID targets the process group).
+set -m
+
+trap cleanup EXIT
+
+# --- Logging helpers ---
+# Every log line gets:  HH:MM:SS [W<slot>:<objective>] <message>
+# For daemon-level messages (no worker), the tag is omitted.
+
+# Pipe filter: prepends "HH:MM:SS <tag> " to every line read from stdin.
+# Usage: some_command 2>&1 | ts_prefix "W0:fix-bugs"
+ts_prefix() {
+  local tag="$1"
+  while IFS= read -r line; do
+    printf "%s ${CYAN}[%s]${RESET} %s\n" "$(ts)" "$tag" "$line"
+  done
+}
+
 # --- Helper Functions ---
 
-# Find the next ready PRD file (sorted by timestamp in filename, oldest first).
-# Ready means: starts with "prd-", ends with ".json", does NOT contain
-# "~draft", "~running", or "~done" in the name.
-find_next_prd() {
+# Robustly remove a git worktree directory.
+# git worktree remove can fail when node_modules or other large trees have
+# open file handles (Spotlight, FSEvents, lingering processes). Fall back to
+# rm -rf, retrying once after a short sleep if the first attempt fails.
+remove_worktree() {
+  local wt="$1"
+  [ -z "$wt" ] || [ ! -d "$wt" ] && return 0
+
+  # Try git's own removal first (unregisters from .git/worktrees too).
+  git worktree remove --force "$wt" >/dev/null 2>&1 && return 0
+
+  # git failed — force-remove the directory.
+  rm -rf "$wt" 2>/dev/null && { git worktree prune 2>/dev/null || true; return 0; }
+
+  # If rm -rf failed (open file handles), wait and retry once.
+  sleep 2
+  rm -rf "$wt" 2>/dev/null || true
+  git worktree prune 2>/dev/null || true
+}
+
+# Find ALL ready PRD files (sorted by timestamp, oldest first).
+find_ready_prds() {
   find "$SCRIPT_DIR" -maxdepth 1 -name 'prd-*.json' -type f \
     ! -name '*~draft*' \
     ! -name '*~running*' \
     ! -name '*~done*' \
-    2>/dev/null | sort | head -1
+    2>/dev/null | sort
 }
 
-# Find the currently running PRD file (should be at most one).
-find_running_prd() {
+# Find all currently running PRD files.
+find_running_prds() {
   find "$SCRIPT_DIR" -maxdepth 1 -name 'prd-*~running.json' -type f \
-    2>/dev/null | sort | head -1
+    2>/dev/null | sort
 }
 
-# Transition a PRD file to ~running state by renaming it.
-# Input:  prd-2026-02-17-143000-improve-sdk.json
-# Output: prd-2026-02-17-143000-improve-sdk~running.json
-mark_running() {
+# Count active workers.
+count_active_workers() {
+  local count=0
+  for (( s=0; s<MAX_WORKERS; s++ )); do
+    [ -n "${WORKER_PIDS[$s]}" ] && count=$((count + 1))
+  done
+  echo "$count"
+}
+
+# Find a free worker slot. Returns slot number or empty string if none.
+find_free_slot() {
+  for (( s=0; s<MAX_WORKERS; s++ )); do
+    if [ -z "${WORKER_PIDS[$s]}" ]; then
+      echo "$s"
+      return
+    fi
+  done
+  echo ""
+}
+
+# Extract a full slug from a PRD filename for use in branch/worktree names.
+# prd-2026-02-17-143000-improve-sdk.json -> 2026-02-17-143000-improve-sdk
+prd_slug() {
   local prd_file="$1"
   local base
   base=$(basename "$prd_file" .json)
+  # Strip state suffixes
+  base="${base/~running/}"
+  base="${base/~done/}"
+  base="${base/~draft/}"
+  # Strip "prd-" prefix
+  echo "${base#prd-}"
+}
+
+# Extract short human-readable objective from a PRD filename.
+# prd-2026-02-17-143000-improve-sdk.json -> improve-sdk
+prd_objective() {
+  local slug
+  slug=$(prd_slug "$1")
+  # The slug is YYYY-MM-DD-HHMMSS-objective (18 chars of date prefix).
+  echo "${slug:18}"
+}
+
+# Build the worker tag: W<slot>:<objective>
+# e.g. W0:fix-bugs, W2:security-fixes
+make_worker_tag() {
+  local slot="$1"
+  local prd_file="$2"
+  local obj
+  obj=$(prd_objective "$prd_file")
+  # Truncate objective to 20 chars for readability
+  echo "W${slot}:${obj:0:20}"
+}
+
+# Transition a PRD file to ~running state by renaming it.
+# Returns the new path on stdout. Returns 1 if the source file is missing.
+mark_running() {
+  local prd_file="$1"
+  if [ ! -f "$prd_file" ]; then
+    echo "$prd_file"
+    return 1
+  fi
+  local base
+  base=$(basename "$prd_file" .json)
   local running_file="$SCRIPT_DIR/${base}~running.json"
-  mv "$prd_file" "$running_file"
+  mv "$prd_file" "$running_file" || { echo "$prd_file"; return 1; }
   echo "$running_file"
 }
 
 # Transition a PRD file from ~running to ~done state.
-# Input:  prd-2026-02-17-143000-improve-sdk~running.json
-# Output: prd-2026-02-17-143000-improve-sdk~done.json
+# Returns the new path on stdout. Returns 1 if the source file is missing.
 mark_done() {
   local prd_file="$1"
   local done_file="${prd_file/~running/~done}"
-  mv "$prd_file" "$done_file"
+  if [ ! -f "$prd_file" ]; then
+    echo "$done_file"
+    return 1
+  fi
+  mv "$prd_file" "$done_file" || { echo "$done_file"; return 1; }
   echo "$done_file"
 }
 
@@ -173,40 +377,39 @@ clean_name() {
 }
 
 # Derive the progress.txt path from a PRD file (works with any state suffix).
-# prd-2026-02-17-143000-improve-sdk~running.json -> progress-2026-02-17-143000-improve-sdk.txt
 progress_file_for() {
   local prd_file="$1"
   local base
   base=$(basename "$prd_file" .json)
   local cleaned
   cleaned=$(clean_name "$base")
-  # Replace "prd-" prefix with "progress-"
   local progress_name="progress-${cleaned#prd-}"
   echo "$SCRIPT_DIR/${progress_name}.txt"
 }
 
 # Archive a ~done PRD and its progress file.
-# The ~done suffix is preserved in both the folder name and the PRD file
-# so the completed state is visible in the archive history.
+# Tolerates missing files — does not fail if PRD or progress file is gone.
 archive_run() {
   local prd_file="$1"
   local progress_file="$2"
+  local tag="$3"
   local base
   base=$(basename "$prd_file" .json)
   local archive_folder="$ARCHIVE_DIR/$base"
 
-  mkdir -p "$archive_folder"
+  mkdir -p "$archive_folder" || return 1
 
-  [ -f "$prd_file" ] && mv "$prd_file" "$archive_folder/${base}.json"
+  [ -f "$prd_file" ] && mv "$prd_file" "$archive_folder/${base}.json" 2>/dev/null || true
 
   if [ -f "$progress_file" ]; then
-    mv "$progress_file" "$archive_folder/progress.txt"
+    mv "$progress_file" "$archive_folder/progress.txt" 2>/dev/null || true
   fi
 
-  echo -e "${GREEN}  Archived to: $archive_folder${RESET}"
+  echo -e "$(ts) ${CYAN}[${tag}]${RESET} ${GREEN}Archived to: $archive_folder${RESET}"
 }
 
 # Stream filter: extracts concise progress lines from claude's stream-json output.
+# Outputs plain text lines (no timestamp/tag) — the caller pipes through ts_prefix.
 stream_filter() {
   local result_file="$1"
 
@@ -239,7 +442,7 @@ stream_filter() {
         if [ -n "$tool_uses" ]; then
           while IFS=$'\t' read -r tool_name tool_detail; do
             [ -z "$tool_name" ] && continue
-            printf "${CYAN}    ▸ %-8s${RESET} ${DIM}%s${RESET}\n" "$tool_name" "$tool_detail"
+            printf "▸ %-8s %s\n" "$tool_name" "$tool_detail"
           done <<< "$tool_uses"
         fi
 
@@ -249,7 +452,7 @@ stream_filter() {
         ' 2>/dev/null)
 
         if [ -n "$text_content" ] && [ "$text_content" != "null" ]; then
-          printf "${GREEN}    ✦ %.120s${RESET}\n" "$text_content"
+          printf "✦ %.120s\n" "$text_content"
           if echo "$text_content" | grep -q "<promise>COMPLETE</promise>" 2>/dev/null; then
             echo "$text_content" >> "$result_file"
           fi
@@ -265,25 +468,56 @@ stream_filter() {
 
         echo "$result_text" >> "$result_file"
 
-        printf "\n${YELLOW}    ⏱  %ss  │  %s turns  │  \$%s${RESET}\n" "$duration_s" "$num_turns" "$cost"
+        printf "⏱  %ss  │  %s turns  │  \$%s\n" "$duration_s" "$num_turns" "$cost"
         ;;
     esac
   done
 }
 
-# Execute all stories in a single PRD file.
-# Returns 0 if all stories pass, 1 otherwise.
-execute_prd() {
+# Execute all stories in a single PRD file inside a worktree.
+# This runs as the worker's main function (in a subshell / background).
+# All output (stdout+stderr) is piped through ts_prefix by the caller,
+# so this function just writes plain messages — no timestamps or tags.
+# Arguments: prd_file worktree_dir result_file
+execute_prd_in_worktree() {
   local prd_file="$1"
-  local progress_file="$2"
+  local worktree_dir="$2"
+  local result_file="$3"
+
+  local prd_basename
+  prd_basename=$(basename "$prd_file")
+  local wt_prd="$worktree_dir/.ralph/$prd_basename"
+
+  # Sanity check: the worktree PRD must exist (copied by dispatch_prd).
+  if [ ! -f "$wt_prd" ]; then
+    echo "ERROR: PRD file not found in worktree: $wt_prd"
+    return 1
+  fi
+
+  # The progress file lives in the main .ralph/ (canonical location).
+  # We copy it into the worktree for the agent, then copy it back when done.
+  local progress_file
+  progress_file=$(progress_file_for "$prd_file")
+  local progress_basename
+  progress_basename=$(basename "$progress_file")
+  local wt_progress="$worktree_dir/.ralph/$progress_basename"
+
+  # Helper: copy PRD and progress from worktree back to main .ralph/.
+  # Called after each iteration and on exit so the canonical state stays current.
+  # Uses cp with || true — a failed copy-back is not fatal; the worktree
+  # state is still the source of truth until it's removed.
+  _sync_back() {
+    [ -f "$wt_prd" ] && cp "$wt_prd" "$prd_file" 2>/dev/null || true
+    [ -f "$wt_progress" ] && cp "$wt_progress" "$progress_file" 2>/dev/null || true
+  }
 
   # Auto-calculate iterations from remaining stories
   local remaining total buffer max_iterations
-  remaining=$(jq '[.userStories[] | select(.passes != true)] | length' "$prd_file" 2>/dev/null || echo "0")
-  total=$(jq '.userStories | length' "$prd_file" 2>/dev/null || echo "?")
+  remaining=$(jq '[.userStories[] | select(.passes != true)] | length' "$wt_prd" 2>/dev/null || echo "0")
+  total=$(jq '.userStories | length' "$wt_prd" 2>/dev/null || echo "?")
 
   if [ "$remaining" -eq 0 ]; then
-    echo -e "${GREEN}  All stories already pass. Nothing to do.${RESET}"
+    echo "All stories already pass. Nothing to do."
     return 0
   fi
 
@@ -291,151 +525,388 @@ execute_prd() {
   [ "$buffer" -lt 1 ] && buffer=1
   max_iterations=$(( remaining + buffer ))
 
-  echo -e "  ${DIM}Stories: $remaining remaining (of $total total), $max_iterations iterations max${RESET}"
+  echo "Stories: $remaining remaining (of $total total), $max_iterations iterations max"
 
-  # Initialize progress file
-  if [ ! -f "$progress_file" ]; then
-    echo "# Ralph Progress Log" > "$progress_file"
-    echo "PRD: $(basename "$prd_file")" >> "$progress_file"
-    echo "Started: $(date)" >> "$progress_file"
-    echo "---" >> "$progress_file"
+  # Initialize progress file in worktree
+  if [ ! -f "$wt_progress" ]; then
+    echo "# Ralph Progress Log" > "$wt_progress"
+    echo "PRD: $prd_basename" >> "$wt_progress"
+    echo "Started: $(date)" >> "$wt_progress"
+    echo "---" >> "$wt_progress"
   fi
 
   for i in $(seq 1 $max_iterations); do
     # Check if all stories pass before each iteration
-    remaining=$(jq '[.userStories[] | select(.passes != true)] | length' "$prd_file" 2>/dev/null || echo "0")
+    remaining=$(jq '[.userStories[] | select(.passes != true)] | length' "$wt_prd" 2>/dev/null || echo "0")
     if [ "$remaining" -eq 0 ]; then
       echo ""
-      echo -e "  ${GREEN}All stories pass!${RESET} Completed before iteration $i."
+      echo "All stories pass! Completed before iteration $i."
+      _sync_back
       return 0
     fi
 
     echo ""
-    echo -e "  ${BOLD}── Iteration $i/$max_iterations — $remaining stories remaining ──${RESET}"
+    echo "── Iteration $i/$max_iterations — $remaining stories remaining ──"
 
-    RESULT_FILE=$(mktemp)
+    ITER_RESULT_FILE=$(mktemp)
     STDERR_FILE=$(mktemp)
 
     if [[ "$TOOL" == "amp" ]]; then
-      OUTPUT=$(cat "$SCRIPT_DIR/RALPH.md" | amp --dangerously-allow-all 2>&1 | tee /dev/stderr) || true
-      echo "$OUTPUT" > "$RESULT_FILE"
+      OUTPUT=$(cat "$worktree_dir/.ralph/RALPH.md" | (cd "$worktree_dir" && amp --dangerously-allow-all) 2>&1 | tee /dev/stderr) || true
+      echo "$OUTPUT" > "$ITER_RESULT_FILE"
     else
       CLAUDE_ARGS=(--dangerously-skip-permissions --print --output-format stream-json --verbose)
       [ -n "$MODEL" ] && CLAUDE_ARGS+=(--model "$MODEL")
-      claude "${CLAUDE_ARGS[@]}" \
-        < "$SCRIPT_DIR/RALPH.md" 2>"$STDERR_FILE" \
-        | stream_filter "$RESULT_FILE" || true
+      (cd "$worktree_dir" && claude "${CLAUDE_ARGS[@]}") \
+        < "$worktree_dir/.ralph/RALPH.md" 2>"$STDERR_FILE" \
+        | stream_filter "$ITER_RESULT_FILE" || true
     fi
 
-    # Detect empty iterations: if claude produced no output at all, it likely
-    # crashed or errored. Log stderr and abort the PRD to avoid burning
-    # through all iterations with no work done.
-    RESULT_SIZE=$(wc -c < "$RESULT_FILE" 2>/dev/null | tr -d ' ')
-    if [ "${RESULT_SIZE:-0}" -eq 0 ]; then
+    # Detect empty iterations
+    ITER_RESULT_SIZE=$(wc -c < "$ITER_RESULT_FILE" 2>/dev/null | tr -d ' ')
+    if [ "${ITER_RESULT_SIZE:-0}" -eq 0 ]; then
       echo ""
-      echo -e "  ${RED}Empty iteration — claude produced no output.${RESET}"
+      echo "ERROR: Empty iteration — claude produced no output."
       if [ -s "$STDERR_FILE" ]; then
-        echo -e "  ${RED}stderr:${RESET}"
-        head -20 "$STDERR_FILE" | while IFS= read -r errline; do
-          echo -e "    ${DIM}$errline${RESET}"
-        done
+        echo "stderr:"
+        head -20 "$STDERR_FILE"
       fi
-      rm -f "$RESULT_FILE" "$STDERR_FILE"
-      echo -e "  ${YELLOW}Aborting PRD to avoid burning iterations.${RESET}"
+      rm -f "$ITER_RESULT_FILE" "$STDERR_FILE"
+      echo "Aborting PRD to avoid burning iterations."
+      _sync_back
       return 1
     fi
 
     rm -f "$STDERR_FILE"
 
-    if [ -f "$RESULT_FILE" ] && grep -q "<promise>COMPLETE</promise>" "$RESULT_FILE" 2>/dev/null; then
+    if [ -f "$ITER_RESULT_FILE" ] && grep -q "<promise>COMPLETE</promise>" "$ITER_RESULT_FILE" 2>/dev/null; then
       echo ""
-      echo -e "  ${GREEN}All tasks complete!${RESET}"
-      rm -f "$RESULT_FILE"
+      echo "All tasks complete!"
+      rm -f "$ITER_RESULT_FILE"
+      _sync_back
       return 0
     fi
 
-    rm -f "$RESULT_FILE"
+    rm -f "$ITER_RESULT_FILE"
+
+    # Sync progress back after each iteration so the main .ralph/ stays current
+    _sync_back
+
     sleep 2
   done
 
   echo ""
-  echo -e "  ${YELLOW}Reached max iterations ($max_iterations) without completing all stories.${RESET}"
+  echo "Reached max iterations ($max_iterations) without completing all stories."
+  _sync_back
   return 1
+}
+
+# Dispatch a PRD to a free worker slot.
+# Creates a worktree, copies PRD files, installs deps, launches agent.
+dispatch_prd() {
+  local prd_file="$1"
+  local slot="$2"
+
+  local slug
+  slug=$(prd_slug "$prd_file")
+  local branch_name="ralph-$slug"
+  local worktree_dir="$WORKTREE_BASE/$slug"
+  local tag
+  tag=$(make_worker_tag "$slot" "$prd_file")
+
+  echo ""
+  echo -e "$(ts) ${BOLD}┌───────────────────────────────────────────────────────────┐${RESET}"
+  echo -e "$(ts) ${BOLD}│  [${tag}] Dispatching: $(basename "$prd_file")${RESET}"
+  echo -e "$(ts) ${BOLD}└───────────────────────────────────────────────────────────┘${RESET}"
+
+  # Mark PRD as running
+  if ! prd_file=$(mark_running "$prd_file"); then
+    echo -e "$(ts) ${CYAN}[${tag}]${RESET} ${RED}Failed to mark PRD as running. File may have been moved.${RESET}"
+    return 1
+  fi
+
+  local prd_project prd_desc
+  prd_project=$(jq -r '.project // "unknown"' "$prd_file" 2>/dev/null)
+  prd_desc=$(jq -r '.description // ""' "$prd_file" 2>/dev/null)
+  echo -e "$(ts) ${CYAN}[${tag}]${RESET} Project: $prd_project"
+  [ -n "$prd_desc" ] && echo -e "$(ts) ${CYAN}[${tag}]${RESET} ${DIM}$prd_desc${RESET}"
+
+  # Clean up any leftover worktree/branch from a previous crashed run
+  if [ -d "$worktree_dir" ]; then
+    echo -e "$(ts) ${CYAN}[${tag}]${RESET} ${DIM}Cleaning up stale worktree...${RESET}"
+    remove_worktree "$worktree_dir"
+  fi
+  git branch -D "$branch_name" 2>/dev/null || true
+
+  # Create worktree branching from current HEAD
+  echo -e "$(ts) ${CYAN}[${tag}]${RESET} ${DIM}Creating worktree...${RESET}"
+  if ! git worktree add "$worktree_dir" -b "$branch_name" HEAD >/dev/null 2>&1; then
+    echo -e "$(ts) ${CYAN}[${tag}]${RESET} ${RED}Failed to create worktree. Skipping PRD.${RESET}"
+    # Revert PRD from ~running back to ready so it can be retried
+    mv "$prd_file" "${prd_file/\~running.json/.json}" 2>/dev/null || true
+    return 1
+  fi
+
+  # Copy PRD and progress files into the worktree's .ralph/ directory.
+  # The worktree has .ralph/RALPH.md (tracked) but not the PRD/progress (gitignored).
+  mkdir -p "$worktree_dir/.ralph"
+  cp "$prd_file" "$worktree_dir/.ralph/"
+
+  local progress_file
+  progress_file=$(progress_file_for "$prd_file")
+  if [ -f "$progress_file" ]; then
+    cp "$progress_file" "$worktree_dir/.ralph/"
+  fi
+
+  # Install dependencies in the worktree.
+  # bun's global cache makes this fast (seconds, not minutes).
+  echo -e "$(ts) ${CYAN}[${tag}]${RESET} ${DIM}Installing dependencies...${RESET}"
+  if ! (cd "$worktree_dir" && bun install --frozen-lockfile 2>&1 | tail -1); then
+    echo -e "$(ts) ${CYAN}[${tag}]${RESET} ${RED}bun install failed. Aborting worker.${RESET}"
+    remove_worktree "$worktree_dir"
+    git branch -D "$branch_name" 2>/dev/null || true
+    # Revert PRD from ~running back to ready so it can be retried
+    mv "$prd_file" "${prd_file/\~running.json/.json}" 2>/dev/null || true
+    return 1
+  fi
+
+  # Launch the worker in the background.
+  # All worker output (stdout+stderr) is piped through ts_prefix so every
+  # line in ralph.log gets "HH:MM:SS [W<n>:<objective>] <message>".
+  local result_file
+  result_file=$(mktemp)
+
+  (
+    # Run the worker function and pipe through the timestamp prefixer.
+    # PIPESTATUS[0] captures execute_prd_in_worktree's exit code (ts_prefix
+    # always exits 0 when its stdin closes, so $? from the pipeline is 0
+    # regardless of the worker's exit code — PIPESTATUS is the only way
+    # to get the real exit code).
+    execute_prd_in_worktree "$prd_file" "$worktree_dir" "$result_file" 2>&1 \
+      | ts_prefix "$tag"
+    # Capture the worker's exit code. If the subshell is killed before this
+    # line runs (e.g., SIGTERM), the .exit file won't exist and reap_workers
+    # defaults to exit_code=1 — which is the correct safe fallback.
+    echo "${PIPESTATUS[0]}" > "${result_file}.exit"
+  ) &
+
+  local pid=$!
+
+  WORKER_PIDS[$slot]="$pid"
+  WORKER_PRDS[$slot]="$prd_file"
+  WORKER_WORKTREES[$slot]="$worktree_dir"
+  WORKER_BRANCHES[$slot]="$branch_name"
+  WORKER_RESULT_FILES[$slot]="$result_file"
+  WORKER_TAGS[$slot]="$tag"
+
+  echo -e "$(ts) ${CYAN}[${tag}]${RESET} ${GREEN}Launched (PID $pid)${RESET}"
+  return 0
+}
+
+# Merge a worktree branch into the current branch.
+# Returns 0 on success, 1 on conflict.
+merge_worktree_branch() {
+  local branch="$1"
+  local tag="$2"
+
+  # Check if the branch has any commits beyond the fork point
+  local commit_count
+  commit_count=$(git rev-list --count "HEAD..$branch" 2>/dev/null || echo "0")
+
+  if [ "$commit_count" -eq 0 ]; then
+    echo -e "$(ts) ${CYAN}[${tag}]${RESET} ${DIM}No commits to merge.${RESET}"
+    return 0
+  fi
+
+  echo -e "$(ts) ${CYAN}[${tag}]${RESET} ${DIM}Merging $commit_count commit(s) from $branch...${RESET}"
+
+  if git merge --no-edit "$branch" 2>/dev/null; then
+    echo -e "$(ts) ${CYAN}[${tag}]${RESET} ${GREEN}Merge successful.${RESET}"
+    return 0
+  else
+    echo -e "$(ts) ${CYAN}[${tag}]${RESET} ${RED}Merge conflict! Aborting merge.${RESET}"
+    git merge --abort 2>/dev/null || true
+    return 1
+  fi
+}
+
+# Check for completed workers, merge results, clean up.
+reap_workers() {
+  for (( s=0; s<MAX_WORKERS; s++ )); do
+    local pid="${WORKER_PIDS[$s]}"
+    [ -z "$pid" ] && continue
+
+    # Check if still running
+    if kill -0 "$pid" 2>/dev/null; then
+      continue
+    fi
+
+    # Worker finished — collect results
+    wait "$pid" 2>/dev/null || true
+
+    # Kill any orphaned child processes (Chromium browsers, MCP servers, test
+    # servers) that the worker's e2e tests may have spawned. With set -m, each
+    # worker subshell gets its own process group (PGID == PID). Killing the
+    # negative PID targets the entire group — only THIS worker's descendants,
+    # not other workers' processes.
+    kill -- -"$pid" 2>/dev/null || true
+    sleep 1  # Let orphaned processes (Chromium, test servers) exit before worktree removal
+
+    local prd_file="${WORKER_PRDS[$s]}"
+    local worktree_dir="${WORKER_WORKTREES[$s]}"
+    local branch_name="${WORKER_BRANCHES[$s]}"
+    local result_file="${WORKER_RESULT_FILES[$s]}"
+    local tag="${WORKER_TAGS[$s]}"
+
+    # Read exit code (default 1 = failure if file missing or corrupt)
+    local exit_code=1
+    if [ -f "${result_file}.exit" ]; then
+      local raw_exit
+      raw_exit=$(cat "${result_file}.exit" 2>/dev/null)
+      rm -f "${result_file}.exit"
+      # Validate it's a number; fall back to 1 if corrupt
+      if [[ "$raw_exit" =~ ^[0-9]+$ ]]; then
+        exit_code="$raw_exit"
+      fi
+    fi
+
+    echo ""
+    if [ "$exit_code" -eq 0 ]; then
+      echo -e "$(ts) ${CYAN}[${tag}]${RESET} ${GREEN}Worker completed successfully.${RESET}"
+    else
+      echo -e "$(ts) ${CYAN}[${tag}]${RESET} ${YELLOW}Worker finished with errors (exit $exit_code).${RESET}"
+    fi
+
+    # Merge worktree branch into current branch.
+    # merge_worktree_branch runs git merge which can fail in two ways:
+    # 1. Conflict → abort merge, keep branch for manual resolution
+    # 2. No commits → skip (fast path)
+    local merge_failed=false
+    if ! merge_worktree_branch "$branch_name" "$tag"; then
+      merge_failed=true
+      echo -e "$(ts) ${CYAN}[${tag}]${RESET} ${RED}Could not merge. Commits remain on branch $branch_name.${RESET}"
+      echo -e "$(ts) ${CYAN}[${tag}]${RESET} ${YELLOW}Manual resolution needed: git merge $branch_name${RESET}"
+    fi
+
+    # Remove the worktree (always — it's just a checkout, commits live on the branch).
+    remove_worktree "$worktree_dir"
+
+    # Delete the branch only if merge succeeded (or had no commits).
+    # On merge failure, preserve the branch so the user can resolve manually.
+    if [ "$merge_failed" = false ]; then
+      git branch -D "$branch_name" 2>/dev/null || true
+    fi
+
+    # Transition PRD: ~running -> ~done -> archive
+    local progress_file
+    progress_file=$(progress_file_for "$prd_file")
+
+    if [ "$exit_code" -eq 0 ]; then
+      local done_prd
+      done_prd=$(mark_done "$prd_file") || true
+      echo -e "$(ts) ${CYAN}[${tag}]${RESET} ${GREEN}Marked done: $(basename "$done_prd")${RESET}"
+      archive_run "$done_prd" "$progress_file" "$tag"
+    else
+      echo -e "$(ts) ${CYAN}[${tag}]${RESET} ${YELLOW}Incomplete — marking done and archiving.${RESET}"
+      local done_prd
+      done_prd=$(mark_done "$prd_file") || true
+      archive_run "$done_prd" "$progress_file" "$tag"
+    fi
+
+    # Clean up temp files
+    rm -f "$result_file"
+
+    # Free the slot
+    WORKER_PIDS[$s]=""
+    WORKER_PRDS[$s]=""
+    WORKER_WORKTREES[$s]=""
+    WORKER_BRANCHES[$s]=""
+    WORKER_RESULT_FILES[$s]=""
+    WORKER_TAGS[$s]=""
+  done
 }
 
 # --- Main ---
 
 echo ""
-echo -e "${BOLD}╔═══════════════════════════════════════════════════════════╗${RESET}"
-echo -e "${BOLD}║  Ralph — Continuous PRD Consumer                         ║${RESET}"
-echo -e "${BOLD}╚═══════════════════════════════════════════════════════════╝${RESET}"
+echo -e "$(ts) ${BOLD}╔═══════════════════════════════════════════════════════════╗${RESET}"
+echo -e "$(ts) ${BOLD}║  Ralph — Parallel PRD Consumer (worktree isolation)      ║${RESET}"
+echo -e "$(ts) ${BOLD}╚═══════════════════════════════════════════════════════════╝${RESET}"
 echo ""
-echo -e "  Tool:     ${CYAN}${TOOL}${RESET}"
-[ -n "$MODEL" ] && echo -e "  Model:    ${CYAN}${MODEL}${RESET}"
-echo -e "  Mode:     ${CYAN}$([ "$ONCE" = true ] && echo "single PRD" || echo "daemon (poll every ${POLL_INTERVAL}s)")${RESET}"
-echo -e "  Watching: ${CYAN}${SCRIPT_DIR}${RESET}"
+echo -e "$(ts)   Tool:     ${CYAN}${TOOL}${RESET}"
+[ -n "$MODEL" ] && echo -e "$(ts)   Model:    ${CYAN}${MODEL}${RESET}"
+echo -e "$(ts)   Workers:  ${CYAN}${MAX_WORKERS}${RESET}"
+echo -e "$(ts)   Mode:     ${CYAN}$([ "$ONCE" = true ] && echo "single batch" || echo "daemon (poll every ${POLL_INTERVAL}s)")${RESET}"
+echo -e "$(ts)   Watching: ${CYAN}${SCRIPT_DIR}${RESET}"
 echo ""
 
-# Recovery: if there is already a ~running PRD from a previous crash, resume it.
-RUNNING_PRD=$(find_running_prd)
-if [ -n "$RUNNING_PRD" ]; then
-  echo -e "${YELLOW}  Resuming interrupted PRD: $(basename "$RUNNING_PRD")${RESET}"
+# Recovery: resume any ~running PRDs from a previous crash.
+RUNNING_PRDS=$(find_running_prds)
+if [ -n "$RUNNING_PRDS" ]; then
+  echo -e "$(ts) ${YELLOW}Recovering interrupted PRDs:${RESET}"
+  while IFS= read -r rprd; do
+    [ -z "$rprd" ] && continue
+    echo -e "$(ts) ${YELLOW}  - $(basename "$rprd")${RESET}"
+    SLOT=$(find_free_slot)
+    if [ -n "$SLOT" ]; then
+      # The PRD is already ~running, dispatch it directly.
+      # dispatch_prd expects a non-running file and calls mark_running itself,
+      # so we temporarily rename it back to ready for dispatch.
+      local_ready="${rprd/\~running.json/.json}"
+      mv "$rprd" "$local_ready"
+      dispatch_prd "$local_ready" "$SLOT" || true
+    else
+      echo -e "$(ts) ${YELLOW}  (no free slots, will retry later)${RESET}"
+    fi
+  done <<< "$RUNNING_PRDS"
 fi
 
-while true; do
-  # Pick up a running PRD (from recovery) or find the next ready one
-  if [ -z "$RUNNING_PRD" ]; then
-    RUNNING_PRD=$(find_next_prd)
-  fi
+DISPATCHED_ANY=false
 
-  if [ -z "$RUNNING_PRD" ]; then
-    if [ "$ONCE" = true ]; then
-      echo -e "${DIM}  No PRD files found. Exiting (--once mode).${RESET}"
+while true; do
+  # Reap completed workers first
+  reap_workers
+
+  # Count active workers
+  ACTIVE=$(count_active_workers)
+
+  # In --once mode, exit only when all workers are done AND no more ready PRDs
+  # remain. Without the has_ready_prds check, ralph exits prematurely if all
+  # current workers complete in one reap cycle but more PRDs are still queued
+  # (e.g., 5 PRDs with 3 workers — when the first 3 finish simultaneously,
+  # the exit check would fire before the remaining 2 get dispatched).
+  if [ "$ONCE" = true ] && [ "$DISPATCHED_ANY" = true ] && [ "$ACTIVE" -eq 0 ]; then
+    if ! has_ready_prds; then
+      echo ""
+      echo -e "$(ts) ${DIM}--once mode: all PRDs complete. Exiting.${RESET}"
       exit 0
     fi
-    sleep "$POLL_INTERVAL"
-    continue
   fi
 
-  # Transition to ~running state if not already
-  if [[ "$RUNNING_PRD" != *"~running"* ]]; then
-    echo ""
-    echo -e "${BOLD}┌───────────────────────────────────────────────────────────┐${RESET}"
-    echo -e "${BOLD}│  Picked up: $(basename "$RUNNING_PRD")${RESET}"
-    echo -e "${BOLD}└───────────────────────────────────────────────────────────┘${RESET}"
-    RUNNING_PRD=$(mark_running "$RUNNING_PRD")
+  # Dispatch new PRDs to free slots
+  if [ "$ACTIVE" -lt "$MAX_WORKERS" ]; then
+    READY_PRDS=$(find_ready_prds)
+
+    if [ -n "$READY_PRDS" ]; then
+      while IFS= read -r prd; do
+        [ -z "$prd" ] && continue
+
+        SLOT=$(find_free_slot)
+        [ -z "$SLOT" ] && break  # All slots full
+
+        dispatch_prd "$prd" "$SLOT" && DISPATCHED_ANY=true || true
+      done <<< "$READY_PRDS"
+    fi
   fi
 
-  PROGRESS_FILE=$(progress_file_for "$RUNNING_PRD")
-
-  # Print project info
-  local_project=$(jq -r '.project // "unknown"' "$RUNNING_PRD" 2>/dev/null)
-  local_desc=$(jq -r '.description // ""' "$RUNNING_PRD" 2>/dev/null)
-  echo -e "  ${CYAN}Project:${RESET} $local_project"
-  [ -n "$local_desc" ] && echo -e "  ${DIM}$local_desc${RESET}"
-
-  # Execute
-  if execute_prd "$RUNNING_PRD" "$PROGRESS_FILE"; then
-    # Transition: ~running -> ~done -> archive
-    DONE_PRD=$(mark_done "$RUNNING_PRD")
-    echo -e "${GREEN}  Marked done: $(basename "$DONE_PRD")${RESET}"
-    archive_run "$DONE_PRD" "$PROGRESS_FILE"
-  else
-    # Even on failure, mark done and archive so we do not re-run forever
-    echo -e "${YELLOW}  Incomplete — marking done and archiving.${RESET}"
-    DONE_PRD=$(mark_done "$RUNNING_PRD")
-    archive_run "$DONE_PRD" "$PROGRESS_FILE"
+  # In --once mode with nothing dispatched and no active workers, exit
+  if [ "$ONCE" = true ] && [ "$DISPATCHED_ANY" = false ]; then
+    ACTIVE=$(count_active_workers)
+    if [ "$ACTIVE" -eq 0 ]; then
+      echo -e "$(ts) ${DIM}No PRD files found. Exiting (--once mode).${RESET}"
+      exit 0
+    fi
   fi
 
-  # Clear running reference — loop will pick up the next ready PRD
-  RUNNING_PRD=""
-
-  if [ "$ONCE" = true ]; then
-    echo ""
-    echo -e "${DIM}  --once mode: exiting after single PRD.${RESET}"
-    exit 0
-  fi
-
-  # Brief pause before checking for next PRD
-  sleep 2
+  sleep "$POLL_INTERVAL"
 done
