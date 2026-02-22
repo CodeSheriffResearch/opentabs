@@ -9,7 +9,9 @@
     "build": "tsc --build",
     "build:bundle": "bun run build-extension.ts",
     "build:side-panel": "bun run build-side-panel.ts && bun run build:tailwind",
-    "build:tailwind": "bunx @tailwindcss/cli -i src/side-panel/styles.css -o dist/side-panel/styles.css --minify"
+    "build:tailwind": "bunx @tailwindcss/cli -i src/side-panel/styles.css -o dist/side-panel/styles.css --minify",
+    "storybook": "storybook dev -p 6006",
+    "storybook:build": "storybook build -o storybook-static"
   },
   "dependencies": {
     "@opentabs-dev/shared": "workspace:*",
@@ -23,9 +25,15 @@
     "tw-animate-css": "^1.3.7"
   },
   "devDependencies": {
+    "@storybook/react": "^10.2.10",
+    "@storybook/react-vite": "^10.2.10",
+    "@tailwindcss/vite": "^4.2.0",
     "@types/chrome": "^0.1.36",
+    "@vitejs/plugin-react": "^5.1.4",
     "lucide-react": "^0.574.0",
     "react": "^19.2.4",
-    "react-dom": "^19.2.4"
+    "react-dom": "^19.2.4",
+    "storybook": "^10.2.10",
+    "vite": "^7.3.1"
   }
 }

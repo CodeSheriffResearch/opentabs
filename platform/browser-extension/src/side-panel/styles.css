@@ -59,6 +59,18 @@
   --success: #16a34a;
   --success-foreground: #fff;
   --border: #000;
+
+  /* Plugin avatar palette — deterministic per-plugin colors for letter avatars */
+  --avatar-0: #c62828;
+  --avatar-1: #d17000;
+  --avatar-2: #a67a00;
+  --avatar-3: #117a34;
+  --avatar-4: #0a7070;
+  --avatar-5: #1a5bb5;
+  --avatar-6: #3d3daa;
+  --avatar-7: #6430b0;
+  --avatar-8: #b31d6a;
+  --avatar-9: #3d5060;
 }
 
 .dark {
@@ -81,6 +93,18 @@
   --success: #22c55e;
   --success-foreground: #000;
   --border: #5c5c5c;
+
+  /* Lighter/brighter avatar palette for dark backgrounds */
+  --avatar-0: #ef5350;
+  --avatar-1: #ff9800;
+  --avatar-2: #c8a415;
+  --avatar-3: #2ecc71;
+  --avatar-4: #26a69a;
+  --avatar-5: #42a5f5;
+  --avatar-6: #7c6de5;
+  --avatar-7: #9c5cf0;
+  --avatar-8: #e84d8a;
+  --avatar-9: #78909c;
 }
 
 body {

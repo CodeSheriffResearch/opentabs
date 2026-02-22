@@ -1,26 +1,43 @@
+const AVATAR_PALETTE_SIZE = 10;
+
+/** djb2 string hash to unsigned 32-bit integer. */
+const hashString = (str: string): number => {
+  let hash = 5381;
+  for (let i = 0; i < str.length; i++) {
+    hash = (hash * 33) ^ str.charCodeAt(i);
+  }
+  return hash >>> 0;
+};
+
+/** Returns a CSS variable reference for the deterministic avatar color. */
+const getAvatarVar = (pluginName: string): string =>
+  `var(--avatar-${String(hashString(pluginName) % AVATAR_PALETTE_SIZE)})`;
+
+/** Extracts the display letter from the plugin's displayName, falling back to name. */
+const getAvatarLetter = (displayName: string, pluginName: string): string =>
+  (displayName[0] ?? pluginName[0] ?? '?').toUpperCase();
+
 interface PluginIconProps {
   pluginName: string;
+  displayName: string;
   ready: boolean;
   size?: number;
   className?: string;
 }
 
-const PluginIcon = ({ ready, size = 32, className = '' }: PluginIconProps) => (
-  <div
-    className={`border-border bg-muted flex shrink-0 items-center justify-center rounded border-2 ${ready ? 'text-foreground' : 'text-muted-foreground'} ${className}`}
-    style={{ width: size, height: size }}>
-    <svg
-      width={size * 0.5}
-      height={size * 0.5}
-      viewBox="0 0 24 24"
-      fill={ready ? 'currentColor' : 'none'}
-      stroke="currentColor"
-      strokeWidth={2}
-      strokeLinecap="round"
-      strokeLinejoin="round">
-      <path d="M20 12h-2a2 2 0 0 1 0-4h2V4h-4a2 2 0 0 1-4 0H4v4h2a2 2 0 0 1 0 4H4v8h8v-2a2 2 0 0 1 4 0v2h4z" />
-    </svg>
-  </div>
-);
+const PluginIcon = ({ pluginName, displayName, ready, size = 32, className = '' }: PluginIconProps) => {
+  const letter = getAvatarLetter(displayName, pluginName);
+  const fontSize = Math.round(size * 0.55);
 
-export { PluginIcon };
+  return (
+    <div
+      className={`border-border flex shrink-0 items-center justify-center rounded border-2 ${ready ? '' : 'opacity-50'} ${className}`}
+      style={{ width: size, height: size, backgroundColor: getAvatarVar(pluginName) }}>
+      <span className="font-head leading-none text-white select-none" style={{ fontSize, letterSpacing: '-0.02em' }}>
+        {letter}
+      </span>
+    </div>
+  );
+};
+
+export { AVATAR_PALETTE_SIZE, getAvatarLetter, getAvatarVar, hashString, PluginIcon };

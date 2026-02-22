@@ -111,7 +111,12 @@ const PluginCard = ({
             <Tooltip>
               <Tooltip.Trigger asChild>
                 <div>
-                  <PluginIcon pluginName={plugin.name} ready={plugin.tabState === 'ready'} size={32} />
+                  <PluginIcon
+                    pluginName={plugin.name}
+                    displayName={plugin.displayName}
+                    ready={plugin.tabState === 'ready'}
+                    size={32}
+                  />
                 </div>
               </Tooltip.Trigger>
               <Tooltip.Content>
