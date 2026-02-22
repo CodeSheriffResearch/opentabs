@@ -84,6 +84,32 @@ const formatDuration = (ms: number): string => {
   return `${(ms / 1000).toFixed(1)}s`;
 };
 
+const COL_TIME = 15;
+const COL_TOOL = 30;
+const COL_STATUS = 4;
+const COL_DURATION = 10;
+
+const printAuditTable = (entries: AuditEntry[]): void => {
+  console.log(
+    pc.bold(
+      `${'Time'.padEnd(COL_TIME)}${'Tool'.padEnd(COL_TOOL)}${'OK'.padEnd(COL_STATUS)}${'Duration'.padEnd(COL_DURATION)}`,
+    ),
+  );
+  console.log(pc.dim('─'.repeat(COL_TIME + COL_TOOL + COL_STATUS + COL_DURATION)));
+
+  for (const entry of entries) {
+    const time = formatTimestamp(entry.timestamp).padEnd(COL_TIME);
+    const tool = entry.tool.padEnd(COL_TOOL);
+    // Pad the plain-text icon to the column width, then colorize.
+    // Colorizing after padding ensures ANSI escape codes don't affect alignment.
+    const icon = entry.success ? '✓' : '✗';
+    const paddedStatus = icon.padEnd(COL_STATUS);
+    const status = entry.success ? pc.green(paddedStatus) : pc.red(paddedStatus);
+    const duration = formatDuration(entry.durationMs).padEnd(COL_DURATION);
+    console.log(`${time}${tool}${status}${duration}`);
+  }
+};
+
 /**
  * Read audit entries from the persistent disk log (~/.opentabs/audit.log).
  * Parses NDJSON (one JSON object per line), applies the same filters as the server mode.
@@ -138,27 +164,7 @@ const handleAuditFromFile = async (options: AuditOptions): Promise<void> => {
     return;
   }
 
-  // Table output (same format as server mode)
-  const timeCol = 15;
-  const toolCol = 30;
-  const statusCol = 4;
-  const durationCol = 10;
-
-  console.log(
-    pc.bold(
-      `${'Time'.padEnd(timeCol)}${'Tool'.padEnd(toolCol)}${'OK'.padEnd(statusCol)}${'Duration'.padEnd(durationCol)}`,
-    ),
-  );
-  console.log(pc.dim('─'.repeat(timeCol + toolCol + statusCol + durationCol)));
-
-  for (const entry of entries) {
-    const time = formatTimestamp(entry.timestamp).padEnd(timeCol);
-    const tool = entry.tool.padEnd(toolCol);
-    const statusIcon = entry.success ? pc.green('✓') : pc.red('✗');
-    const status = statusIcon + ' '.repeat(Math.max(0, statusCol - 1));
-    const duration = formatDuration(entry.durationMs).padEnd(durationCol);
-    console.log(`${time}${tool}${status}${duration}`);
-  }
+  printAuditTable(entries);
 };
 
 const handleAudit = async (options: AuditOptions): Promise<void> => {
@@ -226,27 +232,7 @@ const handleAudit = async (options: AuditOptions): Promise<void> => {
       return;
     }
 
-    // Table output
-    const timeCol = 15;
-    const toolCol = 30;
-    const statusCol = 4;
-    const durationCol = 10;
-
-    console.log(
-      pc.bold(
-        `${'Time'.padEnd(timeCol)}${'Tool'.padEnd(toolCol)}${'OK'.padEnd(statusCol)}${'Duration'.padEnd(durationCol)}`,
-      ),
-    );
-    console.log(pc.dim('─'.repeat(timeCol + toolCol + statusCol + durationCol)));
-
-    for (const entry of entries) {
-      const time = formatTimestamp(entry.timestamp).padEnd(timeCol);
-      const tool = entry.tool.padEnd(toolCol);
-      const statusIcon = entry.success ? pc.green('✓') : pc.red('✗');
-      const status = statusIcon + ' '.repeat(Math.max(0, statusCol - 1));
-      const duration = formatDuration(entry.durationMs).padEnd(durationCol);
-      console.log(`${time}${tool}${status}${duration}`);
-    }
+    printAuditTable(entries);
   } catch (err: unknown) {
     const startHint = `Start it with: opentabs start${port !== 9515 ? ` --port ${port}` : ''}`;
 
