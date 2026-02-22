@@ -23,6 +23,7 @@ import { indeterminateProgress } from './tools/indeterminate-progress.js';
 import { noDisplayName } from './tools/no-display-name.js';
 import { OpenTabsPlugin, defineResource, definePrompt } from '@opentabs-dev/plugin-sdk';
 import type { ToolDefinition, ResourceDefinition, PromptDefinition } from '@opentabs-dev/plugin-sdk';
+import { z } from 'zod';
 
 const testResource = defineResource({
   uri: 'test://items',
@@ -42,16 +43,33 @@ const testResource = defineResource({
 const testPrompt = definePrompt({
   name: 'greet',
   description: 'Generates a greeting message',
-  arguments: [
-    { name: 'name', description: 'The name to greet', required: true },
-  ],
+  arguments: [{ name: 'name', description: 'The name to greet', required: true }],
   async render(args) {
     const name = args['name'] ?? 'World';
-    return [
-      { role: 'user', content: { type: 'text', text: `Hello, ${name}!` } },
-    ];
+    return [{ role: 'user', content: { type: 'text', text: `Hello, ${name}!` } }];
   },
 });
+
+/**
+ * Typed prompt that uses a Zod `args` schema for auto-generated argument metadata.
+ *
+ * The published SDK (v0.0.16) does not have the `args` field on `PromptDefinition`.
+ * The local source has added it (PRD 4 US-001). A type assertion bypasses the
+ * published type constraint so the runtime `args` schema is present — the local
+ * build tool reads it to auto-generate the `arguments` array in dist/tools.json.
+ */
+const typedGreetPrompt = definePrompt({
+  name: 'typed_greet',
+  description: 'A typed greeting prompt with Zod args schema',
+  args: z.object({
+    name: z.string().describe('Name to greet'),
+    formal: z.string().optional().describe('Whether to use formal greeting'),
+  }),
+  async render(args: Record<string, string>) {
+    const greeting = args.formal === 'true' ? `Dear ${args.name}` : `Hey ${args.name}`;
+    return [{ role: 'user', content: { type: 'text', text: `${greeting}!` } }];
+  },
+} as unknown as PromptDefinition);
 
 class E2eTestPlugin extends OpenTabsPlugin {
   readonly name = 'e2e-test';
@@ -84,7 +102,7 @@ class E2eTestPlugin extends OpenTabsPlugin {
     noDisplayName,
   ];
   override readonly resources: ResourceDefinition[] = [testResource];
-  override readonly prompts: PromptDefinition[] = [testPrompt];
+  override readonly prompts: PromptDefinition[] = [testPrompt, typedGreetPrompt];
 
   constructor() {
     super();

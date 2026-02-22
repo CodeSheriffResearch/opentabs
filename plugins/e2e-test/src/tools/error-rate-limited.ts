@@ -4,7 +4,8 @@ import { z } from 'zod';
 export const errorRateLimited = defineTool({
   name: 'error_rate_limited',
   displayName: 'Error: Rate Limited',
-  description: 'Always throws ToolError.rateLimited() with retryAfterMs — tests structured rate limit error propagation',
+  description:
+    'Always throws ToolError.rateLimited() with retryAfterMs — tests structured rate limit error propagation',
   icon: 'wrench',
   input: z.object({}),
   output: z.object({}),

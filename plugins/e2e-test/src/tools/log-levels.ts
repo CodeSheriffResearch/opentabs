@@ -23,7 +23,8 @@ const getSdkLog = (): SdkLog | undefined => {
 export const logLevels = defineTool({
   name: 'log_levels',
   displayName: 'Log Levels',
-  description: 'Emits one log entry at each level (debug, info, warning, error) for E2E testing of the plugin logging pipeline',
+  description:
+    'Emits one log entry at each level (debug, info, warning, error) for E2E testing of the plugin logging pipeline',
   icon: 'wrench',
   input: z.object({
     prefix: z.string().describe('A unique prefix to identify log messages from this invocation'),

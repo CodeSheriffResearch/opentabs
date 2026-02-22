@@ -132,3 +132,76 @@ test.describe('Prompts — full stack', () => {
     await expect(mcpClient.getPrompt('nonexistent_prompt')).rejects.toThrow(/not found/i);
   });
 });
+
+// ---------------------------------------------------------------------------
+// Typed prompts (Zod args schema)
+// ---------------------------------------------------------------------------
+
+test.describe('Typed prompts — Zod args schema', () => {
+  test('list prompts returns argument metadata derived from Zod schema', async ({
+    mcpServer,
+    testServer,
+    extensionContext,
+    mcpClient,
+  }) => {
+    await setupToolTest(mcpServer, testServer, extensionContext, mcpClient);
+
+    const prompts = await mcpClient.listPrompts();
+    const typedPrompt = prompts.find(p => p.name === 'e2e-test_typed_greet');
+
+    expect(typedPrompt).toBeDefined();
+    if (!typedPrompt) throw new Error('Typed prompt not found');
+    expect(typedPrompt.description).toBe('A typed greeting prompt with Zod args schema');
+    expect(typedPrompt.arguments).toBeDefined();
+    expect(typedPrompt.arguments?.length).toBe(2);
+
+    const nameArg = typedPrompt.arguments?.find(a => a.name === 'name');
+    expect(nameArg).toBeDefined();
+    expect(nameArg?.description).toBe('Name to greet');
+    expect(nameArg?.required).toBe(true);
+
+    const formalArg = typedPrompt.arguments?.find(a => a.name === 'formal');
+    expect(formalArg).toBeDefined();
+    expect(formalArg?.description).toBe('Whether to use formal greeting');
+    expect(formalArg?.required).toBe(false);
+  });
+
+  test('get typed prompt returns informal greeting by default', async ({
+    mcpServer,
+    testServer,
+    extensionContext,
+    mcpClient,
+  }) => {
+    await setupToolTest(mcpServer, testServer, extensionContext, mcpClient);
+
+    const messages = await mcpClient.getPrompt('e2e-test_typed_greet', { name: 'Alice' });
+
+    expect(messages.length).toBeGreaterThanOrEqual(1);
+    const msg = messages[0];
+    if (!msg) throw new Error('No message returned');
+    expect(msg.role).toBe('user');
+    expect(msg.content.type).toBe('text');
+    expect(msg.content.text).toBe('Hey Alice!');
+  });
+
+  test('get typed prompt returns formal greeting when formal arg is set', async ({
+    mcpServer,
+    testServer,
+    extensionContext,
+    mcpClient,
+  }) => {
+    await setupToolTest(mcpServer, testServer, extensionContext, mcpClient);
+
+    const messages = await mcpClient.getPrompt('e2e-test_typed_greet', {
+      name: 'Bob',
+      formal: 'true',
+    });
+
+    expect(messages.length).toBeGreaterThanOrEqual(1);
+    const msg = messages[0];
+    if (!msg) throw new Error('No message returned');
+    expect(msg.role).toBe('user');
+    expect(msg.content.type).toBe('text');
+    expect(msg.content.text).toBe('Dear Bob!');
+  });
+});
