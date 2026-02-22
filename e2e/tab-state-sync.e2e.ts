@@ -295,7 +295,9 @@ test.describe('Tab state sync — server restart reconnect', () => {
       await expect
         .poll(
           async () => {
-            const res = await fetch(`http://localhost:${serverPort}/health`);
+            const res = await fetch(`http://localhost:${serverPort}/health`, {
+              headers: { Authorization: `Bearer ${server1.secret ?? ''}` },
+            });
             const body = (await res.json()) as {
               pluginDetails?: Array<{ name: string; tabState: string }>;
             };
@@ -327,7 +329,9 @@ test.describe('Tab state sync — server restart reconnect', () => {
         await expect
           .poll(
             async () => {
-              const res = await fetch(`http://localhost:${serverPort}/health`);
+              const res = await fetch(`http://localhost:${serverPort}/health`, {
+                headers: { Authorization: `Bearer ${server2.secret ?? ''}` },
+              });
               const body = (await res.json()) as {
                 pluginDetails?: Array<{ name: string; tabState: string }>;
               };

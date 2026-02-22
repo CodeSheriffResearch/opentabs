@@ -484,13 +484,14 @@ test.describe('Secret rotation during hot reload', () => {
 
     // Wait for hot reload to complete (updates state.wsSecret)
     await waitForLog(mcpServer, 'Hot reload complete', 15_000);
+    mcpServer.secret = config.secret;
 
     // The extension's existing connection is still alive (hot reload preserves
     // the TCP socket). Force a disconnect by stealing the WS slot using the
     // new secret's token, so the extension has to reconnect.
     mcpServer.logs.length = 0;
-    const { wsUrl: newWsUrl, wsSecret: newSecret } = await fetchWsInfo(mcpServer.port, mcpServer.secret);
-    const rotateConnToken = await fetchConnectionToken(mcpServer.port, mcpServer.secret);
+    const { wsUrl: newWsUrl, wsSecret: newSecret } = await fetchWsInfo(mcpServer.port, config.secret);
+    const rotateConnToken = await fetchConnectionToken(mcpServer.port, config.secret);
     const rotateProtocols = ['opentabs'];
     if (newSecret) rotateProtocols.push(newSecret);
     if (rotateConnToken) rotateProtocols.push(rotateConnToken);
@@ -505,6 +506,16 @@ test.describe('Secret rotation during hot reload', () => {
     await waitForLog(mcpServer, 'Closing previous extension WebSocket', 5_000);
     fakeWs.close();
     await waitForExtensionDisconnected(mcpServer, 5_000);
+
+    // Write auth.json so the extension can bootstrap the rotated secret
+    // when /ws-info returns 401 (stale secret). The extension's offscreen
+    // document falls back to auth.json on 401.
+    const extensionAuthJson = path.join(mcpServer.configDir, 'extension', 'auth.json');
+    fs.writeFileSync(
+      extensionAuthJson,
+      JSON.stringify({ secret: config.secret, port: mcpServer.port }) + '\n',
+      'utf-8',
+    );
 
     // Wait for the extension to reconnect — it must re-fetch /ws-info
     // to get a token signed with the new secret
@@ -783,6 +794,24 @@ test.describe('URL change reconnection', () => {
       const serverBAdaptersDir = path.join(serverBAdaptersParent, 'adapters');
       fs.rmSync(serverBAdaptersDir, { recursive: true, force: true });
       fs.symlinkSync(extensionAdaptersDir, serverBAdaptersDir);
+
+      // Write auth.json into the extension copy so the offscreen document
+      // can bootstrap the secret for server B. The extension copy's
+      // auth.json is symlinked to server A's configDir — server B has a
+      // different configDir, so write directly into the extension.
+      const extensionAdaptersSymlink = path.join(mcpServer.configDir, 'extension', 'adapters');
+      const realExtensionAdaptersDir = fs.readlinkSync(extensionAdaptersSymlink);
+      const extensionRootDir = path.dirname(realExtensionAdaptersDir);
+      const extensionAuthPath = path.join(extensionRootDir, 'auth.json');
+      fs.writeFileSync(
+        extensionAuthPath,
+        JSON.stringify({ secret: serverB.secret, port: serverBPort }) + '\n',
+        'utf-8',
+      );
+
+      // Wait briefly for the file write to be visible to the extension's
+      // fetch of chrome.runtime.getURL('auth.json').
+      await new Promise(r => setTimeout(r, 500));
 
       // 5. Change mcpServerUrl in chrome.storage.local to point to server B.
       //    The background script's chrome.storage.onChanged listener relays

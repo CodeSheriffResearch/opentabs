@@ -179,8 +179,11 @@ test.describe('Onboarding states', () => {
       await expect(sidePanelPage.locator('text=No Plugins Installed')).toBeVisible({ timeout: 30_000 });
       await expect(sidePanelPage.locator('text=Show setup guide')).toBeVisible({ timeout: 5_000 });
 
-      // Click "Show setup guide" to reset hasEverHadPlugins
+      // Click "Show setup guide" to reset hasEverHadPlugins.
+      // The button uses a two-click confirmation pattern: first click shows
+      // "Click again to confirm", second click triggers onResetOnboarding.
       await sidePanelPage.locator('text=Show setup guide').click();
+      await sidePanelPage.locator('text=Click again to confirm').click();
 
       // Verify the onboarding view appears
       await expect(sidePanelPage.locator('text=Welcome to OpenTabs')).toBeVisible({ timeout: 10_000 });

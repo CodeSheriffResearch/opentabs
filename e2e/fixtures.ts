@@ -446,6 +446,7 @@ const startMcpServer = (configDir: string, hot: boolean = true, explicitPort?: n
         PORT: portStr,
         OPENTABS_CONFIG_DIR: configDir,
         OPENTABS_SKIP_CONFIRMATION: '1',
+        OPENTABS_SKIP_SANITIZATION: '1',
       },
       stdio: ['ignore', 'pipe', 'pipe'],
     });
@@ -1293,6 +1294,16 @@ const test = base.extend<TestFixtures>({
     const extensionAdaptersDir = path.join(extensionDir, 'adapters');
     fs.rmSync(serverAdaptersDir, { recursive: true, force: true });
     fs.symlinkSync(extensionAdaptersDir, serverAdaptersDir);
+
+    // Symlink auth.json so the extension copy always sees the latest secret
+    // and port. The MCP server writes auth.json to <configDir>/extension/
+    // on every reload (including after secret rotation), and the offscreen
+    // document re-reads it via chrome.runtime.getURL('auth.json') when
+    // /ws-info returns 401 (stale secret).
+    const serverAuthJson = path.join(serverAdaptersParent, 'auth.json');
+    const extensionAuthJson = path.join(extensionDir, 'auth.json');
+    fs.rmSync(extensionAuthJson, { force: true });
+    fs.symlinkSync(serverAuthJson, extensionAuthJson);
 
     await use(context);
     await context.close();

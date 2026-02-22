@@ -194,7 +194,19 @@ const refreshWsUrl = async (): Promise<void> => {
     if (wsSecret) {
       headers['Authorization'] = `Bearer ${wsSecret}`;
     }
-    const res = await fetch(`${httpBase}/ws-info`, { headers, signal: AbortSignal.timeout(3_000) });
+    let res = await fetch(`${httpBase}/ws-info`, { headers, signal: AbortSignal.timeout(3_000), cache: 'no-store' });
+    // 401 means the secret is stale (e.g., server rotated secrets during hot
+    // reload). Re-read auth.json for the latest secret and retry once.
+    if (res.status === 401) {
+      await bootstrapFromAuthFile();
+      const retryHeaders: Record<string, string> = {};
+      if (wsSecret) retryHeaders['Authorization'] = `Bearer ${wsSecret}`;
+      res = await fetch(`${httpBase}/ws-info`, {
+        headers: retryHeaders,
+        signal: AbortSignal.timeout(3_000),
+        cache: 'no-store',
+      });
+    }
     if (res.ok) {
       const wsInfo = (await res.json()) as { wsUrl?: string; wsSecret?: string };
       if (typeof wsInfo.wsUrl === 'string' && wsInfo.wsUrl !== '' && wsInfo.wsUrl !== mcpServerUrl) {
@@ -366,12 +378,24 @@ chrome.runtime.onMessage.addListener((message: InternalMessage, sender, sendResp
           if (wsSecret) {
             setUrlHeaders['Authorization'] = `Bearer ${wsSecret}`;
           }
-          const res = await fetch(`${httpBase}/ws-info`, {
+          let infoRes = await fetch(`${httpBase}/ws-info`, {
             headers: setUrlHeaders,
             signal: AbortSignal.timeout(3_000),
+            cache: 'no-store',
           });
-          if (res.ok) {
-            const wsInfo = (await res.json()) as { wsUrl?: string; wsSecret?: string };
+          // 401 means the secret is stale — re-read auth.json and retry
+          if (infoRes.status === 401) {
+            await bootstrapFromAuthFile();
+            const retryHeaders: Record<string, string> = {};
+            if (wsSecret) retryHeaders['Authorization'] = `Bearer ${wsSecret}`;
+            infoRes = await fetch(`${httpBase}/ws-info`, {
+              headers: retryHeaders,
+              signal: AbortSignal.timeout(3_000),
+              cache: 'no-store',
+            });
+          }
+          if (infoRes.ok) {
+            const wsInfo = (await infoRes.json()) as { wsUrl?: string; wsSecret?: string };
             if (typeof wsInfo.wsUrl === 'string' && wsInfo.wsUrl !== '') {
               if (isValidWsOrigin(wsInfo.wsUrl, httpBase)) {
                 resolvedUrl = wsInfo.wsUrl;
@@ -476,7 +500,8 @@ chrome.runtime.onMessage.addListener((message: InternalMessage, sender, sendResp
  */
 const bootstrapFromAuthFile = async (): Promise<void> => {
   try {
-    const res = await fetch(chrome.runtime.getURL('auth.json'), { signal: AbortSignal.timeout(1_000) });
+    const authUrl = `${chrome.runtime.getURL('auth.json')}?_t=${Date.now()}`;
+    const res = await fetch(authUrl, { signal: AbortSignal.timeout(1_000), cache: 'no-store' });
     if (res.ok) {
       const auth = (await res.json()) as { secret?: string; port?: number };
       if (typeof auth.secret === 'string' && auth.secret !== '') {
