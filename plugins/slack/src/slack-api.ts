@@ -307,10 +307,7 @@ const extractAuthFromObject = (obj: unknown, depth = 0): SlackAuth | null => {
  *   4. Full localStorage scan for any key containing an xoxc- token
  */
 const getAuth = (): SlackAuth | null =>
-  getAuthFromLocalStorage() ??
-  getAuthFromBootData() ??
-  getAuthFromPageScripts() ??
-  getAuthFromLocalStorageScan();
+  getAuthFromLocalStorage() ?? getAuthFromBootData() ?? getAuthFromPageScripts() ?? getAuthFromLocalStorageScan();
 
 /**
  * Check if the current Slack session is authenticated.
@@ -365,7 +362,7 @@ const slackApi = async <T extends Record<string, unknown>>(
 ): Promise<T & { ok: true }> => {
   const auth = getAuth();
   if (!auth) {
-    throw new ToolError('Not authenticated — no Slack session token found', 'not_authed');
+    throw ToolError.auth('Not authenticated — no Slack session token found');
   }
 
   const form = new URLSearchParams();
@@ -386,7 +383,7 @@ const slackApi = async <T extends Record<string, unknown>>(
   }
 
   if (!auth.workspaceUrl.startsWith('https://')) {
-    throw new ToolError('HTTPS required for Slack API calls', 'insecure_connection');
+    throw ToolError.validation('HTTPS required for Slack API calls');
   }
 
   const response = await fetch(`${auth.workspaceUrl}/api/${method}`, {
@@ -398,30 +395,56 @@ const slackApi = async <T extends Record<string, unknown>>(
   });
 
   if (response.status === 429) {
-    const retryAfter = response.headers.get('Retry-After') ?? 'unknown';
-    throw new ToolError(`Slack API rate limited (429). Retry after ${retryAfter} seconds.`, 'rate_limited');
+    const retryAfterStr = response.headers.get('Retry-After') ?? 'unknown';
+    const retryMs = retryAfterStr ? parseInt(retryAfterStr, 10) * 1000 : 60000;
+    throw ToolError.rateLimited(`Slack API rate limited (429). Retry after ${retryAfterStr} seconds.`, retryMs);
   }
 
   if (!response.ok) {
     const errorText = await response.text().catch(() => response.statusText);
-    throw new ToolError(`Slack API HTTP ${response.status}: ${errorText}`, 'http_error');
+    const errorMsg = `Slack API HTTP ${response.status}: ${errorText}`;
+    if (response.status === 401 || response.status === 403) {
+      throw ToolError.auth(errorMsg);
+    } else if (response.status === 404) {
+      throw ToolError.notFound(errorMsg);
+    } else {
+      throw ToolError.internal(errorMsg);
+    }
   }
 
   let data: unknown;
   try {
     data = await response.json();
   } catch {
-    throw new ToolError('Failed to parse Slack API response', 'invalid_response');
+    throw ToolError.internal('Failed to parse Slack API response');
   }
 
   if (typeof data !== 'object' || data === null) {
-    throw new ToolError('Invalid API response format', 'invalid_response');
+    throw ToolError.internal('Invalid API response format');
   }
 
   const record = data as Record<string, unknown>;
   if (record.ok !== true) {
     const error = typeof record.error === 'string' ? record.error : 'unknown_error';
-    throw new ToolError(`Slack API error: ${error}`, error);
+    const errorMsg = `Slack API error: ${error}`;
+    const slackError = error;
+    if (
+      ['not_authed', 'invalid_auth', 'account_inactive', 'token_revoked', 'token_expired', 'missing_scope'].includes(
+        slackError,
+      )
+    ) {
+      throw ToolError.auth(errorMsg);
+    } else if (['channel_not_found', 'user_not_found', 'message_not_found', 'not_in_channel'].includes(slackError)) {
+      throw ToolError.notFound(errorMsg);
+    } else if (slackError === 'ratelimited') {
+      throw ToolError.rateLimited(errorMsg);
+    } else if (
+      ['invalid_arguments', 'too_many_attachments', 'msg_too_long', 'no_text', 'invalid_blocks'].includes(slackError)
+    ) {
+      throw ToolError.validation(errorMsg);
+    } else {
+      throw ToolError.internal(errorMsg);
+    }
   }
 
   return data as T & { ok: true };

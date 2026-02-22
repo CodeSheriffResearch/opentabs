@@ -38,25 +38,20 @@ export const uploadFile = defineTool({
   }),
   handle: async params => {
     const BLOCKED_EXTENSIONS = new Set(['exe', 'sh', 'bat', 'cmd', 'com', 'app', 'dmg', 'msi', 'bin']);
-    const ext = params.filename.includes('.') ? params.filename.split('.').pop()!.toLowerCase() : '';
+    const ext = params.filename.includes('.') ? params.filename.split('.').pop()?.toLowerCase() || '' : '';
     if (BLOCKED_EXTENSIONS.has(ext)) {
-      throw new ToolError(`File extension .${ext} is not allowed`, 'blocked_file_type');
+      throw ToolError.validation(`File extension .${ext} is not allowed`);
     }
 
     const decodeBase64 = (content: string): Uint8Array<ArrayBuffer> => {
       try {
         return Uint8Array.from(atob(content), c => c.charCodeAt(0));
       } catch {
-        throw new ToolError(
-          'Invalid base64 content — ensure the content is properly base64-encoded',
-          'invalid_base64',
-        );
+        throw ToolError.validation('Invalid base64 content — ensure the content is properly base64-encoded');
       }
     };
 
-    const contentBytes = params.is_base64
-      ? decodeBase64(params.content)
-      : new TextEncoder().encode(params.content);
+    const contentBytes = params.is_base64 ? decodeBase64(params.content) : new TextEncoder().encode(params.content);
 
     if (params.is_base64) {
       const MAGIC_BYTES: Record<string, number[]> = {
@@ -71,10 +66,7 @@ export const uploadFile = defineTool({
         const headerBytes = contentBytes.slice(0, expectedMagic.length);
         const matches = expectedMagic.every((byte, i) => headerBytes[i] === byte);
         if (!matches) {
-          throw new ToolError(
-            `File content does not match expected .${ext} format (magic bytes mismatch)`,
-            'magic_bytes_mismatch',
-          );
+          throw ToolError.validation(`File content does not match expected .${ext} format (magic bytes mismatch)`);
         }
       }
     }
@@ -89,16 +81,16 @@ export const uploadFile = defineTool({
     });
 
     if (!uploadResponse.upload_url || !uploadResponse.file_id) {
-      throw new ToolError('Failed to obtain upload URL from Slack', 'upload_url_failed');
+      throw ToolError.internal('Failed to obtain upload URL from Slack');
     }
 
     const uploadUrl = new URL(uploadResponse.upload_url);
     if (uploadUrl.protocol !== 'https:') {
-      throw new ToolError('Upload URL must use HTTPS', 'insecure_protocol');
+      throw ToolError.validation('Upload URL must use HTTPS');
     }
     const SLACK_DOMAINS = ['slack.com', 'slack-edge.com'];
     if (!SLACK_DOMAINS.some(d => uploadUrl.hostname === d || uploadUrl.hostname.endsWith('.' + d))) {
-      throw new ToolError('Upload URL domain is not a trusted Slack domain', 'untrusted_upload_domain');
+      throw ToolError.validation('Upload URL domain is not a trusted Slack domain');
     }
 
     const uploadResult = await fetch(uploadResponse.upload_url, {
@@ -108,7 +100,7 @@ export const uploadFile = defineTool({
       signal: AbortSignal.timeout(30_000),
     });
     if (!uploadResult.ok) {
-      throw new ToolError(`File upload HTTP ${uploadResult.status}`, 'upload_failed');
+      throw ToolError.internal(`File upload HTTP ${uploadResult.status}`);
     }
 
     const fileTitle = params.title ?? params.filename;
