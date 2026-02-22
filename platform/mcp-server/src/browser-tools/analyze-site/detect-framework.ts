@@ -37,11 +37,13 @@ interface FrameworkDetectionInput {
 // Output types
 // ---------------------------------------------------------------------------
 
+/** A detected frontend framework with its name and optional version. */
 interface FrameworkInfo {
   name: string;
   version: string | undefined;
 }
 
+/** Result of framework detection: identified frameworks plus SPA and SSR classification. */
 interface FrameworkAnalysis {
   frameworks: FrameworkInfo[];
   isSPA: boolean;

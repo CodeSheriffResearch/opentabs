@@ -127,58 +127,63 @@ const EVENT_HANDLER_RE =
 
 /** Parse a hex color (#RGB or #RRGGBB) to [R, G, B] */
 const parseHex = (hex: string): [number, number, number] | null => {
-  const h = hex.trim();
-  if (h.length === 4) {
-    const c1 = h[1] ?? '0';
-    const c2 = h[2] ?? '0';
-    const c3 = h[3] ?? '0';
-    const r = parseInt(c1 + c1, 16);
-    const g = parseInt(c2 + c2, 16);
-    const b = parseInt(c3 + c3, 16);
-    if (Number.isNaN(r) || Number.isNaN(g) || Number.isNaN(b)) return null;
-    return [r, g, b];
+  const trimmedHex = hex.trim();
+  if (trimmedHex.length === 4) {
+    const c1 = trimmedHex[1] ?? '0';
+    const c2 = trimmedHex[2] ?? '0';
+    const c3 = trimmedHex[3] ?? '0';
+    const red = parseInt(c1 + c1, 16);
+    const green = parseInt(c2 + c2, 16);
+    const blue = parseInt(c3 + c3, 16);
+    if (Number.isNaN(red) || Number.isNaN(green) || Number.isNaN(blue)) return null;
+    return [red, green, blue];
   }
-  if (h.length === 7) {
-    const r = parseInt(h.slice(1, 3), 16);
-    const g = parseInt(h.slice(3, 5), 16);
-    const b = parseInt(h.slice(5, 7), 16);
-    if (Number.isNaN(r) || Number.isNaN(g) || Number.isNaN(b)) return null;
-    return [r, g, b];
+  if (trimmedHex.length === 7) {
+    const red = parseInt(trimmedHex.slice(1, 3), 16);
+    const green = parseInt(trimmedHex.slice(3, 5), 16);
+    const blue = parseInt(trimmedHex.slice(5, 7), 16);
+    if (Number.isNaN(red) || Number.isNaN(green) || Number.isNaN(blue)) return null;
+    return [red, green, blue];
   }
   return null;
 };
 
-/** Convert HSL to RGB. h is 0-360, s/l are 0-100 percentages. */
-const hslToRgb = (h: number, s: number, l: number): [number, number, number] => {
-  const sn = s / 100;
-  const ln = l / 100;
-  const c = (1 - Math.abs(2 * ln - 1)) * sn;
-  const x = c * (1 - Math.abs(((h / 60) % 2) - 1));
-  const m = ln - c / 2;
-  let r1: number, g1: number, b1: number;
-  if (h < 60) {
-    [r1, g1, b1] = [c, x, 0];
-  } else if (h < 120) {
-    [r1, g1, b1] = [x, c, 0];
-  } else if (h < 180) {
-    [r1, g1, b1] = [0, c, x];
-  } else if (h < 240) {
-    [r1, g1, b1] = [0, x, c];
-  } else if (h < 300) {
-    [r1, g1, b1] = [x, 0, c];
+/** Convert HSL to RGB. hue is 0-360, saturation/lightness are 0-100 percentages. */
+const hslToRgb = (hue: number, saturation: number, lightness: number): [number, number, number] => {
+  const saturationNorm = saturation / 100;
+  const lightnessNorm = lightness / 100;
+  const chroma = (1 - Math.abs(2 * lightnessNorm - 1)) * saturationNorm;
+  const secondaryComponent = chroma * (1 - Math.abs(((hue / 60) % 2) - 1));
+  const lightnessMatch = lightnessNorm - chroma / 2;
+  let redPrime: number, greenPrime: number, bluePrime: number;
+  if (hue < 60) {
+    [redPrime, greenPrime, bluePrime] = [chroma, secondaryComponent, 0];
+  } else if (hue < 120) {
+    [redPrime, greenPrime, bluePrime] = [secondaryComponent, chroma, 0];
+  } else if (hue < 180) {
+    [redPrime, greenPrime, bluePrime] = [0, chroma, secondaryComponent];
+  } else if (hue < 240) {
+    [redPrime, greenPrime, bluePrime] = [0, secondaryComponent, chroma];
+  } else if (hue < 300) {
+    [redPrime, greenPrime, bluePrime] = [secondaryComponent, 0, chroma];
   } else {
-    [r1, g1, b1] = [c, 0, x];
+    [redPrime, greenPrime, bluePrime] = [chroma, 0, secondaryComponent];
   }
-  return [Math.round((r1 + m) * 255), Math.round((g1 + m) * 255), Math.round((b1 + m) * 255)];
+  return [
+    Math.round((redPrime + lightnessMatch) * 255),
+    Math.round((greenPrime + lightnessMatch) * 255),
+    Math.round((bluePrime + lightnessMatch) * 255),
+  ];
 };
 
 /** Compute luminance-equivalent gray value using ITU-R BT.709 */
-const toLuminanceGray = (r: number, g: number, b: number): number => Math.round(0.2126 * r + 0.7152 * g + 0.0722 * b);
+const toLuminanceGray = (red: number, green: number, blue: number): number =>
+  Math.round(0.2126 * red + 0.7152 * green + 0.0722 * blue);
 
 /** Convert a gray value (0-255) to a two-digit hex string */
 const grayToHex = (gray: number): string => {
-  const h = Math.max(0, Math.min(255, gray)).toString(16).padStart(2, '0');
-  return `#${h}${h}${h}`;
+  const hexPair = Math.max(0, Math.min(255, gray)).toString(16).padStart(2, '0');
+  return `#${hexPair}${hexPair}${hexPair}`;
 };
 
 /**
@@ -186,53 +191,53 @@ const grayToHex = (gray: number): string => {
  * Returns null for passthrough values (none, currentColor, etc.) and url() references.
  */
 const parseColor = (value: string): [number, number, number] | null => {
-  const v = value.trim();
-  const vLower = v.toLowerCase();
+  const trimmedValue = value.trim();
+  const lowerValue = trimmedValue.toLowerCase();
 
   // Passthrough values
-  if (PASSTHROUGH_VALUES.has(vLower)) return null;
+  if (PASSTHROUGH_VALUES.has(lowerValue)) return null;
 
   // URL references (e.g., url(#gradient))
-  if (vLower.startsWith('url(')) return null;
+  if (lowerValue.startsWith('url(')) return null;
 
   // Hex colors
-  if (v.startsWith('#')) return parseHex(v);
+  if (trimmedValue.startsWith('#')) return parseHex(trimmedValue);
 
   // rgb()/rgba()
-  const rgbMatch = vLower.match(/^rgba?\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)/);
+  const rgbMatch = lowerValue.match(/^rgba?\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)/);
   if (rgbMatch) {
     return [parseInt(rgbMatch[1] ?? '0', 10), parseInt(rgbMatch[2] ?? '0', 10), parseInt(rgbMatch[3] ?? '0', 10)];
   }
 
   // hsl()/hsla()
-  const hslMatch = vLower.match(/^hsla?\(\s*([\d.]+)\s*,\s*([\d.]+)%\s*,\s*([\d.]+)%/);
+  const hslMatch = lowerValue.match(/^hsla?\(\s*([\d.]+)\s*,\s*([\d.]+)%\s*,\s*([\d.]+)%/);
   if (hslMatch) {
     return hslToRgb(parseFloat(hslMatch[1] ?? '0'), parseFloat(hslMatch[2] ?? '0'), parseFloat(hslMatch[3] ?? '0'));
   }
 
   // Named colors
-  const named = NAMED_COLORS[vLower];
+  const named = NAMED_COLORS[lowerValue];
   if (named) return named;
 
   return null;
 };
 
 /** Check if a parsed RGB is achromatic (R === G === B) */
-const isAchromatic = (r: number, g: number, b: number): boolean => r === g && g === b;
+const isAchromatic = (red: number, green: number, blue: number): boolean => red === green && green === blue;
 
 /** Check if a CSS color string is achromatic (or a passthrough value) */
 const isAchromaticColor = (value: string): boolean => {
-  const v = value.trim().toLowerCase();
+  const normalizedValue = value.trim().toLowerCase();
 
-  if (PASSTHROUGH_VALUES.has(v)) return true;
-  if (v.startsWith('url(')) return true;
-  if (ACHROMATIC_NAMES.has(v)) return true;
+  if (PASSTHROUGH_VALUES.has(normalizedValue)) return true;
+  if (normalizedValue.startsWith('url(')) return true;
+  if (ACHROMATIC_NAMES.has(normalizedValue)) return true;
 
   // hsl/hsla — check saturation is 0
-  const hslMatch = v.match(/^hsla?\(\s*[\d.]+\s*,\s*([\d.]+)%/);
+  const hslMatch = normalizedValue.match(/^hsla?\(\s*[\d.]+\s*,\s*([\d.]+)%/);
   if (hslMatch) return parseFloat(hslMatch[1] ?? '0') === 0;
 
-  const rgb = parseColor(v);
+  const rgb = parseColor(normalizedValue);
   if (!rgb) return true; // Unrecognized values are considered achromatic
   return isAchromatic(rgb[0], rgb[1], rgb[2]);
 };
@@ -265,10 +270,10 @@ const validateIconSvg = (content: string, _filename: string): ValidationResult =
     const viewBoxValue = viewBoxMatch[1] ?? '';
     const parts = viewBoxValue.trim().split(/\s+/);
     if (parts.length === 4) {
-      const w = parseFloat(parts[2] ?? '0');
-      const h = parseFloat(parts[3] ?? '0');
-      if (w !== h) {
-        errors.push(`SVG viewBox must be square (got ${w}x${h})`);
+      const viewBoxWidth = parseFloat(parts[2] ?? '0');
+      const viewBoxHeight = parseFloat(parts[3] ?? '0');
+      if (viewBoxWidth !== viewBoxHeight) {
+        errors.push(`SVG viewBox must be square (got ${viewBoxWidth}x${viewBoxHeight})`);
       }
     } else {
       errors.push('SVG viewBox must have exactly 4 values (min-x min-y width height)');
@@ -344,14 +349,14 @@ const validateInactiveIconColors = (content: string): ValidationResult => {
  * Returns the original value for passthrough values (none, currentColor, etc.)
  */
 const convertColorToGray = (value: string): string => {
-  const v = value.trim();
-  const vLower = v.toLowerCase();
+  const trimmedValue = value.trim();
+  const lowerValue = trimmedValue.toLowerCase();
 
-  if (PASSTHROUGH_VALUES.has(vLower)) return v;
-  if (vLower.startsWith('url(')) return v;
+  if (PASSTHROUGH_VALUES.has(lowerValue)) return trimmedValue;
+  if (lowerValue.startsWith('url(')) return trimmedValue;
 
   // hsl/hsla — set saturation to 0, preserve everything else
-  const hslaMatch = vLower.match(/^(hsla?)\(\s*([\d.]+)\s*,\s*[\d.]+%\s*,\s*([\d.]+%)\s*(?:,\s*([\d.]+))?\s*\)/);
+  const hslaMatch = lowerValue.match(/^(hsla?)\(\s*([\d.]+)\s*,\s*[\d.]+%\s*,\s*([\d.]+%)\s*(?:,\s*([\d.]+))?\s*\)/);
   if (hslaMatch) {
     const fn = hslaMatch[1] ?? 'hsl';
     const hue = hslaMatch[2] ?? '0';
@@ -364,44 +369,44 @@ const convertColorToGray = (value: string): string => {
   }
 
   // rgba — convert and preserve alpha
-  const rgbaMatch = vLower.match(/^rgba\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)\s*,\s*([\d.]+)\s*\)/);
+  const rgbaMatch = lowerValue.match(/^rgba\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)\s*,\s*([\d.]+)\s*\)/);
   if (rgbaMatch) {
-    const r = parseInt(rgbaMatch[1] ?? '0', 10);
-    const g = parseInt(rgbaMatch[2] ?? '0', 10);
-    const b = parseInt(rgbaMatch[3] ?? '0', 10);
-    const a = rgbaMatch[4] ?? '1';
-    const gray = toLuminanceGray(r, g, b);
-    return `rgba(${gray}, ${gray}, ${gray}, ${a})`;
+    const red = parseInt(rgbaMatch[1] ?? '0', 10);
+    const green = parseInt(rgbaMatch[2] ?? '0', 10);
+    const blue = parseInt(rgbaMatch[3] ?? '0', 10);
+    const alpha = rgbaMatch[4] ?? '1';
+    const gray = toLuminanceGray(red, green, blue);
+    return `rgba(${gray}, ${gray}, ${gray}, ${alpha})`;
   }
 
   // rgb()
-  const rgbMatch = vLower.match(/^rgb\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)\s*\)/);
+  const rgbMatch = lowerValue.match(/^rgb\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)\s*\)/);
   if (rgbMatch) {
-    const r = parseInt(rgbMatch[1] ?? '0', 10);
-    const g = parseInt(rgbMatch[2] ?? '0', 10);
-    const b = parseInt(rgbMatch[3] ?? '0', 10);
-    const gray = toLuminanceGray(r, g, b);
+    const red = parseInt(rgbMatch[1] ?? '0', 10);
+    const green = parseInt(rgbMatch[2] ?? '0', 10);
+    const blue = parseInt(rgbMatch[3] ?? '0', 10);
+    const gray = toLuminanceGray(red, green, blue);
     return grayToHex(gray);
   }
 
   // Hex colors
-  if (v.startsWith('#')) {
-    const rgb = parseHex(v);
+  if (trimmedValue.startsWith('#')) {
+    const rgb = parseHex(trimmedValue);
     if (rgb) {
       const gray = toLuminanceGray(rgb[0], rgb[1], rgb[2]);
       return grayToHex(gray);
     }
-    return v;
+    return trimmedValue;
   }
 
   // Named colors
-  const named = NAMED_COLORS[vLower];
+  const named = NAMED_COLORS[lowerValue];
   if (named) {
     const gray = toLuminanceGray(named[0], named[1], named[2]);
     return grayToHex(gray);
   }
 
-  return v;
+  return trimmedValue;
 };
 
 /**

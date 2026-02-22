@@ -44,12 +44,14 @@ interface DomDetectionInput {
 // Output types
 // ---------------------------------------------------------------------------
 
+/** An analyzed form element with its action URL, HTTP method, and fields. */
 interface FormAnalysis {
   action: string;
   method: string;
   fields: FormField[];
 }
 
+/** An interactive DOM element (button, input, link, etc.) with identifying attributes. */
 interface InteractiveElement {
   tag: string;
   type: string | undefined;
@@ -58,6 +60,7 @@ interface InteractiveElement {
   text: string | undefined;
 }
 
+/** Result of DOM analysis: forms, interactive elements, and data-attribute patterns found on the page. */
 interface DomAnalysis {
   forms: FormAnalysis[];
   interactiveElements: InteractiveElement[];

@@ -27,6 +27,7 @@ interface GlobalsDetectionInput {
 // Output types
 // ---------------------------------------------------------------------------
 
+/** A classified window global with an auth-data flag indicating whether its keys match auth patterns. */
 interface GlobalInfo {
   path: string;
   type: string;
@@ -34,6 +35,7 @@ interface GlobalInfo {
   topLevelKeys: string[] | undefined;
 }
 
+/** Result of window globals detection: classified globals with auth-relevance flags. */
 interface GlobalsAnalysis {
   globals: GlobalInfo[];
 }

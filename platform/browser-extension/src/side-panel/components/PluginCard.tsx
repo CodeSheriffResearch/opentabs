@@ -5,6 +5,7 @@ import { Switch } from './retro/Switch.js';
 import { Tooltip } from './retro/Tooltip.js';
 import { ToolRow } from './ToolRow.js';
 import { setToolEnabled, setAllToolsEnabled } from '../bridge.js';
+import { ERROR_DISPLAY_DURATION_MS } from '../constants.js';
 import * as AccordionPrimitive from '@radix-ui/react-accordion';
 import { ChevronDown } from 'lucide-react';
 import { useState, useEffect, useRef } from 'react';
@@ -58,7 +59,7 @@ const PluginCard = ({
   const showToggleError = (message: string) => {
     clearTimeout(errorTimerRef.current);
     setToggleError(message);
-    errorTimerRef.current = setTimeout(() => setToggleError(null), 3000);
+    errorTimerRef.current = setTimeout(() => setToggleError(null), ERROR_DISPLAY_DURATION_MS);
   };
 
   const allEnabled = plugin.tools.length > 0 && plugin.tools.every(t => t.enabled);

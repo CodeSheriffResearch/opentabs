@@ -12,8 +12,10 @@ import type { NetworkRequest } from './detect-auth.js';
 // Output types
 // ---------------------------------------------------------------------------
 
+/** Supported API protocol classifications for captured network requests. */
 type ApiProtocol = 'rest' | 'graphql' | 'grpc-web' | 'jsonrpc' | 'trpc' | 'websocket' | 'sse' | 'form-submission';
 
+/** A single detected API endpoint with its protocol, auth info, and call frequency. */
 interface ApiEndpoint {
   url: string;
   method: string;
@@ -25,6 +27,7 @@ interface ApiEndpoint {
   callCount: number;
 }
 
+/** Result of API pattern detection: classified endpoints and the primary API base URL. */
 interface ApiAnalysis {
   endpoints: ApiEndpoint[];
   primaryApiBaseUrl: string | undefined;

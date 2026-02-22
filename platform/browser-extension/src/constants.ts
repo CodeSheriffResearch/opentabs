@@ -32,6 +32,12 @@ export const MAX_SCRIPT_TIMEOUT_MS = 295_000;
 export const IS_READY_TIMEOUT_MS = 5_000;
 /** Delay before chrome.runtime.reload() to allow the WebSocket response to flush */
 export const RELOAD_FLUSH_DELAY_MS = 100;
+/** Delay (ms) before retrying adapter injection after a hash verification failure */
+export const INJECTION_RETRY_DELAY_MS = 200;
+/** Delay (ms) for a tab to render after focus before capturing a screenshot */
+export const SCREENSHOT_RENDER_DELAY_MS = 100;
+/** Delay (ms) to let the WebSocket response flush before forcing a reconnect */
+export const WS_FLUSH_DELAY_MS = 50;
 /** Matches lowercase alphanumeric plugin names with optional hyphen separators (e.g., "slack", "e2e-test") */
 export const VALID_PLUGIN_NAME = /^[a-z0-9]+(-[a-z0-9]+)*$/;
 /** Validate a plugin name against the expected format */

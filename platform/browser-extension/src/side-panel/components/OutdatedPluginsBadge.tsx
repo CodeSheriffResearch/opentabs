@@ -1,3 +1,4 @@
+import { COPIED_INDICATOR_DURATION_MS } from '../constants.js';
 import { ArrowUpCircle, ChevronDown, Copy, Check } from 'lucide-react';
 import { useState, useRef, useEffect } from 'react';
 
@@ -18,7 +19,7 @@ const CopyButton = ({ text }: { text: string }) => {
     void navigator.clipboard.writeText(text).then(() => {
       setCopied(true);
       clearTimeout(timerRef.current);
-      timerRef.current = setTimeout(() => setCopied(false), 2000);
+      timerRef.current = setTimeout(() => setCopied(false), COPIED_INDICATOR_DURATION_MS);
     });
   };
 

@@ -33,6 +33,7 @@ import type { ServerState } from '../../state.js';
 // Output types
 // ---------------------------------------------------------------------------
 
+/** A concrete plugin tool idea derived from detected APIs, forms, or endpoints. */
 interface ToolSuggestion {
   toolName: string;
   description: string;
@@ -40,6 +41,7 @@ interface ToolSuggestion {
   complexity: 'low' | 'medium' | 'high';
 }
 
+/** Comprehensive site analysis report combining all detection module results and tool suggestions. */
 interface SiteAnalysis {
   url: string;
   title: string;

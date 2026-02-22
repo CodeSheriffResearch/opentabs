@@ -1,4 +1,5 @@
 import { Empty } from './retro/Empty.js';
+import { CONFIRMATION_DISPLAY_DURATION_MS } from '../constants.js';
 import { useEffect, useRef, useState } from 'react';
 
 interface ReturningUserEmptyStateProps {
@@ -22,7 +23,7 @@ const ReturningUserEmptyState = ({ onResetOnboarding }: ReturningUserEmptyStateP
       onResetOnboarding();
     } else {
       setConfirming(true);
-      timerRef.current = window.setTimeout(() => setConfirming(false), 3000);
+      timerRef.current = window.setTimeout(() => setConfirming(false), CONFIRMATION_DISPLAY_DURATION_MS);
     }
   };
 

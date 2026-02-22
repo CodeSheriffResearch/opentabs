@@ -22,25 +22,25 @@ interface NetworkRequest {
   mimeType?: string;
 }
 
-/** Cookie entry as visible from the page context. */
+/** A cookie visible from the page context, with name and value. */
 interface CookieEntry {
   name: string;
   value: string;
 }
 
-/** Key-value entry from localStorage or sessionStorage. */
+/** A key-value entry from localStorage or sessionStorage. */
 interface StorageEntry {
   key: string;
   value: string;
 }
 
-/** A window global with metadata from page script execution. */
+/** A window global with its dot-notation path and runtime value. */
 interface GlobalEntry {
   path: string;
   value: unknown;
 }
 
-/** CSRF token found in the DOM (meta tag or hidden input). */
+/** A CSRF token found in the DOM via a meta tag or hidden input field. */
 interface CsrfDomToken {
   source: 'meta' | 'hidden-input';
   name: string;
@@ -61,6 +61,7 @@ interface AuthDetectionInput {
 // Output types
 // ---------------------------------------------------------------------------
 
+/** Discriminator for the kind of authentication mechanism detected on a page. */
 type AuthMethodType =
   | 'cookie-session'
   | 'jwt-localstorage'
@@ -72,12 +73,14 @@ type AuthMethodType =
   | 'custom-auth-header'
   | 'auth-global';
 
+/** A single detected authentication method with a description and extraction hint for plugin authors. */
 interface AuthMethod {
   type: AuthMethodType;
   details: string;
   extractionHint: string;
 }
 
+/** Result of authentication detection: whether the page is authenticated and which methods were found. */
 interface AuthAnalysis {
   authenticated: boolean;
   methods: AuthMethod[];

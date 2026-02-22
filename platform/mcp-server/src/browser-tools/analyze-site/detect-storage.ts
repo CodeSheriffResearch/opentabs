@@ -25,11 +25,13 @@ interface StorageDetectionInput {
 // Output types
 // ---------------------------------------------------------------------------
 
+/** A storage key name with an auth-relevance flag based on pattern matching. */
 interface StorageKeyInfo {
   name: string;
   isAuth: boolean;
 }
 
+/** Result of storage analysis: cookie, localStorage, and sessionStorage keys with auth flags. */
 interface StorageAnalysis {
   cookies: StorageKeyInfo[];
   localStorage: StorageKeyInfo[];

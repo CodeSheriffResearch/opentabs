@@ -1,9 +1,10 @@
 import { Button } from './retro/Button.js';
 import { Text } from './retro/Text.js';
-import { cn } from '../lib/utils.js';
+import { COUNTDOWN_POLL_INTERVAL_MS } from '../constants.js';
+import { cn } from '../lib/cn.js';
 import { ShieldAlert, ChevronDown } from 'lucide-react';
 import { useState, useEffect, useRef } from 'react';
-import type { SpConfirmationRequestMessage } from '../../types.js';
+import type { SpConfirmationRequestMessage } from '../../extension-messages.js';
 
 type ConfirmationData = SpConfirmationRequestMessage['data'] & {
   /** Timestamp when the confirmation was received in the side panel */
@@ -29,7 +30,7 @@ const CountdownBar = ({ timeoutMs, receivedAt }: { timeoutMs: number; receivedAt
       setRemaining(Math.max(0, timeoutMs - elapsed));
     };
     update();
-    const id = setInterval(update, 200);
+    const id = setInterval(update, COUNTDOWN_POLL_INTERVAL_MS);
     return () => clearInterval(id);
   }, [timeoutMs, receivedAt]);
 
