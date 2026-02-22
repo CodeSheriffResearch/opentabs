@@ -111,6 +111,7 @@ const withDebugger = async <T>(tabId: number, fn: () => Promise<T>): Promise<T> 
   }
 };
 
+/** Lists all open Chrome tabs with their IDs, URLs, titles, active state, and window IDs. */
 export const handleBrowserListTabs = async (id: string | number): Promise<void> => {
   try {
     const tabs = await chrome.tabs.query({});
@@ -131,6 +132,11 @@ export const handleBrowserListTabs = async (id: string | number): Promise<void> 
   }
 };
 
+/**
+ * Opens a new Chrome tab with the specified URL.
+ * @param params - Expects `{ url: string }`. Rejects blocked URL schemes (javascript:, data:, etc.).
+ * @returns The new tab's ID, title, URL, and window ID.
+ */
 export const handleBrowserOpenTab = async (params: Record<string, unknown>, id: string | number): Promise<void> => {
   try {
     const url = params.url;
@@ -164,6 +170,11 @@ export const handleBrowserOpenTab = async (params: Record<string, unknown>, id: 
   }
 };
 
+/**
+ * Closes a Chrome tab by its ID.
+ * @param params - Expects `{ tabId: number }`.
+ * @returns `{ ok: true }` on success.
+ */
 export const handleBrowserCloseTab = async (params: Record<string, unknown>, id: string | number): Promise<void> => {
   try {
     const tabId = params.tabId;
@@ -182,6 +193,11 @@ export const handleBrowserCloseTab = async (params: Record<string, unknown>, id:
   }
 };
 
+/**
+ * Navigates an existing tab to a new URL.
+ * @param params - Expects `{ tabId: number, url: string }`. Rejects blocked URL schemes.
+ * @returns The tab's ID, title, and navigated URL.
+ */
 export const handleBrowserNavigateTab = async (params: Record<string, unknown>, id: string | number): Promise<void> => {
   try {
     const tabId = params.tabId;
@@ -220,6 +236,11 @@ export const handleBrowserNavigateTab = async (params: Record<string, unknown>, 
   }
 };
 
+/**
+ * Activates a tab and brings its window to the foreground.
+ * @param params - Expects `{ tabId: number }`.
+ * @returns The focused tab's ID, title, URL, and active state.
+ */
 export const handleBrowserFocusTab = async (params: Record<string, unknown>, id: string | number): Promise<void> => {
   try {
     const tabId = params.tabId;
@@ -247,6 +268,11 @@ export const handleBrowserFocusTab = async (params: Record<string, unknown>, id:
   }
 };
 
+/**
+ * Retrieves detailed metadata for a single tab including status, favicon URL, and incognito state.
+ * @param params - Expects `{ tabId: number }`.
+ * @returns Tab metadata: ID, title, URL, status, active, windowId, favIconUrl, and incognito.
+ */
 export const handleBrowserGetTabInfo = async (params: Record<string, unknown>, id: string | number): Promise<void> => {
   try {
     const tabId = params.tabId;
@@ -278,6 +304,11 @@ export const handleBrowserGetTabInfo = async (params: Record<string, unknown>, i
   }
 };
 
+/**
+ * Captures a PNG screenshot of a tab by focusing it and using chrome.tabs.captureVisibleTab.
+ * @param params - Expects `{ tabId: number }`.
+ * @returns `{ image: string }` containing the base64-encoded PNG data.
+ */
 export const handleBrowserScreenshotTab = async (
   params: Record<string, unknown>,
   id: string | number,
@@ -307,6 +338,11 @@ export const handleBrowserScreenshotTab = async (
   }
 };
 
+/**
+ * Extracts the innerText of a DOM element in a tab's page context.
+ * @param params - Expects `{ tabId: number, selector?: string, maxLength?: number }`. Defaults to `body` selector and 50000 max length.
+ * @returns `{ title, url, content }` with the element's trimmed text content.
+ */
 export const handleBrowserGetTabContent = async (
   params: Record<string, unknown>,
   id: string | number,
@@ -354,6 +390,11 @@ export const handleBrowserGetTabContent = async (
   }
 };
 
+/**
+ * Returns the outerHTML of a DOM element in a tab's page context.
+ * @param params - Expects `{ tabId: number, selector?: string, maxLength?: number }`. Defaults to `html` selector and 200000 max length.
+ * @returns `{ title, url, html }` with the element's outer HTML, truncated if exceeding maxLength.
+ */
 export const handleBrowserGetPageHtml = async (params: Record<string, unknown>, id: string | number): Promise<void> => {
   try {
     const tabId = params.tabId;
@@ -399,6 +440,11 @@ export const handleBrowserGetPageHtml = async (params: Record<string, unknown>, 
   }
 };
 
+/**
+ * Reads localStorage or sessionStorage from a tab's page context.
+ * @param params - Expects `{ tabId: number, storageType?: 'local' | 'session', key?: string }`. Without `key`, returns all entries up to a size limit.
+ * @returns A single `{ key, value }` when key is provided, or `{ entries, count }` for all entries.
+ */
 export const handleBrowserGetStorage = async (params: Record<string, unknown>, id: string | number): Promise<void> => {
   try {
     const tabId = params.tabId;
@@ -476,6 +522,11 @@ export const handleBrowserGetStorage = async (params: Record<string, unknown>, i
   }
 };
 
+/**
+ * Clicks a DOM element matched by a CSS selector in a tab's page context.
+ * @param params - Expects `{ tabId: number, selector: string }`.
+ * @returns `{ clicked, tagName, text }` describing the clicked element.
+ */
 export const handleBrowserClickElement = async (
   params: Record<string, unknown>,
   id: string | number,
@@ -533,6 +584,11 @@ export const handleBrowserClickElement = async (
   }
 };
 
+/**
+ * Types text into an input, textarea, or contentEditable element, dispatching input and change events.
+ * @param params - Expects `{ tabId: number, selector: string, text: string, clear?: boolean }`. Defaults to clearing existing value before typing.
+ * @returns `{ typed, tagName, value }` with the element's resulting value.
+ */
 export const handleBrowserTypeText = async (params: Record<string, unknown>, id: string | number): Promise<void> => {
   try {
     const tabId = params.tabId;
@@ -777,6 +833,11 @@ export const handleBrowserWaitForElement = async (
   }
 };
 
+/**
+ * Queries DOM elements matching a CSS selector and returns their tag names, text content, and specified attributes.
+ * @param params - Expects `{ tabId: number, selector: string, limit?: number, attributes?: string[] }`. Defaults to 100 element limit and standard attribute set.
+ * @returns `{ count, elements }` where count is the total matches and elements is the (possibly limited) result array.
+ */
 export const handleBrowserQueryElements = async (
   params: Record<string, unknown>,
   id: string | number,
@@ -829,6 +890,11 @@ export const handleBrowserQueryElements = async (
   }
 };
 
+/**
+ * Retrieves cookies for a URL, optionally filtered by cookie name.
+ * @param params - Expects `{ url: string, name?: string }`. Rejects blocked URL schemes.
+ * @returns `{ cookies }` array with name, value, domain, path, secure, httpOnly, sameSite, and expirationDate.
+ */
 export const handleBrowserGetCookies = async (params: Record<string, unknown>, id: string | number): Promise<void> => {
   try {
     const url = params.url;
@@ -878,6 +944,11 @@ export const handleBrowserGetCookies = async (params: Record<string, unknown>, i
   }
 };
 
+/**
+ * Sets a cookie with the specified name, value, and optional attributes (domain, path, secure, httpOnly, expirationDate).
+ * @param params - Expects `{ url: string, name: string, value: string, domain?: string, path?: string, secure?: boolean, httpOnly?: boolean, expirationDate?: number }`.
+ * @returns The cookie as set by Chrome, including all resolved attributes.
+ */
 export const handleBrowserSetCookie = async (params: Record<string, unknown>, id: string | number): Promise<void> => {
   try {
     const url = params.url;
@@ -977,6 +1048,11 @@ export const handleBrowserDeleteCookies = async (
   }
 };
 
+/**
+ * Executes a pre-written JavaScript file in a tab's MAIN world, supporting both sync and async code.
+ * @param params - Expects `{ tabId: number, execFile: string }` where execFile matches the `__exec-<uuid>.js` pattern.
+ * @returns The script's return value, serialized as JSON. Async scripts are polled until resolved or timed out.
+ */
 export const handleBrowserExecuteScript = async (
   params: Record<string, unknown>,
   id: string | number,
