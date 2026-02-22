@@ -34,7 +34,9 @@ const TabStateHint = ({ plugin }: { plugin: PluginState }) => {
     );
   }
 
-  return <div className="text-muted-foreground px-3 py-2 text-[11px]">Log in to {plugin.displayName}</div>;
+  return (
+    <div className="text-muted-foreground px-3 py-2 text-[11px]">Waiting for {plugin.displayName} to be ready</div>
+  );
 };
 
 const PluginCard = ({
