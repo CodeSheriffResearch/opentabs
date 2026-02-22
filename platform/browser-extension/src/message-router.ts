@@ -75,6 +75,7 @@ const SIDE_PANEL_METHODS = new Set([
   'tool.invocationStart',
   'tool.invocationEnd',
   'plugins.changed',
+  'confirmation.request',
 ]);
 
 // ---------------------------------------------------------------------------

@@ -12,12 +12,20 @@ import {
   getNextRequestId,
   DISPATCH_TIMEOUT_MS,
   MAX_DISPATCH_TIMEOUT_MS,
+  CONFIRMATION_TIMEOUT_MS,
 } from './state.js';
 import { SIDE_PANEL_PROTOCOL_VERSION } from '@opentabs-dev/shared';
 import { mkdir, readdir, rename } from 'node:fs/promises';
 import { join } from 'node:path';
 import type { PluginLogEntry } from './log-buffer.js';
-import type { ServerState, TabMapping, PendingDispatch } from './state.js';
+import type {
+  ServerState,
+  TabMapping,
+  PendingDispatch,
+  ConfirmationDecision,
+  ConfirmationScope,
+  SessionPermissionRule,
+} from './state.js';
 import type {
   ConfigSetAllToolsEnabledParams,
   ConfigSetToolEnabledParams,
@@ -331,6 +339,112 @@ const sendInvocationEnd = (
 };
 
 /**
+ * Send a confirmation request to the extension and return a promise that resolves
+ * with the user's decision. The promise rejects on timeout (30s) or extension disconnect.
+ *
+ * @param state - Server state
+ * @param tool - Browser tool name (e.g., 'browser_execute_script')
+ * @param domain - Target domain (e.g., 'mail.google.com'), or null
+ * @param tabId - Target tab ID, if applicable
+ * @param paramsPreview - Truncated preview of tool parameters
+ * @returns The user's decision: 'allow_once', 'allow_always', or 'deny'
+ */
+const sendConfirmationRequest = (
+  state: ServerState,
+  tool: string,
+  domain: string | null,
+  tabId: number | undefined,
+  paramsPreview: string,
+): Promise<ConfirmationDecision> => {
+  const id = crypto.randomUUID();
+
+  return new Promise<ConfirmationDecision>((resolve, reject) => {
+    const timerId = setTimeout(() => {
+      state.pendingConfirmations.delete(id);
+      reject(new Error('CONFIRMATION_TIMEOUT'));
+    }, CONFIRMATION_TIMEOUT_MS);
+
+    state.pendingConfirmations.set(id, {
+      resolve,
+      reject,
+      timerId,
+      tool,
+      domain,
+      tabId,
+    });
+
+    const sent = sendToExtension(state, {
+      jsonrpc: '2.0',
+      method: 'confirmation.request',
+      params: {
+        id,
+        tool,
+        domain,
+        tabId,
+        paramsPreview,
+        timeoutMs: CONFIRMATION_TIMEOUT_MS,
+      },
+    });
+
+    if (!sent) {
+      clearTimeout(timerId);
+      state.pendingConfirmations.delete(id);
+      reject(new Error('Extension not connected — cannot request confirmation'));
+    }
+  });
+};
+
+/**
+ * Handle a confirmation.response from the extension.
+ * Resolves the pending confirmation promise with the user's decision.
+ * For 'allow_always', also adds a session permission rule.
+ */
+const handleConfirmationResponse = (state: ServerState, params: Record<string, unknown> | undefined): void => {
+  if (!params) return;
+
+  const id = params.id;
+  if (typeof id !== 'string') return;
+
+  const decision = params.decision;
+  if (decision !== 'allow_once' && decision !== 'allow_always' && decision !== 'deny') return;
+
+  const pending = state.pendingConfirmations.get(id);
+  if (!pending) return;
+
+  clearTimeout(pending.timerId);
+  state.pendingConfirmations.delete(id);
+
+  // For allow_always, add a session permission rule based on the scope
+  if (decision === 'allow_always') {
+    const scope = typeof params.scope === 'string' ? (params.scope as ConfirmationScope) : 'tool_domain';
+    const rule: SessionPermissionRule = { tool: pending.tool, domain: pending.domain, scope };
+
+    // Adjust rule fields based on scope
+    if (scope === 'tool_all') {
+      rule.domain = null;
+    } else if (scope === 'domain_all') {
+      rule.tool = null;
+    }
+
+    state.sessionPermissions.push(rule);
+  }
+
+  pending.resolve(decision);
+};
+
+/**
+ * Reject all pending confirmations. Called when the extension disconnects
+ * to clean up any confirmation promises that can no longer be fulfilled.
+ */
+const rejectAllPendingConfirmations = (state: ServerState): void => {
+  for (const [id, pending] of state.pendingConfirmations) {
+    clearTimeout(pending.timerId);
+    pending.reject(new Error('Extension disconnected — confirmation cancelled'));
+    state.pendingConfirmations.delete(id);
+  }
+};
+
+/**
  * Send plugin.update notification to extension with updated plugin metadata.
  * Writes the adapter IIFE to the extension's adapters/ directory first,
  * then sends the notification (without IIFE content) to the extension.
@@ -480,6 +594,11 @@ const handleExtensionMessage = (
 
   if (method === 'plugin.log') {
     handlePluginLog(params, callbacks);
+    return;
+  }
+
+  if (method === 'confirmation.response') {
+    handleConfirmationResponse(state, params);
     return;
   }
 
@@ -931,6 +1050,8 @@ export {
   dispatchToExtension,
   sendInvocationStart,
   sendInvocationEnd,
+  sendConfirmationRequest,
+  rejectAllPendingConfirmations,
   sendPluginUpdate,
   handleExtensionMessage,
   isDispatchError,

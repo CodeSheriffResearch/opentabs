@@ -102,6 +102,29 @@ export interface ToolProgressMessage {
   message?: string;
 }
 
+/** Background → Side panel: confirmation request from MCP server */
+export interface SpConfirmationRequestMessage {
+  type: 'sp:confirmationRequest';
+  data: {
+    id: string;
+    tool: string;
+    domain: string | null;
+    tabId?: number;
+    paramsPreview: string;
+    timeoutMs: number;
+  };
+}
+
+/** Side panel → Background: confirmation response from user */
+export interface SpConfirmationResponseMessage {
+  type: 'sp:confirmationResponse';
+  data: {
+    id: string;
+    decision: 'allow_once' | 'allow_always' | 'deny';
+    scope?: 'tool_domain' | 'tool_all' | 'domain_all';
+  };
+}
+
 /** All internal message types flowing through chrome.runtime.sendMessage */
 export type InternalMessage =
   | OffscreenGetUrlMessage
@@ -118,7 +141,9 @@ export type InternalMessage =
   | ToolProgressMessage
   | SpGetStateMessage
   | SpConnectionStateMessage
-  | SpRelayMessage;
+  | SpRelayMessage
+  | SpConfirmationRequestMessage
+  | SpConfirmationResponseMessage;
 
 /** Lightweight plugin metadata stored in the `plugins_meta` index (no IIFE content) */
 export interface PluginMeta {

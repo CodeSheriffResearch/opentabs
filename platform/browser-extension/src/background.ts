@@ -263,6 +263,20 @@ chrome.runtime.onMessage.addListener((message: InternalMessage, sender, sendResp
       return true;
     }
 
+    case 'sp:confirmationResponse': {
+      // Forward confirmation response from the side panel to the MCP server.
+      // The server resolves the pending confirmation promise with the decision.
+      if (wsConnected) {
+        sendToServer({
+          jsonrpc: '2.0',
+          method: 'confirmation.response',
+          params: message.data,
+        });
+      }
+      sendResponse({ ok: true });
+      return true;
+    }
+
     // Messages handled by other listeners (offscreen, side panel) — not
     // processed here, but included for exhaustiveness so TypeScript flags
     // any new InternalMessage variant that isn't routed somewhere.
@@ -273,6 +287,7 @@ chrome.runtime.onMessage.addListener((message: InternalMessage, sender, sendResp
     case 'sp:getState':
     case 'sp:connectionState':
     case 'sp:serverMessage':
+    case 'sp:confirmationRequest':
       return false;
   }
 });

@@ -156,6 +156,7 @@ describe('tools/call handler — browser tool path', () => {
 
   test('browser tool handler success returns sanitized output', async () => {
     const state = createState();
+    state.skipConfirmation = true;
     state.browserTools = [
       {
         name: 'browser_test',
@@ -182,6 +183,7 @@ describe('tools/call handler — browser tool path', () => {
 
   test('browser tool handler throws returns "Browser tool error: ..." message', async () => {
     const state = createState();
+    state.skipConfirmation = true;
     state.browserTools = [
       {
         name: 'browser_test',

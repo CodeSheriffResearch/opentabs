@@ -75,20 +75,18 @@ describe('getPageGlobal', () => {
     (globalThis as Record<string, unknown>).TS = {
       boot_data: { api_token: 'xoxs-abc' },
     };
-    // With generic: result is string | undefined (no `as` cast needed)
-    const token = getPageGlobal<string>('TS.boot_data.api_token');
+    const token = getPageGlobal('TS.boot_data.api_token') as string | undefined;
     expect(token).toBe('xoxs-abc');
   });
 
-  test('generic defaults to unknown when omitted', () => {
+  test('returns unknown when called without cast', () => {
     (globalThis as Record<string, unknown>).__testGlobal = 42;
-    // Without generic: result is unknown (backward compatible)
     const val = getPageGlobal('__testGlobal');
     expect(val).toBe(42);
   });
 
-  test('generic returns undefined for missing path', () => {
-    const result = getPageGlobal<string>('nonExistent.deep.path');
+  test('returns undefined for missing path', () => {
+    const result = getPageGlobal('nonExistent.deep.path');
     expect(result).toBeUndefined();
   });
 });

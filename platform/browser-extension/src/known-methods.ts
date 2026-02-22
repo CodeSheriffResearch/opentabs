@@ -58,7 +58,12 @@ export const DISPATCH_METHODS = [
  * - handled directly by the offscreen document (pong)
  * - forwarded to the side panel without a dispatch handler (invocation events)
  */
-export const PASSTHROUGH_METHODS = ['pong', 'tool.invocationStart', 'tool.invocationEnd'] as const;
+export const PASSTHROUGH_METHODS = [
+  'pong',
+  'tool.invocationStart',
+  'tool.invocationEnd',
+  'confirmation.request',
+] as const;
 
 /** All methods the offscreen document allows through the WebSocket filter */
 export const ALL_ALLOWED_METHODS = [...DISPATCH_METHODS, ...PASSTHROUGH_METHODS] as const;

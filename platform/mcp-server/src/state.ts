@@ -156,6 +156,47 @@ export interface PluginRegistry {
   readonly failures: readonly FailedPlugin[];
 }
 
+/** Confirmation timeout for human approval (30 seconds) */
+export const CONFIRMATION_TIMEOUT_MS = 30_000;
+
+/** Pending confirmation awaiting human approval */
+export interface PendingConfirmation {
+  resolve: (decision: ConfirmationDecision) => void;
+  reject: (error: Error) => void;
+  timerId: ReturnType<typeof setTimeout>;
+  tool: string;
+  domain: string | null;
+  tabId?: number;
+}
+
+/** Decision from the side panel confirmation dialog */
+export type ConfirmationDecision = 'allow_once' | 'allow_always' | 'deny';
+
+/** Scope for "Allow Always" session permissions */
+export type ConfirmationScope = 'tool_domain' | 'tool_all' | 'domain_all';
+
+/** Session-scoped permission rule created by "Allow Always" */
+export interface SessionPermissionRule {
+  tool: string | null;
+  domain: string | null;
+  scope: ConfirmationScope;
+}
+
+/** Check if a tool+domain combination is allowed by session permissions */
+export const isSessionAllowed = (rules: SessionPermissionRule[], toolName: string, domain: string | null): boolean =>
+  rules.some(rule => {
+    switch (rule.scope) {
+      case 'tool_domain':
+        return rule.tool === toolName && rule.domain === domain;
+      case 'tool_all':
+        return rule.tool === toolName;
+      case 'domain_all':
+        return rule.domain !== null && rule.domain === domain;
+      default:
+        return false;
+    }
+  });
+
 /** Record of a single tool invocation for audit logging */
 export interface AuditEntry {
   /** ISO 8601 timestamp of the invocation */
@@ -255,6 +296,10 @@ export interface ServerState {
   skipConfirmation: boolean;
   /** Permission rules for browser tool confirmation */
   permissions: PermissionsConfig;
+  /** Pending confirmation requests awaiting human approval in the side panel */
+  pendingConfirmations: Map<string, PendingConfirmation>;
+  /** Session-scoped permission rules set by "Allow Always" actions during this server lifetime */
+  sessionPermissions: SessionPermissionRule[];
 }
 
 /** Increment when changing the type of an existing ServerState field */
@@ -306,6 +351,8 @@ export const createState = (): ServerState => ({
     toolPolicy: {},
     domainToolPolicy: {},
   },
+  pendingConfirmations: new Map(),
+  sessionPermissions: [],
 });
 
 /** Generate a cryptographically random JSON-RPC request ID */

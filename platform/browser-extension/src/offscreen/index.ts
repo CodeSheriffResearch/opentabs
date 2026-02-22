@@ -458,6 +458,8 @@ chrome.runtime.onMessage.addListener((message: InternalMessage, sender, sendResp
     case 'sp:getState':
     case 'sp:connectionState':
     case 'sp:serverMessage':
+    case 'sp:confirmationRequest':
+    case 'sp:confirmationResponse':
       break;
   }
 

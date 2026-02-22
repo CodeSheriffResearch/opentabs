@@ -14,7 +14,7 @@
 
 import { saveToolConfig } from './config.js';
 import { isDev } from './dev-mode.js';
-import { handleExtensionMessage, sendSyncFull } from './extension-protocol.js';
+import { handleExtensionMessage, sendSyncFull, rejectAllPendingConfirmations } from './extension-protocol.js';
 import { getLogCount } from './log-buffer.js';
 import { log } from './logger.js';
 import { createMcpServer, notifyToolListChanged } from './mcp-setup.js';
@@ -559,6 +559,10 @@ const createHandleWsClose =
       // Clear the connection token so a new first-connect can proceed
       // without needing a token (no live connection to protect).
       state.connectionToken = null;
+
+      // Reject all pending confirmations immediately so tool dispatch promises
+      // resolve with an error instead of hanging until confirmation timeout.
+      rejectAllPendingConfirmations(state);
 
       // Reject all pending dispatches immediately so MCP clients get a fast
       // error instead of hanging until the 30-second dispatch timeout fires.
