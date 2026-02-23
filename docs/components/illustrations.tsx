@@ -829,6 +829,308 @@ export const ConfigDirectory = () => (
 );
 
 /**
+ * MonorepoStructure — project structure diagram for the Dev Setup page.
+ * Shows the top-level monorepo layout as a terminal-window tree.
+ */
+export const MonorepoStructure = () => (
+  <div className="my-8">
+    <svg
+      viewBox="0 0 560 530"
+      fill="none"
+      xmlns="http://www.w3.org/2000/svg"
+      className="w-full max-w-lg"
+      aria-hidden="true">
+      {/* ── Main box ──────────────────────────────────────── */}
+      {/* Shadow */}
+      <rect x="8" y="8" width="548" height="518" fill="var(--color-foreground)" />
+      {/* Body */}
+      <rect
+        x="4"
+        y="4"
+        width="548"
+        height="518"
+        fill="var(--color-background)"
+        stroke="var(--color-foreground)"
+        strokeWidth="3"
+      />
+      {/* Header */}
+      <rect x="4" y="4" width="548" height="36" fill="var(--color-foreground)" />
+      {/* Traffic lights */}
+      <circle cx="24" cy="22" r="5" fill="var(--color-primary)" />
+      <circle cx="40" cy="22" r="5" fill="var(--color-background)" opacity="0.4" />
+      <circle cx="56" cy="22" r="5" fill="var(--color-background)" opacity="0.4" />
+      <text
+        x="280"
+        y="27"
+        fontSize="12"
+        fontFamily="var(--font-mono), monospace"
+        fill="var(--color-primary)"
+        fontWeight="bold"
+        textAnchor="middle">
+        opentabs/
+      </text>
+
+      {/* ── platform/ ───────────────────────────────────────── */}
+      <text
+        x="28"
+        y="68"
+        fontSize="12"
+        fontFamily="var(--font-mono), monospace"
+        fill="var(--color-primary)"
+        fontWeight="bold">
+        platform/
+      </text>
+      <text
+        x="240"
+        y="68"
+        fontSize="10"
+        fontFamily="var(--font-mono), monospace"
+        fill="var(--color-foreground)"
+        opacity="0.45">
+        Core platform packages (bun workspaces)
+      </text>
+
+      {/* platform sub-entries */}
+      <text x="62" y="94" fontSize="12" fontFamily="var(--font-mono), monospace" fill="var(--color-foreground)">
+        mcp-server/
+      </text>
+      <text
+        x="240"
+        y="94"
+        fontSize="10"
+        fontFamily="var(--font-mono), monospace"
+        fill="var(--color-foreground)"
+        opacity="0.45">
+        MCP server
+      </text>
+
+      <text x="62" y="120" fontSize="12" fontFamily="var(--font-mono), monospace" fill="var(--color-foreground)">
+        browser-extension/
+      </text>
+      <text
+        x="240"
+        y="120"
+        fontSize="10"
+        fontFamily="var(--font-mono), monospace"
+        fill="var(--color-foreground)"
+        opacity="0.45">
+        Chrome extension (MV3)
+      </text>
+
+      <text x="62" y="146" fontSize="12" fontFamily="var(--font-mono), monospace" fill="var(--color-foreground)">
+        plugin-sdk/
+      </text>
+      <text
+        x="240"
+        y="146"
+        fontSize="10"
+        fontFamily="var(--font-mono), monospace"
+        fill="var(--color-foreground)"
+        opacity="0.45">
+        Plugin authoring SDK
+      </text>
+
+      <text x="62" y="172" fontSize="12" fontFamily="var(--font-mono), monospace" fill="var(--color-foreground)">
+        plugin-tools/
+      </text>
+      <text
+        x="240"
+        y="172"
+        fontSize="10"
+        fontFamily="var(--font-mono), monospace"
+        fill="var(--color-foreground)"
+        opacity="0.45">
+        Plugin developer CLI (opentabs-plugin)
+      </text>
+
+      <text x="62" y="198" fontSize="12" fontFamily="var(--font-mono), monospace" fill="var(--color-foreground)">
+        cli/
+      </text>
+      <text
+        x="240"
+        y="198"
+        fontSize="10"
+        fontFamily="var(--font-mono), monospace"
+        fill="var(--color-foreground)"
+        opacity="0.45">
+        User-facing CLI (opentabs)
+      </text>
+
+      <text x="62" y="224" fontSize="12" fontFamily="var(--font-mono), monospace" fill="var(--color-foreground)">
+        shared/
+      </text>
+      <text
+        x="240"
+        y="224"
+        fontSize="10"
+        fontFamily="var(--font-mono), monospace"
+        fill="var(--color-foreground)"
+        opacity="0.45">
+        Shared types and utilities
+      </text>
+
+      <text x="62" y="250" fontSize="12" fontFamily="var(--font-mono), monospace" fill="var(--color-foreground)">
+        create-plugin/
+      </text>
+      <text
+        x="240"
+        y="250"
+        fontSize="10"
+        fontFamily="var(--font-mono), monospace"
+        fill="var(--color-foreground)"
+        opacity="0.45">
+        Plugin scaffolding CLI
+      </text>
+
+      {/* Divider */}
+      <line x1="20" y1="266" x2="540" y2="266" stroke="var(--color-foreground)" strokeWidth="1" opacity="0.15" />
+
+      {/* ── plugins/ ────────────────────────────────────────── */}
+      <text
+        x="28"
+        y="290"
+        fontSize="12"
+        fontFamily="var(--font-mono), monospace"
+        fill="var(--color-primary)"
+        fontWeight="bold">
+        plugins/
+      </text>
+      <text
+        x="240"
+        y="290"
+        fontSize="10"
+        fontFamily="var(--font-mono), monospace"
+        fill="var(--color-foreground)"
+        opacity="0.45">
+        Example plugins (standalone, NOT in workspaces)
+      </text>
+
+      {/* plugins sub-entries */}
+      <text x="62" y="316" fontSize="12" fontFamily="var(--font-mono), monospace" fill="var(--color-foreground)">
+        slack/
+      </text>
+      <text
+        x="240"
+        y="316"
+        fontSize="10"
+        fontFamily="var(--font-mono), monospace"
+        fill="var(--color-foreground)"
+        opacity="0.45">
+        Slack plugin
+      </text>
+
+      <text x="62" y="342" fontSize="12" fontFamily="var(--font-mono), monospace" fill="var(--color-foreground)">
+        e2e-test/
+      </text>
+      <text
+        x="240"
+        y="342"
+        fontSize="10"
+        fontFamily="var(--font-mono), monospace"
+        fill="var(--color-foreground)"
+        opacity="0.45">
+        Test plugin for E2E tests
+      </text>
+
+      {/* Divider */}
+      <line x1="20" y1="358" x2="540" y2="358" stroke="var(--color-foreground)" strokeWidth="1" opacity="0.15" />
+
+      {/* ── Top-level directories ───────────────────────────── */}
+      <text
+        x="28"
+        y="382"
+        fontSize="12"
+        fontFamily="var(--font-mono), monospace"
+        fill="var(--color-primary)"
+        fontWeight="bold">
+        e2e/
+      </text>
+      <text
+        x="240"
+        y="382"
+        fontSize="10"
+        fontFamily="var(--font-mono), monospace"
+        fill="var(--color-foreground)"
+        opacity="0.45">
+        Playwright E2E tests
+      </text>
+
+      <text
+        x="28"
+        y="408"
+        fontSize="12"
+        fontFamily="var(--font-mono), monospace"
+        fill="var(--color-primary)"
+        fontWeight="bold">
+        scripts/
+      </text>
+      <text
+        x="240"
+        y="408"
+        fontSize="10"
+        fontFamily="var(--font-mono), monospace"
+        fill="var(--color-foreground)"
+        opacity="0.45">
+        Dev orchestrator, publish, install scripts
+      </text>
+
+      <text
+        x="28"
+        y="434"
+        fontSize="12"
+        fontFamily="var(--font-mono), monospace"
+        fill="var(--color-primary)"
+        fontWeight="bold">
+        docs/
+      </text>
+      <text
+        x="240"
+        y="434"
+        fontSize="10"
+        fontFamily="var(--font-mono), monospace"
+        fill="var(--color-foreground)"
+        opacity="0.45">
+        Documentation site (Next.js)
+      </text>
+
+      {/* Dashed "more" entry */}
+      <rect
+        x="20"
+        y="452"
+        width="520"
+        height="22"
+        fill="var(--color-background)"
+        stroke="var(--color-foreground)"
+        strokeWidth="1"
+        strokeDasharray="4 3"
+      />
+      <text
+        x="280"
+        y="467"
+        fontSize="10"
+        fontFamily="var(--font-mono), monospace"
+        fill="var(--color-foreground)"
+        opacity="0.4"
+        textAnchor="middle">
+        tsconfig.json, eslint.config.ts, playwright.config.ts...
+      </text>
+
+      {/* Bottom label */}
+      <text
+        x="280"
+        y="502"
+        fontSize="10"
+        fontFamily="var(--font-mono), monospace"
+        fill="var(--color-foreground)"
+        opacity="0.4"
+        textAnchor="middle">
+        platform/ linked via Bun workspaces · plugins/ are standalone
+      </text>
+    </svg>
+  </div>
+);
+
+/**
  * PluginStructure — project structure diagram for the Plugin Development guide.
  * Shows the key files in a scaffolded plugin project as a tree.
  */

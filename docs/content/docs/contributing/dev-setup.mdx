@@ -177,23 +177,7 @@ bun test platform/mcp-server/             # Run tests for a specific package
 
 ## Project Structure
 
-```
-opentabs/
-├── platform/                  # Core platform packages (bun workspaces)
-│   ├── mcp-server/            # MCP server
-│   ├── browser-extension/     # Chrome extension (MV3)
-│   ├── plugin-sdk/            # Plugin authoring SDK
-│   ├── plugin-tools/          # Plugin developer CLI (opentabs-plugin)
-│   ├── cli/                   # User-facing CLI (opentabs)
-│   ├── shared/                # Shared types and utilities
-│   └── create-plugin/         # Plugin scaffolding CLI
-├── plugins/                   # Example plugins (standalone, NOT in workspaces)
-│   ├── slack/                 # Slack plugin
-│   └── e2e-test/              # Test plugin for E2E tests
-├── e2e/                       # Playwright E2E tests
-├── scripts/                   # Dev orchestrator, publish, install scripts
-└── docs/                      # Documentation site (Next.js)
-```
+<MonorepoStructure />
 
 The `platform/` packages are linked via Bun workspaces. Changes to any platform package are immediately visible to other packages after tsc recompiles.
 
