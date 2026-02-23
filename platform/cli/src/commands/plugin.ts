@@ -13,6 +13,7 @@ import {
 } from '../config.js';
 import { parsePort, resolvePort } from '../parse-port.js';
 import { scaffoldPlugin, promptForMissingArgs, ScaffoldError } from '../scaffold.js';
+import { platformExec } from '@opentabs-dev/shared';
 import pc from 'picocolors';
 import { join } from 'node:path';
 import type { Command } from 'commander';
@@ -87,7 +88,7 @@ const handlePluginInstall = async (name: string, options: { port?: number }): Pr
   const pkg = normalizePluginName(name);
   console.log(`Installing ${pc.bold(pkg)}...`);
 
-  const proc = Bun.spawn(['npm', 'install', '-g', pkg], {
+  const proc = Bun.spawn([platformExec('npm'), 'install', '-g', pkg], {
     stdio: ['inherit', 'inherit', 'inherit'],
   });
   const exitCode = await proc.exited;
@@ -144,7 +145,7 @@ const handlePluginRemove = async (name: string, options: { port?: number }): Pro
   const pkg = normalizePluginName(name);
   console.log(`Removing ${pc.bold(pkg)}...`);
 
-  const proc = Bun.spawn(['npm', 'uninstall', '-g', pkg], {
+  const proc = Bun.spawn([platformExec('npm'), 'uninstall', '-g', pkg], {
     stdio: ['inherit', 'inherit', 'inherit'],
   });
   const exitCode = await proc.exited;
@@ -282,7 +283,7 @@ const readLocalPluginInfo = async (
 const scanNpmPlugins = async (): Promise<ListPluginEntry[]> => {
   const entries: ListPluginEntry[] = [];
   try {
-    const proc = Bun.spawn(['npm', 'list', '-g', '--json', '--depth=0'], {
+    const proc = Bun.spawn([platformExec('npm'), 'list', '-g', '--json', '--depth=0'], {
       stdout: 'pipe',
       stderr: 'pipe',
     });
