@@ -145,8 +145,9 @@ const groupCommits = (subjects: string[]): CommitGroups => {
 
     if (type === 'release') continue;
 
-    if (type in groups) {
-      groups[type].push(msg);
+    const bucket = groups[type];
+    if (bucket) {
+      bucket.push(msg);
     } else {
       groups.other.push(msg);
     }
