@@ -2,7 +2,7 @@
  * `opentabs doctor` command — diagnoses the entire OpenTabs setup.
  */
 
-import { getConfigPath, getLocalPluginsFromConfig, readConfig, resolvePluginPath } from '../config.js';
+import { getConfigPath, getExtensionDir, getLocalPluginsFromConfig, readConfig, resolvePluginPath } from '../config.js';
 import { parsePort, resolvePort } from '../parse-port.js';
 import pc from 'picocolors';
 import { existsSync } from 'node:fs';
@@ -109,7 +109,7 @@ const checkExtensionConnected = (data: Record<string, unknown> | null): CheckRes
 };
 
 const checkExtensionInstalled = async (): Promise<{ result: CheckResult; versionFile: string | null }> => {
-  const extensionDir = join(homedir(), '.opentabs', 'extension');
+  const extensionDir = getExtensionDir();
   const manifestPath = join(extensionDir, 'manifest.json');
 
   if (!existsSync(manifestPath)) {

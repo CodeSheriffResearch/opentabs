@@ -58,6 +58,13 @@ beforeAll(() => {
         return new Response('Internal Server Error', { status: 500 });
       }
 
+      if (url.pathname === '/error-503') {
+        return new Response('Service Unavailable', {
+          status: 503,
+          headers: { 'Retry-After': '60' },
+        });
+      }
+
       if (url.pathname === '/invalid-json') {
         return new Response('this is not json', {
           headers: { 'Content-Type': 'application/json' },
@@ -208,7 +215,7 @@ describe('fetchFromPage', () => {
     }
   });
 
-  test('throws ToolError with internal category on 500 status', async () => {
+  test('throws retryable ToolError with internal category on 500 status', async () => {
     try {
       await fetchFromPage(`${baseUrl}/error-500`);
       expect.unreachable('should have thrown');
@@ -217,9 +224,24 @@ describe('fetchFromPage', () => {
       const toolError = error as ToolError;
       expect(toolError.code).toBe('http_error');
       expect(toolError.category).toBe('internal');
-      expect(toolError.retryable).toBe(false);
+      expect(toolError.retryable).toBe(true);
       expect(toolError.message).toContain('HTTP 500');
       expect(toolError.message).toContain('Internal Server Error');
+    }
+  });
+
+  test('throws retryable ToolError with retryAfterMs on 503 status', async () => {
+    try {
+      await fetchFromPage(`${baseUrl}/error-503`);
+      expect.unreachable('should have thrown');
+    } catch (error) {
+      expect(error).toBeInstanceOf(ToolError);
+      const toolError = error as ToolError;
+      expect(toolError.code).toBe('http_error');
+      expect(toolError.category).toBe('internal');
+      expect(toolError.retryable).toBe(true);
+      expect(toolError.retryAfterMs).toBe(60_000);
+      expect(toolError.message).toContain('HTTP 503');
     }
   });
 

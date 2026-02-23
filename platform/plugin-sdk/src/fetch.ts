@@ -24,6 +24,11 @@ export const httpStatusToToolError = (response: Response, message: string): Tool
     const retryAfterMs = retryAfter !== null ? parseRetryAfterMs(retryAfter) : undefined;
     return ToolError.rateLimited(message, retryAfterMs);
   }
+  if (status >= 500) {
+    const retryAfter = status === 503 ? response.headers.get('Retry-After') : null;
+    const retryAfterMs = retryAfter !== null ? parseRetryAfterMs(retryAfter) : undefined;
+    return new ToolError(message, 'http_error', { category: 'internal', retryable: true, retryAfterMs });
+  }
   return new ToolError(message, 'http_error', { category: 'internal' });
 };
 
@@ -85,6 +90,10 @@ export const fetchFromPage = async (url: string, init?: FetchFromPageOptions): P
 /** Shared implementation for fetchJSON and postJSON — fetches, parses JSON, optionally validates. */
 export const fetchJSONImpl = async (url: string, init?: FetchFromPageOptions, schema?: z.ZodType): Promise<unknown> => {
   const response = await fetchFromPage(url, init);
+
+  if (response.status === 204 || response.headers.get('content-length') === '0') {
+    return undefined;
+  }
 
   let data: unknown;
   try {
@@ -250,8 +259,8 @@ export const patchJSON: PatchJSON = (async (
 export interface DeleteJSON {
   /** DELETE and validate the response against a Zod schema. Returns the validated, typed result. */
   <T extends z.ZodType>(url: string, init: FetchFromPageOptions | undefined, schema: T): Promise<z.infer<T>>;
-  /** DELETE with an unchecked cast to T (backward compatible). */
-  <T>(url: string, init?: FetchFromPageOptions): Promise<T>;
+  /** DELETE with an unchecked cast to T. Returns undefined for 204 No Content responses. */
+  <T>(url: string, init?: FetchFromPageOptions): Promise<T | undefined>;
 }
 
 /**

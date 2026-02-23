@@ -27,7 +27,7 @@ import { buildRegistry } from './registry.js';
 import { isOk } from '@opentabs-dev/shared';
 import { statSync, watch } from 'node:fs';
 import { join } from 'node:path';
-import type { ServerState, FileWatcherEntry } from './state.js';
+import type { ServerState, FileWatcherEntry, RegisteredPlugin } from './state.js';
 import type { ManifestTool } from '@opentabs-dev/shared';
 import type { FSWatcher } from 'node:fs';
 
@@ -175,8 +175,8 @@ const handleIifeChange = async (
       return;
     }
 
-    // Update in-memory plugin state
-    plugin.iife = iife;
+    // Build updated fields for the new plugin object
+    const updatedFields: Partial<RegisteredPlugin> = { iife };
 
     // Use the hash embedded in the IIFE by the CLI's hash-setter snippet. The
     // embedded hash is SHA-256 of the core content (before the hash-setter was
@@ -185,7 +185,7 @@ const handleIifeChange = async (
     // produce a value that never matches the runtime adapter hash.
     const embeddedHash = extractEmbeddedAdapterHash(iife);
     if (embeddedHash) {
-      plugin.adapterHash = embeddedHash;
+      updatedFields.adapterHash = embeddedHash;
     }
 
     // Read source map if available
@@ -194,11 +194,18 @@ const handleIifeChange = async (
     try {
       if (await fileExists(sourceMapPath)) {
         sourceMap = await readFileWithRetry(sourceMapPath);
-        plugin.iifeSourceMap = sourceMap;
+        updatedFields.iifeSourceMap = sourceMap;
       }
     } catch {
       // Source map read failed — proceed without it
     }
+
+    // Atomically swap the registry with the updated plugin
+    const updatedPlugin: RegisteredPlugin = { ...plugin, ...updatedFields };
+    const allPlugins = Array.from(state.registry.plugins.values()).map(p =>
+      p.name === pluginName ? updatedPlugin : p,
+    );
+    state.registry = buildRegistry(allPlugins, [...state.registry.failures]);
 
     // Update mtime for polling fallback
     const entry = findEntry(state, pluginDir);
@@ -302,8 +309,8 @@ const handleToolsJsonChange = async (
       return;
     }
 
-    // Update tool definitions
-    plugin.tools = tools;
+    // Build updated fields for the new plugin object
+    const updatedFields: Partial<RegisteredPlugin> = { tools };
 
     // Re-read IIFE from disk so the extension has the latest adapter code.
     // Use the hash embedded in the IIFE rather than recomputing from the full
@@ -314,10 +321,10 @@ const handleToolsJsonChange = async (
     if (await fileExists(iifePath)) {
       try {
         const iife = await readFileWithRetry(iifePath);
-        plugin.iife = iife;
+        updatedFields.iife = iife;
         const embeddedHash = extractEmbeddedAdapterHash(iife);
         if (embeddedHash) {
-          plugin.adapterHash = embeddedHash;
+          updatedFields.adapterHash = embeddedHash;
         }
       } catch {
         // IIFE read failed — the IIFE watcher will handle it separately
@@ -327,12 +334,19 @@ const handleToolsJsonChange = async (
       const sourceMapPath = join(pluginDir, 'dist', 'adapter.iife.js.map');
       try {
         if (await fileExists(sourceMapPath)) {
-          plugin.iifeSourceMap = await readFileWithRetry(sourceMapPath);
+          updatedFields.iifeSourceMap = await readFileWithRetry(sourceMapPath);
         }
       } catch {
         // Source map read failed — proceed without it
       }
     }
+
+    // Atomically swap the registry with the updated plugin
+    const updatedPlugin: RegisteredPlugin = { ...plugin, ...updatedFields };
+    const allPlugins = Array.from(state.registry.plugins.values()).map(p =>
+      p.name === pluginName ? updatedPlugin : p,
+    );
+    state.registry = buildRegistry(allPlugins, [...state.registry.failures]);
 
     // Update mtimes for polling fallback (both tools.json and IIFE were re-read)
     const entry = findEntry(state, pluginDir);

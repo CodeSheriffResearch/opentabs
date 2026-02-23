@@ -54,8 +54,8 @@ export interface BgGetConnectionStateMessage {
 }
 
 /** Background → Offscreen: request log entries from the offscreen LogCollector */
-export interface BgGetLogsMessage {
-  type: 'bg:getLogs';
+export interface OffscreenGetLogsMessage {
+  type: 'offscreen:getLogs';
   options?: {
     level?: 'log' | 'warn' | 'error' | 'info';
     source?: 'background' | 'offscreen' | 'side-panel';
@@ -135,7 +135,7 @@ export type InternalMessage =
   | WsSetUrlMessage
   | BgSendMessage
   | BgGetConnectionStateMessage
-  | BgGetLogsMessage
+  | OffscreenGetLogsMessage
   | BgForceReconnectMessage
   | PluginLogsMessage
   | ToolProgressMessage

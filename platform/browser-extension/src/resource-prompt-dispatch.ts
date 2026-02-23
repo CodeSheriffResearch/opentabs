@@ -351,6 +351,12 @@ const handleResourceRead = async (params: Record<string, unknown>, id: string | 
       error: { code: firstError.code, message: firstError.message },
       id,
     });
+  } else {
+    sendToServer({
+      jsonrpc: '2.0',
+      error: { code: -32001, message: 'No usable tab found (all matching tabs have undefined IDs)' },
+      id,
+    });
   }
 };
 
@@ -389,7 +395,11 @@ const handlePromptGet = async (params: Record<string, unknown>, id: string | num
     });
     return;
   }
-  const promptArgs = (rawArgs ?? {}) as Record<string, string>;
+  const rawObj = (rawArgs ?? {}) as Record<string, unknown>;
+  const promptArgs: Record<string, string> = {};
+  for (const [key, val] of Object.entries(rawObj)) {
+    promptArgs[key] = String(val);
+  }
 
   const plugin = await getPluginMeta(pluginName);
   if (!plugin) {
@@ -469,6 +479,12 @@ const handlePromptGet = async (params: Record<string, unknown>, id: string | num
     sendToServer({
       jsonrpc: '2.0',
       error: { code: firstError.code, message: firstError.message },
+      id,
+    });
+  } else {
+    sendToServer({
+      jsonrpc: '2.0',
+      error: { code: -32001, message: 'No usable tab found (all matching tabs have undefined IDs)' },
       id,
     });
   }

@@ -21,7 +21,7 @@ import { sanitizeErrorMessage } from './sanitize-error.js';
 import { findAllMatchingTabs } from './tab-matching.js';
 import { getLastKnownStates } from './tab-state.js';
 import { isBlockedUrlScheme } from '@opentabs-dev/shared';
-import type { BgForceReconnectMessage, BgGetLogsMessage, SpGetStateMessage } from './extension-messages.js';
+import type { BgForceReconnectMessage, OffscreenGetLogsMessage, SpGetStateMessage } from './extension-messages.js';
 import type { LogEntry, LogFilterOptions, LogStats } from './log-collector.js';
 
 interface CdpFrame {
@@ -1950,9 +1950,9 @@ export const handleExtensionGetLogs = async (params: Record<string, unknown>, id
     };
     try {
       const raw: unknown = await chrome.runtime.sendMessage({
-        type: 'bg:getLogs',
+        type: 'offscreen:getLogs',
         options: Object.keys(filterOptions).length > 0 ? filterOptions : undefined,
-      } satisfies BgGetLogsMessage);
+      } satisfies OffscreenGetLogsMessage);
       const response = raw as { entries?: LogEntry[]; stats?: LogStats } | undefined;
       if (response && Array.isArray(response.entries)) {
         offscreenEntries = response.entries;

@@ -73,7 +73,13 @@ const followFile = async (filePath: string, initialOffset: number, filter?: stri
       readRequested = true;
       return;
     }
-    const currentSize = statSync(filePath).size;
+    let currentSize: number;
+    try {
+      currentSize = statSync(filePath).size;
+    } catch {
+      // File was deleted (e.g., server restart removed old log) — skip this cycle
+      return;
+    }
     if (currentSize < offset) {
       // File was truncated (e.g., new server start) — read from beginning
       offset = 0;
@@ -151,7 +157,10 @@ const handleLogs = async (options: LogsOptions): Promise<void> => {
 
   const lineCount = options.lines ?? DEFAULT_LINES;
   const { content, fileSize } = await tailFile(logFilePath, lineCount, filter);
-  if (content) process.stdout.write(content);
+  if (content) {
+    process.stdout.write(content);
+    if (!content.endsWith('\n')) process.stdout.write('\n');
+  }
 
   if (options.follow !== false) {
     await followFile(logFilePath, fileSize, filter);

@@ -425,7 +425,7 @@ chrome.runtime.onMessage.addListener((message: InternalMessage, sender, sendResp
       return true;
     }
 
-    case 'bg:getLogs': {
+    case 'offscreen:getLogs': {
       sendResponse({
         entries: offscreenLogCollector.getEntries(message.options),
         stats: offscreenLogCollector.getStats(),

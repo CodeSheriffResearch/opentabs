@@ -103,7 +103,7 @@ const checkBearerAuth = (req: Request, wsSecret: string | null): Response | null
 };
 
 /** Allowed hostnames for the Host header (DNS rebinding protection) */
-const ALLOWED_HOSTS = new Set(['localhost', '127.0.0.1', '::1']);
+const ALLOWED_HOSTS = new Set(['localhost', '127.0.0.1', '::1', '::ffff:127.0.0.1']);
 
 /**
  * Check whether a Host header value refers to a localhost address.
@@ -267,7 +267,9 @@ const createHandleFetch =
       const authError = checkBearerAuth(req, state.wsSecret);
       if (authError) return authError;
       const wsUrl = `ws://${url.host}/ws`;
-      return Response.json({ wsUrl, wsSecret: state.wsSecret });
+      const body: Record<string, string> = { wsUrl };
+      if (state.wsSecret) body.wsSecret = state.wsSecret;
+      return Response.json(body);
     }
 
     // --- Health endpoint ---

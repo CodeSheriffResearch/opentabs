@@ -546,8 +546,21 @@ const handleExtensionMessage = (
     log.debug('dispatch ← extension:', pending.label, 'id:', id, 'in', `${Date.now() - pending.startTs}ms`);
 
     if ('error' in parsed) {
-      const err = parsed.error as { code: number; message: string; data?: Record<string, unknown> };
-      const error = new DispatchError(err.message, err.code, err.data);
+      const rawErr = parsed.error;
+      const errObj =
+        rawErr !== null && typeof rawErr === 'object' && !Array.isArray(rawErr)
+          ? (rawErr as Record<string, unknown>)
+          : {};
+      const errCode = typeof errObj.code === 'number' ? errObj.code : -32603;
+      const errMsg = typeof errObj.message === 'string' ? errObj.message : 'Unknown extension error';
+      const errData =
+        errObj.data !== null &&
+        errObj.data !== undefined &&
+        typeof errObj.data === 'object' &&
+        !Array.isArray(errObj.data)
+          ? (errObj.data as Record<string, unknown>)
+          : undefined;
+      const error = new DispatchError(errMsg, errCode, errData);
       pending.reject(error);
     } else {
       pending.resolve(parsed.result);

@@ -129,6 +129,19 @@ const handleAuditFromFile = async (options: AuditOptions): Promise<void> => {
     return;
   }
 
+  const MAX_AUDIT_FILE_SIZE = 10 * 1024 * 1024; // 10MB
+  const fileSize = auditFile.size;
+  if (fileSize > MAX_AUDIT_FILE_SIZE) {
+    console.error(
+      pc.red(
+        `Audit log file is too large (${(fileSize / 1024 / 1024).toFixed(1)}MB, limit ${MAX_AUDIT_FILE_SIZE / 1024 / 1024}MB). ` +
+          'Consider rotating or truncating ' +
+          auditPath,
+      ),
+    );
+    return;
+  }
+
   const raw = await auditFile.text();
   const lines = raw.split('\n').filter(line => line.trim().length > 0);
 

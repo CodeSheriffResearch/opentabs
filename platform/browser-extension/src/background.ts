@@ -1,4 +1,3 @@
-import { bgLogCollector } from './background-log-state.js';
 import { KEEPALIVE_ALARM, KEEPALIVE_INTERVAL_MINUTES, PLUGINS_META_KEY, WS_CONNECTED_KEY } from './constants.js';
 import { injectPluginsIntoTab, reinjectStoredPlugins } from './iife-injection.js';
 import { handleServerMessage, clearConfirmationBadge, clearAllConfirmationBadges } from './message-router.js';
@@ -149,7 +148,7 @@ const EXTENSION_ONLY_TYPES: ReadonlySet<InternalMessage['type']> = new Set([
   'ws:message',
   'bg:send',
   'bg:getConnectionState',
-  'bg:getLogs',
+  'offscreen:getLogs',
 ]);
 
 chrome.runtime.onMessage.addListener((message: InternalMessage, sender, sendResponse) => {
@@ -212,11 +211,6 @@ chrome.runtime.onMessage.addListener((message: InternalMessage, sender, sendResp
 
     case 'bg:getConnectionState': {
       sendResponse({ connected: wsConnected });
-      return true;
-    }
-
-    case 'bg:getLogs': {
-      sendResponse({ entries: bgLogCollector.getEntries(message.options), stats: bgLogCollector.getStats() });
       return true;
     }
 
@@ -286,6 +280,7 @@ chrome.runtime.onMessage.addListener((message: InternalMessage, sender, sendResp
     case 'ws:getState':
     case 'ws:setUrl':
     case 'bg:forceReconnect':
+    case 'offscreen:getLogs':
     case 'sp:getState':
     case 'sp:connectionState':
     case 'sp:serverMessage':
