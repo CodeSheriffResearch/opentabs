@@ -1,12 +1,11 @@
 /**
- * Onboarding E2E tests — verify side panel state transitions for new users,
- * plugin discovery, disconnection, and onboarding reset.
+ * Side panel empty-state E2E tests — verify side panel state transitions
+ * for empty plugins, plugin discovery, and disconnection.
  *
- * These tests exercise the side panel's onboarding state machine:
- *   - Fresh extension with 0 plugins → onboarding view (Welcome to OpenTabs)
+ * These tests exercise the side panel's state machine:
+ *   - 0 plugins → "No Plugins Installed" card
  *   - Adding a plugin → transition to plugin list
- *   - Server disconnect → disconnected state (not onboarding)
- *   - "Show setup guide" resets hasEverHadPlugins → onboarding view reappears
+ *   - Server disconnect → "Cannot Reach MCP Server" card
  *
  * All tests use dynamic ports and isolated config directories.
  */
@@ -27,13 +26,13 @@ import os from 'node:os';
 import path from 'node:path';
 
 // ---------------------------------------------------------------------------
-// Onboarding state tests
+// Empty state tests
 // ---------------------------------------------------------------------------
 
-test.describe('Onboarding states', () => {
-  test('fresh extension with 0 plugins shows onboarding view with welcome heading and checklist', async () => {
+test.describe('Empty states', () => {
+  test('extension with 0 plugins shows no-plugins card with opentabs plugin command', async () => {
     // Start MCP server with empty config (no plugins)
-    const configDir = fs.mkdtempSync(path.join(os.tmpdir(), 'opentabs-e2e-onboard-fresh-'));
+    const configDir = fs.mkdtempSync(path.join(os.tmpdir(), 'opentabs-e2e-empty-fresh-'));
     writeTestConfig(configDir, { localPlugins: [], tools: {} });
 
     const server = await startMcpServer(configDir, true);
@@ -46,27 +45,11 @@ test.describe('Onboarding states', () => {
       // Open the side panel
       const sidePanelPage = await openSidePanel(context);
 
-      // Verify the onboarding heading is visible
-      await expect(sidePanelPage.locator('text=Welcome to OpenTabs')).toBeVisible({ timeout: 10_000 });
+      // Verify the no-plugins heading is visible
+      await expect(sidePanelPage.locator('text=No Plugins Installed')).toBeVisible({ timeout: 10_000 });
 
-      // Verify the setup checklist items are visible
-      await expect(sidePanelPage.locator('text=MCP server running')).toBeVisible({ timeout: 5_000 });
-      await expect(sidePanelPage.locator('text=Plugins installed')).toBeVisible({ timeout: 5_000 });
-
-      // "MCP server running" should be checked (server is connected)
-      // "Plugins installed" should be unchecked (0 plugins)
-      // The description text should be visible
-      await expect(sidePanelPage.locator('text=OpenTabs gives AI agents access to your web apps')).toBeVisible({
-        timeout: 5_000,
-      });
-
-      // Install instruction should be present
-      await expect(sidePanelPage.locator('text=npm install -g opentabs-plugin-slack')).toBeVisible({
-        timeout: 5_000,
-      });
-
-      // Search suggestion should be present
-      await expect(sidePanelPage.locator('text=opentabs plugin search')).toBeVisible({ timeout: 5_000 });
+      // The opentabs plugin command should be present
+      await expect(sidePanelPage.locator('text=opentabs plugin')).toBeVisible({ timeout: 5_000 });
 
       await sidePanelPage.close();
     } finally {
@@ -77,9 +60,9 @@ test.describe('Onboarding states', () => {
     }
   });
 
-  test('adding a plugin transitions the side panel from onboarding to plugin list', async () => {
+  test('adding a plugin transitions the side panel from no-plugins to plugin list', async () => {
     // Start MCP server with empty config (no plugins)
-    const configDir = fs.mkdtempSync(path.join(os.tmpdir(), 'opentabs-e2e-onboard-transition-'));
+    const configDir = fs.mkdtempSync(path.join(os.tmpdir(), 'opentabs-e2e-empty-transition-'));
     writeTestConfig(configDir, { localPlugins: [], tools: {} });
 
     const server = await startMcpServer(configDir, true);
@@ -90,9 +73,9 @@ test.describe('Onboarding states', () => {
       await waitForExtensionConnected(server);
       await waitForLog(server, 'Config watcher: Watching', 10_000);
 
-      // Open the side panel and verify onboarding state
+      // Open the side panel and verify no-plugins state
       const sidePanelPage = await openSidePanel(context);
-      await expect(sidePanelPage.locator('text=Welcome to OpenTabs')).toBeVisible({ timeout: 10_000 });
+      await expect(sidePanelPage.locator('text=No Plugins Installed')).toBeVisible({ timeout: 10_000 });
 
       // Add a plugin via config.json modification
       const absPluginPath = path.resolve(E2E_TEST_PLUGIN_DIR);
@@ -103,8 +86,8 @@ test.describe('Onboarding states', () => {
       }
       writeTestConfig(configDir, { localPlugins: [absPluginPath], tools });
 
-      // Verify the onboarding view disappears and the plugin list appears
-      await expect(sidePanelPage.locator('text=Welcome to OpenTabs')).toBeHidden({ timeout: 30_000 });
+      // Verify the no-plugins view disappears and the plugin list appears
+      await expect(sidePanelPage.locator('text=No Plugins Installed')).toBeHidden({ timeout: 30_000 });
       await expect(sidePanelPage.locator('button[aria-expanded]')).toBeVisible({ timeout: 10_000 });
       await expect(sidePanelPage.locator('text=E2E Test')).toBeVisible({ timeout: 5_000 });
 
@@ -117,9 +100,9 @@ test.describe('Onboarding states', () => {
     }
   });
 
-  test('disconnected state shows when server stops, not onboarding', async () => {
+  test('disconnected state shows when server stops, not no-plugins', async () => {
     // Start MCP server with empty config (no plugins)
-    const configDir = fs.mkdtempSync(path.join(os.tmpdir(), 'opentabs-e2e-onboard-disconnect-'));
+    const configDir = fs.mkdtempSync(path.join(os.tmpdir(), 'opentabs-e2e-empty-disconnect-'));
     writeTestConfig(configDir, { localPlugins: [], tools: {} });
 
     const server = await startMcpServer(configDir, true);
@@ -129,16 +112,16 @@ test.describe('Onboarding states', () => {
     try {
       await waitForExtensionConnected(server);
 
-      // Open the side panel and verify onboarding state
+      // Open the side panel and verify no-plugins state
       const sidePanelPage = await openSidePanel(context);
-      await expect(sidePanelPage.locator('text=Welcome to OpenTabs')).toBeVisible({ timeout: 10_000 });
+      await expect(sidePanelPage.locator('text=No Plugins Installed')).toBeVisible({ timeout: 10_000 });
 
       // Kill the MCP server
       await server.kill();
 
-      // Verify the disconnected state appears (not onboarding)
+      // Verify the disconnected state appears (not no-plugins)
       await expect(sidePanelPage.locator('text=Cannot Reach MCP Server')).toBeVisible({ timeout: 30_000 });
-      await expect(sidePanelPage.locator('text=Welcome to OpenTabs')).toBeHidden({ timeout: 5_000 });
+      await expect(sidePanelPage.locator('text=No Plugins Installed')).toBeHidden({ timeout: 5_000 });
 
       await sidePanelPage.close();
     } finally {
@@ -148,8 +131,8 @@ test.describe('Onboarding states', () => {
     }
   });
 
-  test('"Show setup guide" resets onboarding from returning user empty state', async () => {
-    // Start MCP server WITH the e2e-test plugin to set hasEverHadPlugins
+  test('removing all plugins shows no-plugins card', async () => {
+    // Start MCP server WITH the e2e-test plugin
     const absPluginPath = path.resolve(E2E_TEST_PLUGIN_DIR);
     const prefixedToolNames = readPluginToolNames();
     const tools: Record<string, boolean> = {};
@@ -157,7 +140,7 @@ test.describe('Onboarding states', () => {
       tools[t] = true;
     }
 
-    const configDir = fs.mkdtempSync(path.join(os.tmpdir(), 'opentabs-e2e-onboard-reset-'));
+    const configDir = fs.mkdtempSync(path.join(os.tmpdir(), 'opentabs-e2e-empty-remove-'));
     writeTestConfig(configDir, { localPlugins: [absPluginPath], tools });
 
     const server = await startMcpServer(configDir, true);
@@ -168,30 +151,15 @@ test.describe('Onboarding states', () => {
       await waitForExtensionConnected(server);
       await waitForLog(server, 'Config watcher: Watching', 10_000);
 
-      // Open the side panel and verify plugin is visible (sets hasEverHadPlugins = true)
+      // Open the side panel and verify plugin is visible
       const sidePanelPage = await openSidePanel(context);
       await expect(sidePanelPage.locator('text=E2E Test')).toBeVisible({ timeout: 30_000 });
 
-      // Remove all plugins via config.json to trigger ReturningUserEmptyState
+      // Remove all plugins via config.json
       writeTestConfig(configDir, { localPlugins: [], tools: {} });
 
-      // Verify the returning user empty state appears
+      // Verify the no-plugins card appears
       await expect(sidePanelPage.locator('text=No Plugins Installed')).toBeVisible({ timeout: 30_000 });
-      await expect(sidePanelPage.locator('text=Show setup guide')).toBeVisible({ timeout: 5_000 });
-
-      // Click "Show setup guide" to reset hasEverHadPlugins.
-      // The button uses a two-click confirmation pattern: first click shows
-      // "Click again to confirm", second click triggers onResetOnboarding.
-      await sidePanelPage.locator('text=Show setup guide').click();
-      await sidePanelPage.locator('text=Click again to confirm').click();
-
-      // Verify the onboarding view appears
-      await expect(sidePanelPage.locator('text=Welcome to OpenTabs')).toBeVisible({ timeout: 10_000 });
-      await expect(sidePanelPage.locator('text=No Plugins Installed')).toBeHidden({ timeout: 5_000 });
-
-      // Verify the onboarding checklist is present
-      await expect(sidePanelPage.locator('text=MCP server running')).toBeVisible({ timeout: 5_000 });
-      await expect(sidePanelPage.locator('text=Plugins installed')).toBeVisible({ timeout: 5_000 });
 
       await sidePanelPage.close();
     } finally {

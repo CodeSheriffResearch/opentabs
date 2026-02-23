@@ -6,13 +6,11 @@ import {
   sendConfirmationResponse,
 } from './bridge.js';
 import { ConfirmationDialog } from './components/ConfirmationDialog.js';
-import { DisconnectedState, LoadingState } from './components/EmptyStates.js';
+import { DisconnectedState, NoPluginsState, LoadingState } from './components/EmptyStates.js';
 import { Footer } from './components/Footer.js';
-import { OnboardingState } from './components/OnboardingState.js';
 import { OutdatedPluginsBadge } from './components/OutdatedPluginsBadge.js';
 import { PluginList } from './components/PluginList.js';
 import { Input } from './components/retro/Input.js';
-import { ReturningUserEmptyState } from './components/ReturningUserEmptyState.js';
 import { VALID_PLUGIN_NAME } from '../constants.js';
 import { Search, X } from 'lucide-react';
 import { useState, useEffect, useCallback, useRef } from 'react';
@@ -21,8 +19,6 @@ import type { InternalMessage } from '../extension-messages.js';
 import type { ConfirmationData } from './components/ConfirmationDialog.js';
 import type { OutdatedPlugin } from './components/OutdatedPluginsBadge.js';
 import type { TabState } from '@opentabs-dev/shared';
-
-const STORAGE_KEY_HAS_EVER_HAD_PLUGINS = 'hasEverHadPlugins';
 
 const validTabStates: ReadonlySet<string> = new Set<TabState>(['closed', 'unavailable', 'ready']);
 
@@ -33,7 +29,6 @@ const App = () => {
   const [loading, setLoading] = useState(true);
   const [activeTools, setActiveTools] = useState<Set<string>>(new Set());
   const [toolFilter, setToolFilter] = useState('');
-  const [hasEverHadPlugins, setHasEverHadPlugins] = useState<boolean | null>(null);
   const [outdatedPlugins, setOutdatedPlugins] = useState<OutdatedPlugin[]>([]);
   const [pendingConfirmations, setPendingConfirmations] = useState<ConfirmationData[]>([]);
 
@@ -43,13 +38,11 @@ const App = () => {
   const connectedRef = useRef(connected);
   const loadingRef = useRef(loading);
   const pluginsRef = useRef(plugins);
-  const hasEverHadPluginsRef = useRef(hasEverHadPlugins);
 
   useEffect(() => {
     connectedRef.current = connected;
     loadingRef.current = loading;
     pluginsRef.current = plugins;
-    hasEverHadPluginsRef.current = hasEverHadPlugins;
   });
 
   const loadPlugins = useCallback(() => {
@@ -69,20 +62,10 @@ const App = () => {
         setPlugins(updatedPlugins);
         setFailedPlugins(result.failedPlugins);
         setOutdatedPlugins(result.outdatedPlugins);
-        if (updatedPlugins.length > 0 && hasEverHadPluginsRef.current !== true) {
-          setHasEverHadPlugins(true);
-          void chrome.storage.local.set({ [STORAGE_KEY_HAS_EVER_HAD_PLUGINS]: true });
-        }
       })
       .catch(() => {
         // Server may not be ready yet
       });
-  }, []);
-
-  useEffect(() => {
-    void chrome.storage.local.get(STORAGE_KEY_HAS_EVER_HAD_PLUGINS).then(result => {
-      setHasEverHadPlugins(result[STORAGE_KEY_HAS_EVER_HAD_PLUGINS] === true);
-    });
   }, []);
 
   useEffect(() => {
@@ -180,7 +163,6 @@ const App = () => {
             loading: loadingRef.current,
             pluginCount: currentPlugins.length,
             plugins: currentPlugins.map(p => ({ name: p.name, tabState: p.tabState })),
-            hasEverHadPlugins: hasEverHadPluginsRef.current,
           },
           html,
         });
@@ -260,6 +242,7 @@ const App = () => {
   const totalTools = plugins.reduce((sum, p) => sum + p.tools.length, 0);
   const hasContent = plugins.length > 0 || failedPlugins.length > 0;
   const showPlugins = !loading && connected && hasContent;
+  const showSearchBar = connected && !loading && (totalTools > 5 || outdatedPlugins.length > 0);
 
   return (
     <div className="text-foreground flex min-h-screen flex-col">
@@ -270,8 +253,8 @@ const App = () => {
           onDenyAll={handleDenyAll}
         />
       )}
-      {connected && !loading && (totalTools > 5 || outdatedPlugins.length > 0) && (
-        <div className="flex items-center gap-2 px-3 py-2">
+      {showSearchBar && (
+        <div className="flex items-center gap-2 px-3 pt-3 pb-2">
           {totalTools > 5 && (
             <div className="relative min-w-0 flex-1">
               <Search className="text-muted-foreground pointer-events-none absolute top-1/2 left-2 h-4 w-4 -translate-y-1/2" />
@@ -295,22 +278,14 @@ const App = () => {
           <OutdatedPluginsBadge outdatedPlugins={outdatedPlugins} />
         </div>
       )}
-      <main className={`flex-1 px-3 py-2 ${showPlugins ? '' : 'flex items-center justify-center'}`}>
-        {loading || hasEverHadPlugins === null ? (
+      <main
+        className={`flex-1 px-3 pb-2 ${showSearchBar ? 'pt-2' : 'pt-3'} ${showPlugins ? '' : 'flex items-center justify-center'}`}>
+        {loading ? (
           <LoadingState />
         ) : !connected ? (
           <DisconnectedState />
         ) : !hasContent ? (
-          hasEverHadPlugins ? (
-            <ReturningUserEmptyState
-              onResetOnboarding={() => {
-                setHasEverHadPlugins(false);
-                void chrome.storage.local.set({ [STORAGE_KEY_HAS_EVER_HAD_PLUGINS]: false });
-              }}
-            />
-          ) : (
-            <OnboardingState connected={connected} pluginCount={plugins.length} />
-          )
+          <NoPluginsState />
         ) : (
           <PluginList
             plugins={plugins}

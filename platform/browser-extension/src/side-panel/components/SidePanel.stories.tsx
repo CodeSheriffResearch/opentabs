@@ -1,12 +1,9 @@
-import { DisconnectedState, LoadingState } from './EmptyStates';
-import { OnboardingState } from './OnboardingState';
+import { DisconnectedState, NoPluginsState, LoadingState } from './EmptyStates';
 import { PluginList } from './PluginList';
 import { Button } from './retro/Button';
 import { Input } from './retro/Input';
-import { ReturningUserEmptyState } from './ReturningUserEmptyState';
 import { Moon, Search, Sun, X } from 'lucide-react';
 import { useState } from 'react';
-import { fn } from 'storybook/test';
 import type { FailedPluginState, PluginState } from '../bridge';
 import type { Meta, StoryObj } from '@storybook/react';
 
@@ -297,18 +294,10 @@ const Disconnected: Story = {
   ),
 };
 
-const FirstTimeUser: Story = {
+const NoPlugins: Story = {
   render: () => (
     <SidePanelShell centered>
-      <OnboardingState connected={true} pluginCount={0} />
-    </SidePanelShell>
-  ),
-};
-
-const ReturningUser: Story = {
-  render: () => (
-    <SidePanelShell centered>
-      <ReturningUserEmptyState onResetOnboarding={fn()} />
+      <NoPluginsState />
     </SidePanelShell>
   ),
 };
@@ -502,8 +491,7 @@ export default meta;
 export {
   Loading,
   Disconnected,
-  FirstTimeUser,
-  ReturningUser,
+  NoPlugins,
   SinglePluginReady,
   SinglePluginClosed,
   SinglePluginUnavailable,
