@@ -44,7 +44,7 @@ export default async function DocPage({ params }: IProps) {
       <div className="w-full max-w-2xl min-w-0 flex-1 overflow-hidden px-4 py-12">
         <h1 className="mb-4 text-4xl font-bold tracking-tight">{doc.title}</h1>
         <MDX code={doc.body} />
-        <p className="mt-12 text-right">Last Updated: {format(new Date(doc.lastUpdated), 'dd MMM, yyy')}</p>
+        <p className="mt-12 text-right">Last Updated: {format(new Date(doc.lastUpdated), 'dd MMM, yyyy')}</p>
       </div>
 
       {/* Table of Contents */}

@@ -23,9 +23,9 @@ const badgeVariants = cva('font-semibold rounded-(--radius) inline-flex items-ce
   },
 });
 
-interface ButtonProps extends HTMLAttributes<HTMLSpanElement>, VariantProps<typeof badgeVariants> {}
+interface BadgeProps extends HTMLAttributes<HTMLSpanElement>, VariantProps<typeof badgeVariants> {}
 
-export const Badge = ({ children, size = 'md', variant = 'default', className = '', ...props }: ButtonProps) => (
+export const Badge = ({ children, size = 'md', variant = 'default', className = '', ...props }: BadgeProps) => (
   <span className={cn(badgeVariants({ variant, size }), className)} {...props}>
     {children}
   </span>

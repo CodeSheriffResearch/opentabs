@@ -43,7 +43,9 @@ const Footer = () => (
 
     <div className="bg-foreground">
       <div className="mx-auto max-w-6xl px-4 py-6 text-center">
-        <Text className="text-background text-sm">&copy; 2025 OpenTabs. Open source under MIT license.</Text>
+        <Text className="text-background text-sm">
+          &copy; {new Date().getFullYear()} OpenTabs. Open source under MIT license.
+        </Text>
       </div>
     </div>
   </footer>

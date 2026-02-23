@@ -39,10 +39,10 @@ const docComponents = {
   h4: (props: HTMLAttributes<HTMLHeadingElement>) => (
     <Text as="h4" className="mt-6 mb-2 [&:first-child]:mt-0" {...props} />
   ),
-  h5: (props: HTMLAttributes<HTMLHeadElement>) => (
+  h5: (props: HTMLAttributes<HTMLHeadingElement>) => (
     <Text as="h5" className="mt-4 mb-1 [&:first-child]:mt-0" {...props} />
   ),
-  h6: (props: HTMLAttributes<HTMLHeadElement>) => (
+  h6: (props: HTMLAttributes<HTMLHeadingElement>) => (
     <Text as="h6" className="mt-4 mb-1 [&:first-child]:mt-0" {...props} />
   ),
   p: (props: HTMLAttributes<HTMLParagraphElement>) => <Text className="mb-4 leading-relaxed" {...props} />,
