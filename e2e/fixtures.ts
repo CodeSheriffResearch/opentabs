@@ -1364,16 +1364,19 @@ const fetchWsInfo = async (port: number, secret?: string): Promise<{ wsUrl: stri
       signal: AbortSignal.timeout(3_000),
     });
     if (res.ok) {
-      const info = (await res.json()) as { wsUrl?: string; wsSecret?: string };
+      const info = (await res.json()) as { wsUrl?: string };
       return {
         wsUrl: typeof info.wsUrl === 'string' ? info.wsUrl : `ws://localhost:${port}/ws`,
-        wsSecret: typeof info.wsSecret === 'string' ? info.wsSecret : null,
+        // The server intentionally does not return the secret in /ws-info
+        // (security: prevents leaking it in HTTP responses). The caller
+        // already has the secret — pass it through for WebSocket auth.
+        wsSecret: secret ?? null,
       };
     }
   } catch {
     // Server may not support /ws-info yet
   }
-  return { wsUrl: `ws://localhost:${port}/ws`, wsSecret: null };
+  return { wsUrl: `ws://localhost:${port}/ws`, wsSecret: secret ?? null };
 };
 
 export { expect } from '@playwright/test';

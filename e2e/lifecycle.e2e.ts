@@ -385,7 +385,7 @@ test.describe('WebSocket authentication', () => {
     expect(result).not.toBe('timeout');
   });
 
-  test('/ws-info returns URL and secret as separate fields', async ({ mcpServer }) => {
+  test('/ws-info returns URL without leaking the secret', async ({ mcpServer }) => {
     const headers: Record<string, string> = {};
     if (mcpServer.secret) headers['Authorization'] = `Bearer ${mcpServer.secret}`;
     const res = await fetch(`http://localhost:${mcpServer.port}/ws-info`, {
@@ -398,8 +398,10 @@ test.describe('WebSocket authentication', () => {
     const info = (await res.json()) as { wsUrl: string; wsSecret?: string };
     expect(info.wsUrl).toBe(`ws://localhost:${mcpServer.port}/ws`);
     expect(info.wsUrl).not.toContain('token=');
-    expect(typeof info.wsSecret).toBe('string');
-    expect((info.wsSecret ?? '').length).toBeGreaterThan(0);
+    // The server intentionally does not return wsSecret in the response body
+    // to prevent leaking it in HTTP responses. The extension already has the
+    // secret from auth.json (written to the extension directory at install time).
+    expect(info.wsSecret).toBeUndefined();
   });
 
   test('authenticated WS connection via sec-websocket-protocol succeeds and exchanges ping/pong', async ({
