@@ -1,3 +1,117 @@
+## v0.0.23
+
+### Features
+
+- US-003 — add comprehensive E2E tests for plugin management JSON-RPC APIs
+- US-002 — add plugin.updateFromRegistry, plugin.remove, and plugin.checkUpdates JSON-RPC APIs
+- US-001 — add plugin.search and plugin.install JSON-RPC APIs on MCP server
+- US-009 — E2E test fixtures write auth.json with secret only (no port)
+- US-008 — distinct side panel error states for connection refused vs auth failure
+- US-007 — side panel footer port display and inline editor
+- US-006 — offscreen document listens for port changes and reconnects
+- US-005 — offscreen document reads port from chrome.storage.local instead of auth.json
+- US-004 — opentabs-plugin build reads secret from auth.json instead of config.json
+- US-003 — CLI commands read secret from auth.json instead of config.json
+- US-003 — consolidate plugin status into single PluginIcon indicator
+- US-002 — server reads/writes secret exclusively from auth.json
+- US-001 — move outdated plugin info onto ConfigStatePlugin
+- US-001 — remove secret from OpentabsConfig, make auth.json single source of truth
+- US-005 - Add comprehensive JSDoc documentation to E2E fixtures and helpers
+- US-003 — delete build-artifacts.e2e.ts, tests build tooling not runtime
+- US-002 — remove redundant plugin-logging tests 2-4
+- US-004 - Create comprehensive CONTRIBUTING.md for human contributors
+- US-001 — delete hot-reload-tools.e2e.ts, covered by hot-reload-dynamic.e2e.ts
+- merge conflict breadcrumb files + document ralph in CLAUDE.md
+- US-003 - Auto-run tsc from opentabs-plugin build when dist/index.js is missing
+- US-002 — show tab state hint on collapsed plugin card header
+- US-003 — remove unnecessary PromptDefinition type casts
+- US-002 - Change logs command to default to no-follow with explicit --follow/-f flag
+- US-001 - Fix doctor command to send auth header on health check
+- US-001 — add status dot indicator to PluginIcon based on tab state
+- US-002 — add postFormData utility for multipart form submissions
+- US-001 — add postForm utility for URL-encoded form submissions
+- US-004 - Include resource and prompt counts in build success message
+- US-011 — fix scripts/dev.ts signal handling and publish.ts type error
+- US-003 - Surface resource and prompt validation warnings during plugin build
+- US-010 — rewrite scripts/publish.sh as cross-platform TypeScript script
+- US-002 - Log warnings when version check fails to reach npm registry
+- US-009 — replace hardcoded /tmp paths with os.tmpdir() in unit tests
+- US-008 — fix E2E symlinks to use junctions on Windows
+- US-001 - Add logging to silent catch blocks in resolver.ts npm discovery
+- US-007 - Add docs/CLAUDE.md with complete illustration table
+- US-007 — fix E2E killProcess helper for Windows signal support
+- US-006 - Add first plugin workflow illustration to first-plugin page
+- US-005 - Add installation paths illustration to install page
+- US-004 - Add 'How It Works' illustration to introduction page
+- US-003 - Add error categories illustration to error-handling.mdx
+- US-002 - Add lifecycle hooks sequence illustration to lifecycle-hooks.mdx
+- US-006 — make E2E global teardown cross-platform
+- US-005 — fix signal handling (SIGINT/SIGTERM) for Windows compatibility
+- US-004 — use platformExec for cross-platform Bun.spawn command resolution
+- US-003 — fix path separator hardcoding in resolver.ts
+- US-002 — replace duplicated atomicWrite implementations with shared helper
+- US-001 — extract cross-platform helpers module in platform/shared
+
+### Bug Fixes
+
+- prevent ralph from deleting unmerged conflict branches on re-dispatch
+- US-005 — fix edge cases: PORT validation, log level parsing, build lock staleness, retry maxDelay
+- US-002 — fix contradictory browser tool descriptions for screenshot and focus
+- US-001 — fix SVG sanitizer strippedDepth tracking bug
+- US-005 — correct troubleshooting auth, health fields, override keyword
+- US-004 — document missing SDK exports: postForm, postFormData, Zod overloads, prompt args, resource schema
+- US-005 — remove unused theme variant infrastructure
+- US-003 — correct optional fields, factory method signatures, and error codes in SDK reference
+- US-004 — improve accessibility: skip nav, hamburger menu aria, mobile overlay
+- US-003 — fix CSS bugs: scrollbar colors, WebKit scrollbar visibility, syntax highlighting
+- US-002 — correct scaffold directory, publishing docs, and contributing URLs
+- US-002 — remove dead code: blog components, stale IDs, unused CSS, broken image URLs
+- US-001 — correct CLI reference for logs, config, plugin create, and doctor
+- US-001 — fix TypeScript type bugs and date format error
+- align E2E tests with stale plugin path skip behavior
+- US-016 — fix extension protocol, prompt args, isLocalhostHost, and audit size guard
+- US-015 — fix network capture data loss and select-option validation
+- US-014 — replace Zod instanceof checks with safeParse and remove dead code
+- US-013 — fix analyze-site detection module logic errors
+- add ignoreDependencies for workspace-linked @opentabs-dev packages in knip config
+- US-012 — use getExtensionDir() in doctor and handle ENOENT in logs
+- US-011 — fix sanitizeOutput security bypass and \_setLogTransport idempotency
+- US-010 — prevent TOCTOU race in registerInConfig and normalize plugin path format
+- US-009 — prevent overlapping async predicate calls in waitUntil and abort-responsive sleep in retry
+- US-008 — persist log buffers and global path cache across bun --hot reloads
+- US-007 — mark HTTP 5xx errors as retryable in SDK fetch utilities
+- US-006 — use distinct offscreen:getLogs message type to prevent duplicate log entries
+- US-005 — atomic registry updates in file watcher to prevent mutation of immutable plugins
+- US-004 — use document.documentElement in DOM utilities to prevent null body crash
+- US-003 — handle 204 No Content in deleteJSON and fetchJSONImpl
+- US-002 — ensure dispatch functions always send JSON-RPC responses
+- US-001 — add null safety and try-catch for executeInTab in analyze-site
+
+### Refactoring
+
+- US-004 — add toErrorMessage utility and replace err instanceof Error pattern
+- US-003 — extract shared constants: DEFAULT_PORT, artifact filenames, config paths, generateSecret
+- remove unnecessary postMessage monkey-patch from log relay nonce injection
+
+### Tests
+
+- US-002 — remove duplicate buildRegistry tests from mcp-setup.test.ts
+- US-001 — remove duplicate isAllowedPluginPath and discoverGlobalNpmPlugins tests from discovery.test.ts
+- add inline hint text assertions to E2E tab state tests
+
+### Documentation
+
+- US-010 — document auth.json single source of truth and port configuration in CLAUDE.md
+
+### Other
+
+- Merge branch 'ralph-2026-02-22-212018-auth-secret-single-source'
+- remove plugin card text hints and add defensive stale bundle cleanup to side panel build
+- increase side panel padding to 16px to respect Chrome rounded viewport corners
+- add bottom padding to side panel footer for Chrome rounded viewport corners
+- simplify side panel empty state: remove first-time/returning user distinction
+- add 'honesty over agreement' as a core principle in CLAUDE.md
+
 ## v0.0.22
 
 ### Bug Fixes
