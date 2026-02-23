@@ -257,18 +257,18 @@ describe('writeAuthFile', () => {
     Bun.env.OPENTABS_CONFIG_DIR = TEST_BASE_DIR;
   });
 
-  test('writes auth.json with secret and port', async () => {
-    await writeAuthFile('test-secret-abc', 9515);
+  test('writes auth.json with secret only (no port)', async () => {
+    await writeAuthFile('test-secret-abc');
 
     const file = Bun.file(authPath);
     expect(await file.exists()).toBe(true);
-    const content = JSON.parse(await file.text()) as { secret: string; port: number };
+    const content = JSON.parse(await file.text()) as Record<string, unknown>;
     expect(content.secret).toBe('test-secret-abc');
-    expect(content.port).toBe(9515);
+    expect(content).not.toHaveProperty('port');
   });
 
   test('writes auth.json with restrictive permissions (0600)', async () => {
-    await writeAuthFile('perm-test-secret', 9876);
+    await writeAuthFile('perm-test-secret');
 
     const stats = statSync(authPath);
     // 0o600 = owner read/write only (octal 33188 = 0o100600 including file type bits)
@@ -276,11 +276,10 @@ describe('writeAuthFile', () => {
   });
 
   test('overwrites existing auth.json on subsequent calls', async () => {
-    await writeAuthFile('first-secret', 9515);
-    await writeAuthFile('second-secret', 9999);
+    await writeAuthFile('first-secret');
+    await writeAuthFile('second-secret');
 
-    const content = JSON.parse(await Bun.file(authPath).text()) as { secret: string; port: number };
+    const content = JSON.parse(await Bun.file(authPath).text()) as Record<string, unknown>;
     expect(content.secret).toBe('second-secret');
-    expect(content.port).toBe(9999);
   });
 });

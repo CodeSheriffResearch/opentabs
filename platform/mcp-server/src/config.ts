@@ -378,13 +378,13 @@ const saveToolConfig = async (
 /**
  * Write auth.json to the managed extension directory so the Chrome extension
  * can bootstrap the shared secret without an unauthenticated HTTP request.
- * Called on every reload so the port and secret stay in sync with the running server.
+ * auth.json contains only the secret — port configuration lives in chrome.storage.local.
  */
-const writeAuthFile = async (secret: string, port: number): Promise<void> => {
+const writeAuthFile = async (secret: string): Promise<void> => {
   const extensionDir = getExtensionDir();
   await mkdir(extensionDir, { recursive: true });
   const authPath = join(extensionDir, 'auth.json');
-  await atomicWrite(authPath, JSON.stringify({ secret, port }) + '\n', 0o600);
+  await atomicWrite(authPath, JSON.stringify({ secret }) + '\n', 0o600);
 };
 
 /**
