@@ -15,6 +15,7 @@ import {
   DEFAULT_PORT,
   getConfigPath,
   parsePluginPackageJson,
+  toErrorMessage,
 } from '@opentabs-dev/shared';
 import pc from 'picocolors';
 import { z } from 'zod';
@@ -348,7 +349,7 @@ const convertToolSchemas = (tool: ToolDefinition) => {
     throw new Error(
       `Tool "${tool.name}" input schema failed to serialize to JSON Schema. ` +
         `Schemas cannot use .transform(), .pipe(), or .preprocess() — these produce runtime-only behavior ` +
-        `that cannot be represented in JSON Schema. ${err instanceof Error ? err.message : String(err)}`,
+        `that cannot be represented in JSON Schema. ${toErrorMessage(err)}`,
     );
   }
 
@@ -359,7 +360,7 @@ const convertToolSchemas = (tool: ToolDefinition) => {
     throw new Error(
       `Tool "${tool.name}" output schema failed to serialize to JSON Schema. ` +
         `Schemas cannot use .transform(), .pipe(), or .preprocess() — these produce runtime-only behavior ` +
-        `that cannot be represented in JSON Schema. ${err instanceof Error ? err.message : String(err)}`,
+        `that cannot be represented in JSON Schema. ${toErrorMessage(err)}`,
     );
   }
 
@@ -938,7 +939,7 @@ const handleBuild = async (options: { watch?: boolean }): Promise<void> => {
   try {
     await runBuild(projectDir);
   } catch (err: unknown) {
-    console.error(pc.red(`Error: ${err instanceof Error ? err.message : String(err)}`));
+    console.error(pc.red(`Error: ${toErrorMessage(err)}`));
     process.exit(1);
   }
 
@@ -949,9 +950,7 @@ const handleBuild = async (options: { watch?: boolean }): Promise<void> => {
       console.log(pc.green('Registered in ~/.opentabs/config.json'));
     }
   } catch (err: unknown) {
-    console.warn(
-      pc.yellow(`Warning: Could not auto-register plugin: ${err instanceof Error ? err.message : String(err)}`),
-    );
+    console.warn(pc.yellow(`Warning: Could not auto-register plugin: ${toErrorMessage(err)}`));
   }
   try {
     await notifyServer();
@@ -984,9 +983,7 @@ const handleBuild = async (options: { watch?: boolean }): Promise<void> => {
         // Notification failures are non-fatal
       }
     } catch (err: unknown) {
-      console.error(
-        pc.red(`[${formatTimestamp()}] Rebuild failed: ${err instanceof Error ? err.message : String(err)}`),
-      );
+      console.error(pc.red(`[${formatTimestamp()}] Rebuild failed: ${toErrorMessage(err)}`));
     } finally {
       building = false;
       if (pendingRebuild) {

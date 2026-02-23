@@ -4,7 +4,7 @@
 
 import { atomicWriteConfig, getConfigPath, getExtensionDir, isConnectionRefused, readConfig } from '../config.js';
 import { resolvePort } from '../parse-port.js';
-import { atomicWrite, generateSecret } from '@opentabs-dev/shared';
+import { atomicWrite, generateSecret, toErrorMessage } from '@opentabs-dev/shared';
 import pc from 'picocolors';
 import { mkdir } from 'node:fs/promises';
 import { homedir } from 'node:os';
@@ -393,7 +393,7 @@ const handleRotateSecret = async (options: { port?: number }): Promise<void> => 
   try {
     await writeAuthFile(newSecret, port);
   } catch (err) {
-    console.warn(pc.yellow(`Warning: Could not write auth.json: ${err instanceof Error ? err.message : String(err)}`));
+    console.warn(pc.yellow(`Warning: Could not write auth.json: ${toErrorMessage(err)}`));
   }
 
   // Notify the running server using the OLD secret

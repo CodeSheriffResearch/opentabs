@@ -2,7 +2,14 @@
  * Config file helpers shared across CLI commands.
  */
 
-import { atomicWrite, getConfigDir, getConfigPath, getExtensionDir, getLogFilePath } from '@opentabs-dev/shared';
+import {
+  atomicWrite,
+  getConfigDir,
+  getConfigPath,
+  getExtensionDir,
+  getLogFilePath,
+  toErrorMessage,
+} from '@opentabs-dev/shared';
 import { dirname, resolve, isAbsolute } from 'node:path';
 
 export { getConfigDir, getConfigPath, getExtensionDir, getLogFilePath };
@@ -24,7 +31,7 @@ export const readConfig = async (configPath: string): Promise<ConfigResult> => {
     return {
       config: null,
       error: 'invalid',
-      message: `Invalid JSON: ${err instanceof Error ? err.message : String(err)}`,
+      message: `Invalid JSON: ${toErrorMessage(err)}`,
     };
   }
   if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) {
