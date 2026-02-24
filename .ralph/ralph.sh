@@ -857,10 +857,21 @@ dispatch_prd() {
   # Build the e2e-test plugin (standalone, outside workspace). Its node_modules
   # and dist/ are gitignored, so worktrees don't have them. Unit tests in
   # platform/plugin-tools depend on this plugin being built.
+  # OPENTABS_CONFIG_DIR is set to a throwaway temp directory for the build step
+  # so `opentabs-plugin build` skips auto-registration into the real
+  # ~/.opentabs/config.json (the temp dir has no config.json, so
+  # registerInConfig() no-ops). Without this, every worktree build pollutes
+  # the real config with ephemeral worktree paths that become "Failed to load"
+  # errors when the worktree is cleaned up.
   if [ -f "$worktree_dir/plugins/e2e-test/package.json" ]; then
     echo -e "$(ts) ${CYAN}[${tag}]${RESET} ${DIM}Building e2e-test plugin...${RESET}"
-    (cd "$worktree_dir/plugins/e2e-test" && bun install --frozen-lockfile 2>&1 | tail -1 && bun run build 2>&1 | tail -1) || \
+    local plugin_tmp_config
+    plugin_tmp_config=$(mktemp -d)
+    (cd "$worktree_dir/plugins/e2e-test" \
+      && bun install --frozen-lockfile 2>&1 | tail -1 \
+      && OPENTABS_CONFIG_DIR="$plugin_tmp_config" bun run build 2>&1 | tail -1) || \
       echo -e "$(ts) ${CYAN}[${tag}]${RESET} ${YELLOW}e2e-test plugin build failed (non-fatal).${RESET}"
+    rm -rf "$plugin_tmp_config"
   fi
 
   # Launch the worker in the background.
