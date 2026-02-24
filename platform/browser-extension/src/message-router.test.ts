@@ -129,7 +129,9 @@ await mock.module('./messaging.js', () => ({
 }));
 
 await mock.module('./tool-dispatch.js', () => ({
+  getPluginLink: mock(),
   handleToolDispatch: mockHandleToolDispatch,
+  notifyDispatchProgress: mock(),
 }));
 
 await mock.module('./resource-prompt-dispatch.js', () => ({

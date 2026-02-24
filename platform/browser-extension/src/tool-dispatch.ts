@@ -393,4 +393,4 @@ const handleToolDispatch = async (params: Record<string, unknown>, id: string | 
   });
 };
 
-export { handleToolDispatch, notifyDispatchProgress };
+export { getPluginLink, handleToolDispatch, notifyDispatchProgress };
