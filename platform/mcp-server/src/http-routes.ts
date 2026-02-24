@@ -132,17 +132,15 @@ const isLocalhostHost = (hostHeader: string): boolean => {
 };
 
 // --- Rate limiting for administrative endpoints ---
-const endpointCallTimestamps = new Map<string, number[]>();
-
-const checkEndpointRateLimit = (endpoint: string, maxPerMinute: number): boolean => {
+const checkEndpointRateLimit = (state: ServerState, endpoint: string, maxPerMinute: number): boolean => {
   const now = Date.now();
-  const timestamps = (endpointCallTimestamps.get(endpoint) ?? []).filter(t => now - t < 60_000);
+  const timestamps = (state.endpointCallTimestamps.get(endpoint) ?? []).filter(t => now - t < 60_000);
   if (timestamps.length >= maxPerMinute) {
-    endpointCallTimestamps.set(endpoint, timestamps);
+    state.endpointCallTimestamps.set(endpoint, timestamps);
     return false;
   }
   timestamps.push(now);
-  endpointCallTimestamps.set(endpoint, timestamps);
+  state.endpointCallTimestamps.set(endpoint, timestamps);
   return true;
 };
 
@@ -370,7 +368,7 @@ const createHandleFetch =
     if (url.pathname === '/reload' && req.method === 'POST') {
       const authError = checkBearerAuth(req, state.wsSecret);
       if (authError) return authError;
-      if (!checkEndpointRateLimit('/reload', 10)) {
+      if (!checkEndpointRateLimit(state, '/reload', 10)) {
         return new Response('Too Many Requests', { status: 429, headers: { 'Retry-After': '60' } });
       }
       try {
@@ -391,7 +389,7 @@ const createHandleFetch =
     if (url.pathname === '/extension/reload' && req.method === 'POST') {
       const authError = checkBearerAuth(req, state.wsSecret);
       if (authError) return authError;
-      if (!checkEndpointRateLimit('/extension/reload', 10)) {
+      if (!checkEndpointRateLimit(state, '/extension/reload', 10)) {
         return new Response('Too Many Requests', { status: 429, headers: { 'Retry-After': '60' } });
       }
       if (!state.extensionWs) {
@@ -425,7 +423,7 @@ const createHandleFetch =
         }
 
         // New session — rate-limit session creation to prevent resource exhaustion
-        if (!checkEndpointRateLimit('/mcp-session-create', 5)) {
+        if (!checkEndpointRateLimit(state, '/mcp-session-create', 5)) {
           return new Response('Too Many Requests', { status: 429, headers: { 'Retry-After': '60' } });
         }
 
