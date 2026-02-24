@@ -3,7 +3,7 @@
   "configVersion": 1,
   "workspaces": {
     "": {
-      "name": "@opentabs-dev/opentabs-plugin-e2e-test",
+      "name": "@opentabs-dev/opentabs-plugin-slack",
       "dependencies": {
         "@opentabs-dev/plugin-sdk": "^0.0.26",
       },

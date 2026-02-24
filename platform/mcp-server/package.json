@@ -1,6 +1,6 @@
 {
   "name": "@opentabs-dev/mcp-server",
-  "version": "0.0.25",
+  "version": "0.0.26",
   "type": "module",
   "exports": {
     ".": "./dist/index.js"

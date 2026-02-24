@@ -1,3 +1,30 @@
+## v0.0.26
+
+### Features
+
+- US-005 - Add Chrome API version guards for sidePanel.onOpened/onClosed
+- US-004 - Consolidate duplicate requireStringParam utility
+- US-003 - Fix confirmation badge count drift on timeout
+- handle Network.loadingFailed CDP event in network-capture.ts
+
+### Bug Fixes
+
+- remove duplicate OPENTABS_SKIP_NPM_DISCOVERY property in E2E fixtures
+- US-005 — remove redundant loadSecret() call in index.ts
+- improve CLI UX with suggestion/help-after-error and remove redundant root action
+- serialize sendTabSyncAll through per-plugin locks and isolate E2E from npm auto-discovery
+- US-004 — deduplicate sessionPermissions to prevent unbounded array growth
+- US-003 — validate ConfirmationScope before casting in handleConfirmationResponse
+- US-002 — add .catch() to fire-and-forget sendSyncFull in WebSocket open handler
+- US-001 — add SIGKILL fallback and timeout guard to runNpmGlobal
+- US-003 — optimize pruneStaleState filter and fix E2E test isolation
+- clear orphaned setTimeout in probeTabReadiness
+- stabilize reload test against globally-installed npm plugins
+- use git add -f for plugin files in publish script
+- add plugins.changed to offscreen allowlist for side panel auto-refresh
+- US-002 — move audit-disk initialized flag to globalThis for hot-reload safety
+- US-001 — remove dangling JSDoc comment opener in loader.ts
+
 ## v0.0.25
 
 ### Features

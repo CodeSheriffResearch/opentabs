@@ -1,6 +1,6 @@
 {
   "name": "@opentabs-dev/plugin-tools",
-  "version": "0.0.25",
+  "version": "0.0.26",
   "type": "module",
   "bin": {
     "opentabs-plugin": "./dist/cli.js"
