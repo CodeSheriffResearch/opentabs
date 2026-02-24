@@ -1,4 +1,6 @@
 import { Accordion } from './Accordion';
+import * as AccordionPrimitive from '@radix-ui/react-accordion';
+import { ChevronDown } from 'lucide-react';
 import type { Meta, StoryObj } from '@storybook/react';
 
 const meta: Meta = {
@@ -12,11 +14,21 @@ const Single: Story = {
   render: () => (
     <Accordion type="single" collapsible className="space-y-2">
       <Accordion.Item value="a">
-        <Accordion.Header>Section A</Accordion.Header>
+        <AccordionPrimitive.Header className="flex">
+          <AccordionPrimitive.Trigger className="font-head flex flex-1 cursor-pointer items-start justify-between px-3 py-2 focus:outline-hidden [&[data-state=open]>svg]:rotate-180">
+            Section A
+            <ChevronDown className="h-4 w-4 shrink-0 transition-transform duration-200" />
+          </AccordionPrimitive.Trigger>
+        </AccordionPrimitive.Header>
         <Accordion.Content className="p-3">Content A</Accordion.Content>
       </Accordion.Item>
       <Accordion.Item value="b">
-        <Accordion.Header>Section B</Accordion.Header>
+        <AccordionPrimitive.Header className="flex">
+          <AccordionPrimitive.Trigger className="font-head flex flex-1 cursor-pointer items-start justify-between px-3 py-2 focus:outline-hidden [&[data-state=open]>svg]:rotate-180">
+            Section B
+            <ChevronDown className="h-4 w-4 shrink-0 transition-transform duration-200" />
+          </AccordionPrimitive.Trigger>
+        </AccordionPrimitive.Header>
         <Accordion.Content className="p-3">Content B</Accordion.Content>
       </Accordion.Item>
     </Accordion>
@@ -27,11 +39,21 @@ const Multiple: Story = {
   render: () => (
     <Accordion type="multiple" defaultValue={['a']} className="space-y-2">
       <Accordion.Item value="a">
-        <Accordion.Header>Open by default</Accordion.Header>
+        <AccordionPrimitive.Header className="flex">
+          <AccordionPrimitive.Trigger className="font-head flex flex-1 cursor-pointer items-start justify-between px-3 py-2 focus:outline-hidden [&[data-state=open]>svg]:rotate-180">
+            Open by default
+            <ChevronDown className="h-4 w-4 shrink-0 transition-transform duration-200" />
+          </AccordionPrimitive.Trigger>
+        </AccordionPrimitive.Header>
         <Accordion.Content className="p-3">This starts open.</Accordion.Content>
       </Accordion.Item>
       <Accordion.Item value="b">
-        <Accordion.Header>Collapsed</Accordion.Header>
+        <AccordionPrimitive.Header className="flex">
+          <AccordionPrimitive.Trigger className="font-head flex flex-1 cursor-pointer items-start justify-between px-3 py-2 focus:outline-hidden [&[data-state=open]>svg]:rotate-180">
+            Collapsed
+            <ChevronDown className="h-4 w-4 shrink-0 transition-transform duration-200" />
+          </AccordionPrimitive.Trigger>
+        </AccordionPrimitive.Header>
         <Accordion.Content className="p-3">Click to expand.</Accordion.Content>
       </Accordion.Item>
     </Accordion>

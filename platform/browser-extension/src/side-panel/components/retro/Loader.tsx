@@ -23,7 +23,6 @@ const loaderVariants = cva('flex gap-1', {
 });
 
 interface LoaderProps extends Omit<React.HTMLAttributes<HTMLDivElement>, 'color'>, VariantProps<typeof loaderVariants> {
-  asChild?: boolean;
   count?: number;
   duration?: number;
   delayStep?: number;
