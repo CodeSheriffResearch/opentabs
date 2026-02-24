@@ -54,7 +54,7 @@ const CountdownBar = ({ timeoutMs, receivedAt }: { timeoutMs: number; receivedAt
 const AllowAlwaysButton = ({ domain, onSelect }: { domain: string | null; onSelect: (scope: Scope) => void }) => (
   <Menu>
     <Menu.Trigger asChild>
-      <Button size="sm" variant="outline" className="gap-1 text-xs">
+      <Button size="sm" variant="outline" className="w-full gap-1 text-xs">
         Allow Always
         <ChevronDown className="h-3 w-3" />
       </Button>
@@ -125,23 +125,25 @@ const ConfirmationDialog = ({ confirmations, onRespond, onDenyAll }: Confirmatio
         </div>
 
         {/* Actions */}
-        <div className="border-accent-foreground flex flex-wrap items-center gap-2 border-t-2 py-2 pr-4 pl-3">
-          <Button size="sm" onClick={() => onRespond(current.id, 'allow_once')}>
+        <div className="border-accent-foreground flex flex-col gap-1.5 border-t-2 py-2 pr-4 pl-3">
+          <Button size="sm" className="w-full" onClick={() => onRespond(current.id, 'allow_once')}>
             Allow Once
           </Button>
           <AllowAlwaysButton domain={current.domain} onSelect={scope => onRespond(current.id, 'allow_always', scope)} />
-          <Button
-            size="sm"
-            variant="outline"
-            className="text-destructive text-xs"
-            onClick={() => onRespond(current.id, 'deny')}>
-            Deny
-          </Button>
-          {count > 1 && (
-            <Button size="sm" variant="outline" className="text-destructive ml-auto text-xs" onClick={onDenyAll}>
-              Deny All
+          <div className="flex items-center gap-2">
+            <Button
+              size="sm"
+              variant="outline"
+              className="text-destructive w-full text-xs"
+              onClick={() => onRespond(current.id, 'deny')}>
+              Deny
             </Button>
-          )}
+            {count > 1 && (
+              <Button size="sm" variant="outline" className="text-destructive w-full text-xs" onClick={onDenyAll}>
+                Deny All
+              </Button>
+            )}
+          </div>
         </div>
 
         {/* Navigation for multiple confirmations */}
