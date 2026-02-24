@@ -38,7 +38,8 @@ tail -f .ralph/ralph.log
 - **Never merge a branch that has an active worktree.** Check `git worktree list` before manually merging any `ralph-*` branch — the worker may still be committing to it.
 - **`--once` mode drains the full queue.** It doesn't exit after the first batch — it keeps dispatching as slots free up until both active workers AND ready PRDs are zero.
 - **Recovery on restart.** Any `~running` PRDs from a crash are renamed back to ready and re-dispatched. Stale worktrees and branches from the previous run are cleaned up by `dispatch_prd`.
-- **Two-phase quality checks.** RALPH.md instructs agents to iterate with fast checks (build, type-check, lint, knip, test) and only run `bun run test:e2e` once before committing. This saves 3-5 minutes per fix cycle.
+- **Conditional E2E via `e2eCheckpoint`.** Each story in a PRD has an `e2eCheckpoint` boolean field. When `true`, the agent runs Phase 2 (full suite including `bun run test:e2e`) after that story. When `false`, the agent runs only Phase 1 (fast checks). This avoids running expensive E2E tests after every story — the PRD author places checkpoints at strategic boundaries (after groups of behavioral changes, and always on the final story).
+- **E2E safety net in ralph.sh.** After all stories complete, `execute_prd_in_worktree` checks whether the last completed story was an `e2eCheckpoint`. If not, ralph runs the full verification suite (build, type-check, lint, knip, test, test:e2e) in the worktree as a safety net. If it fails, ralph launches up to 3 fix iterations (fresh Claude sessions with standalone prompts) to resolve the failures before declaring success. This guarantees E2E tests run at least once per PRD.
 
 ## Log Format
 

@@ -537,6 +537,102 @@ execute_prd_in_worktree() {
     [ -f "$wt_progress" ] && cp "$wt_progress" "$progress_file" 2>/dev/null || true
   }
 
+  # Check if this PRD needs E2E safety net (root monorepo without custom qualityChecks).
+  local has_quality_checks
+  has_quality_checks=$(jq -r '.qualityChecks // ""' "$wt_prd" 2>/dev/null)
+
+  # Safety net: run the full verification suite (including E2E) in the worktree if
+  # the last completed story was not an e2eCheckpoint. Only applies to root monorepo
+  # PRDs (no custom qualityChecks). Returns 0 if all checks pass or are not needed,
+  # 1 if any check fails.
+  _run_e2e_safety_net() {
+    # Skip for standalone subprojects (they have their own qualityChecks)
+    if [ -n "$has_quality_checks" ]; then
+      echo "Safety net: skipped (custom qualityChecks — E2E is not separate)."
+      return 0
+    fi
+
+    # Check if the last completed story (highest priority with passes: true) was an e2eCheckpoint
+    local last_checkpoint
+    last_checkpoint=$(jq '
+      [.userStories[] | select(.passes == true)]
+      | sort_by(.priority)
+      | last
+      | .e2eCheckpoint // false
+    ' "$wt_prd" 2>/dev/null)
+
+    if [ "$last_checkpoint" = "true" ]; then
+      echo "Safety net: skipped (last story was an e2eCheckpoint)."
+      return 0
+    fi
+
+    echo ""
+    echo "── E2E Safety Net ──"
+    echo "Last completed story was not an e2eCheckpoint. Running full suite including E2E before merge..."
+
+    if (cd "$worktree_dir" && bun run build && bun run type-check && bun run lint && bun run knip && bun run test && bun run test:e2e); then
+      echo "Safety net: full suite passed."
+      return 0
+    else
+      echo "Safety net: full suite FAILED."
+      return 1
+    fi
+  }
+
+  # Launch a fix iteration: a fresh Claude session with a prompt to fix safety net
+  # failures. The agent runs in the worktree, fixes the issue, and commits. The
+  # safety net re-runs the full suite after this to verify.
+  _run_e2e_fix_iteration() {
+    local fix_num="$1"
+    echo ""
+    echo "── Safety Net Fix Iteration $fix_num ──"
+
+    local E2E_FIX_PROMPT
+    E2E_FIX_PROMPT="# Safety Net Fix Task
+
+You are an autonomous coding agent running in a git worktree. The safety net verification failed after all PRD stories were completed. Your ONLY task is to fix the failures.
+
+## Steps
+
+1. Run the full verification suite to reproduce the failures:
+   \`\`\`bash
+   bun run build && bun run type-check && bun run lint && bun run knip && bun run test && bun run test:e2e
+   \`\`\`
+2. Read the output carefully to identify which check failed and why
+3. Fix the root cause in the source code (not in the tests, unless the tests themselves are wrong)
+4. Re-run the full verification suite to confirm everything passes
+5. If any check still fails, fix it and re-run again
+6. Once all checks pass, commit your fix:
+   \`\`\`bash
+   git add <changed files>
+   git commit -m \"fix: resolve safety net failures\"
+   \`\`\`
+
+## Rules
+
+- Do NOT read or modify any PRD files in \`.ralph/\`
+- Do NOT pick up or implement any user stories
+- Only fix the verification failures — keep changes minimal and focused
+- Stage only the specific files you changed (never \`git add .\`)
+- Files in \`.ralph/\` must never be committed"
+
+    local FIX_RESULT_FILE
+    FIX_RESULT_FILE=$(mktemp)
+    local FIX_STDERR
+    FIX_STDERR=$(mktemp)
+
+    if [[ "$TOOL" == "amp" ]]; then
+      echo "$E2E_FIX_PROMPT" | (cd "$worktree_dir" && amp --dangerously-allow-all) 2>&1 || true
+    else
+      CLAUDE_ARGS=(--dangerously-skip-permissions --print --output-format stream-json --verbose)
+      [ -n "$MODEL" ] && CLAUDE_ARGS+=(--model "$MODEL")
+      echo "$E2E_FIX_PROMPT" | (cd "$worktree_dir" && claude "${CLAUDE_ARGS[@]}") \
+        2>"$FIX_STDERR" | stream_filter "$FIX_RESULT_FILE" || true
+    fi
+
+    rm -f "$FIX_RESULT_FILE" "$FIX_STDERR"
+  }
+
   # Auto-calculate iterations from remaining stories
   local remaining total buffer max_iterations
   remaining=$(jq '[.userStories[] | select(.passes != true)] | length' "$wt_prd" 2>/dev/null || echo "0")
@@ -567,8 +663,26 @@ execute_prd_in_worktree() {
     if [ "$remaining" -eq 0 ]; then
       echo ""
       echo "All stories pass! Completed before iteration $i."
+
+      # Run E2E safety net before declaring success
+      if _run_e2e_safety_net; then
+        _sync_back
+        return 0
+      fi
+
+      # E2E failed — launch up to 3 fix iterations
+      local max_e2e_fixes=3
+      for fix_i in $(seq 1 $max_e2e_fixes); do
+        _run_e2e_fix_iteration "$fix_i"
+        if _run_e2e_safety_net; then
+          _sync_back
+          return 0
+        fi
+      done
+
+      echo "ERROR: Safety net still failing after $max_e2e_fixes fix attempts."
       _sync_back
-      return 0
+      return 1
     fi
 
     echo ""
@@ -609,8 +723,26 @@ execute_prd_in_worktree() {
       echo ""
       echo "All tasks complete!"
       rm -f "$ITER_RESULT_FILE"
+
+      # Run E2E safety net before declaring success
+      if _run_e2e_safety_net; then
+        _sync_back
+        return 0
+      fi
+
+      # E2E failed — launch up to 3 fix iterations
+      local max_e2e_fixes=3
+      for fix_i in $(seq 1 $max_e2e_fixes); do
+        _run_e2e_fix_iteration "$fix_i"
+        if _run_e2e_safety_net; then
+          _sync_back
+          return 0
+        fi
+      done
+
+      echo "ERROR: Safety net still failing after $max_e2e_fixes fix attempts."
       _sync_back
-      return 0
+      return 1
     fi
 
     rm -f "$ITER_RESULT_FILE"

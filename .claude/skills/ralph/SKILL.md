@@ -73,7 +73,8 @@ No `workingDirectory` or `qualityChecks` — ralph uses the default suite.
 
 Story acceptance criteria must reference the verification commands appropriate for the target project:
 
-- **Root monorepo stories**: `bun run build passes`, `bun run type-check passes`, `bun run lint passes`, `bun run knip passes`, `bun run test passes`, `bun run test:e2e passes`
+- **Root monorepo stories (`e2eCheckpoint: false`)**: `bun run build passes`, `bun run type-check passes`, `bun run lint passes`, `bun run knip passes`, `bun run test passes`
+- **Root monorepo stories (`e2eCheckpoint: true`)**: `bun run build passes`, `bun run type-check passes`, `bun run lint passes`, `bun run knip passes`, `bun run test passes`, `bun run test:e2e passes`
 - **Docs stories**: `cd docs && bun run build passes`, `cd docs && bun run type-check passes`, `cd docs && bun run lint passes`, `cd docs && bun run knip passes`
 - **Plugin stories**: `cd plugins/<name> && bun run build passes`, `cd plugins/<name> && bun run type-check passes`, `cd plugins/<name> && bun run lint passes`
 
@@ -192,6 +193,7 @@ Keep the objective slug to 3-5 words max.
       ],
       "priority": 1,
       "passes": false,
+      "e2eCheckpoint": false,
       "notes": "Context to help the agent implement this story"
     }
   ]
@@ -201,8 +203,9 @@ Keep the objective slug to 3-5 words max.
 **Fields:**
 
 - `workingDirectory` (optional): The subdirectory containing the target project, relative to the repo root (e.g., `"docs"`, `"plugins/slack"`). Omit for root monorepo work. The ralph agent uses this to know which project's conventions and CLAUDE.md to read.
-- `qualityChecks` (optional): A shell command string that overrides the default verification suite. Must match the target project's available scripts. Omit for root monorepo work — the ralph agent uses two-phase verification: fast checks (`build`, `type-check`, `lint`, `knip`, `test`) during iteration, then the full suite including `test:e2e` before committing.
+- `qualityChecks` (optional): A shell command string that overrides the default verification suite. Must match the target project's available scripts. Omit for root monorepo work — the ralph agent uses two-phase verification: Phase 1 (fast checks) always runs, Phase 2 (including `test:e2e`) runs only at `e2eCheckpoint` stories.
 - `passes`: MUST be the boolean `false`, not `null` or omitted. Ralph checks `passes == false` to find incomplete stories.
+- `e2eCheckpoint` (boolean): Controls whether the agent runs E2E tests (Phase 2) after completing this story. Only meaningful for root monorepo PRDs — set to `false` for standalone subproject stories (docs, plugins) since they don't have separate E2E tests. See "E2E Checkpoint Strategy" below.
 
 ---
 
@@ -276,7 +279,7 @@ Each criterion must be something the agent can CHECK, not something vague.
 **Good:** "saveConfig call includes secret field", "z.number() params have .min(1)", "Dropdown shows 3 options"
 **Bad:** "Works correctly", "Handles edge cases", "Good UX"
 
-**Always include the verification suite** as the final acceptance criteria for every story, using commands that match the target project (see "Acceptance Criteria Must Match the Target Project" above).
+**Always include the verification suite** as the final acceptance criteria for every story, using commands that match the target project (see "Acceptance Criteria Must Match the Target Project" above). For root monorepo stories with `e2eCheckpoint: false`, list only the fast checks (build, type-check, lint, knip, test) — do not list `bun run test:e2e`. For `e2eCheckpoint: true` stories, include `bun run test:e2e` as well.
 
 ### Notes Field
 
@@ -288,6 +291,71 @@ Use the `notes` field to give the agent implementation hints:
 - What gotchas to watch for
 
 Good notes dramatically increase success rate per iteration.
+
+---
+
+## E2E Checkpoint Strategy
+
+E2E tests are expensive (3-5 minutes per run, spawning Chromium). Running them after every story wastes significant time when most stories don't affect browser behavior. The `e2eCheckpoint` field controls when the agent runs E2E tests.
+
+**This section only applies to root monorepo PRDs** (where `qualityChecks` is not set). Standalone subprojects (docs, plugins) typically don't have E2E tests — their `qualityChecks` field defines the full verification suite.
+
+### How It Works
+
+- `e2eCheckpoint: true` — the agent runs Phase 1 (fast checks) AND Phase 2 (full suite including `bun run test:e2e`) before committing this story.
+- `e2eCheckpoint: false` — the agent runs Phase 1 only (fast checks: build, type-check, lint, knip, unit tests). No E2E.
+- **Safety net:** Ralph automatically runs the full verification suite (including `bun run test:e2e`) after all stories complete if the final story (last to execute) did not have `e2eCheckpoint: true`. This ensures E2E tests always run at least once per PRD, even if no story is marked as a checkpoint.
+
+### When to Set `e2eCheckpoint: true`
+
+Mark a story as an E2E checkpoint when:
+
+1. **The story changes browser-observable behavior** — tool dispatch, side panel UI, adapter injection, WebSocket communication, or anything that Playwright E2E tests exercise.
+2. **The story is the last in a group of behavioral changes** — if stories US-003 through US-006 all touch the browser extension, mark US-006 as the checkpoint. This batches E2E verification for the group.
+3. **The story is the final story in the PRD** — always mark the last story as a checkpoint so the branch is fully verified before ralph merges it.
+
+### When to Set `e2eCheckpoint: false`
+
+Keep a story as a non-checkpoint when:
+
+1. **The story is purely internal** — type changes, refactoring, lint fixes, documentation, SDK-internal changes that don't affect runtime behavior.
+2. **The story only changes server-side logic verified by unit tests** — if `bun run test` covers the change, E2E adds no value.
+3. **The story is early in a group of related changes** — batch the E2E run to the last story in the group instead.
+
+### Grouping Guidelines
+
+- **Group related behavioral stories together** and put a checkpoint on the last one. A typical group is 2-4 stories.
+- **Don't go more than ~5 stories without a checkpoint** if any of them touch behavior — the longer you wait, the harder it is to diagnose which story caused an E2E failure.
+- **Isolated high-risk stories** (e.g., changing WebSocket protocol, modifying tool dispatch) should be their own checkpoint — don't batch these with other changes.
+- **Always make the final story a checkpoint**, regardless of what it does. This is the last line of defense before merge.
+
+### Example
+
+```json
+{
+  "userStories": [
+    {
+      "id": "US-001",
+      "title": "Add shared types for new feature",
+      "e2eCheckpoint": false,
+      "priority": 1,
+      "passes": false
+    },
+    {
+      "id": "US-002",
+      "title": "Implement server-side handler",
+      "e2eCheckpoint": false,
+      "priority": 2,
+      "passes": false
+    },
+    { "id": "US-003", "title": "Add browser extension adapter", "e2eCheckpoint": true, "priority": 3, "passes": false },
+    { "id": "US-004", "title": "Refactor error messages", "e2eCheckpoint": false, "priority": 4, "passes": false },
+    { "id": "US-005", "title": "Update side panel UI", "e2eCheckpoint": true, "priority": 5, "passes": false }
+  ]
+}
+```
+
+In this example, E2E runs twice: after US-003 (verifies the new adapter works end-to-end) and after US-005 (final story checkpoint, verifies UI changes). Because the final story is a checkpoint, ralph's safety net is skipped — the branch is already fully verified.
 
 ---
 
@@ -330,6 +398,9 @@ Ralph commits code changes only — never ralph's own state files.
 - [ ] Notes field has implementation hints for non-trivial stories
 - [ ] Notes use repo-root-relative file paths
 - [ ] `passes` field is boolean `false` for every story
+- [ ] `e2eCheckpoint` field is set on every story (`false` for standalone subprojects; see "E2E Checkpoint Strategy" for root monorepo)
+- [ ] **For root monorepo PRDs: the final story has `e2eCheckpoint: true`** (ensures E2E runs before merge)
+- [ ] **For root monorepo PRDs: E2E checkpoints are placed at logical group boundaries** for behavioral changes
 - [ ] JSON is valid
 - [ ] File written with `~draft` suffix and NO timestamp in filename
 - [ ] Published via `mv` command with `$(date '+%Y-%m-%d-%H%M%S')` for accurate timestamp

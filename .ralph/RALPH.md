@@ -16,13 +16,14 @@ You are running inside a **git worktree** — an isolated copy of the repository
 8. Implement that single user story (do NOT continue to the next story after this one)
 9. **Run fast checks** to iterate quickly (see "Quality Checks — Two-Phase Verification" below)
 10. **If ANY fast check fails, fix it before proceeding** — even pre-existing failures. See "Own the Codebase" below.
-11. **Once all fast checks pass, run the full suite** including E2E tests (see "Quality Checks — Two-Phase Verification" below)
-12. **If E2E tests fail, fix them** — do NOT skip E2E or commit with failing E2E tests.
-13. Update CLAUDE.md files if you discover reusable patterns (see below)
-14. **Only if ALL checks (fast + full) exit 0**, commit code changes (see Git Rules below)
-15. **After committing**, update the PRD to set `passes: true` for the completed story
-16. **After committing**, append your progress to the matching progress file
-17. **STOP.** Do not pick up another story. Your invocation is done. End your response.
+11. **Check the story's `e2eCheckpoint` field** (see "Quality Checks — Two-Phase Verification" below):
+    - If `e2eCheckpoint: true` → run Phase 2 (full suite including E2E tests). Fix any failures.
+    - If `e2eCheckpoint: false` (or field missing in older PRDs) → skip Phase 2. Phase 1 passing is sufficient to commit.
+12. Update CLAUDE.md files if you discover reusable patterns (see below)
+13. **Only if ALL required checks exit 0**, commit code changes (see Git Rules below)
+14. **After committing**, update the PRD to set `passes: true` for the completed story
+15. **After committing**, append your progress to the matching progress file
+16. **STOP.** Do not pick up another story. Your invocation is done. End your response.
 
 ## Worktree Context
 
@@ -61,7 +62,7 @@ This repository contains multiple projects with different build systems and veri
 | Docs site                 | `docs`             | `cd docs && bun run build && bun run type-check && bun run lint && bun run knip`                          |
 | Plugins                   | `plugins/<name>`   | `cd plugins/<name> && bun run build && bun run type-check && bun run lint`                                |
 
-These are examples. Always trust the PRD's `qualityChecks` field over this table. If the PRD specifies a command, use it verbatim.
+These are examples showing the full verification scope. For root monorepo work, `test:e2e` only runs when the current story has `e2eCheckpoint: true` (see Phase 2 below). Always trust the PRD's `qualityChecks` field over this table. If the PRD specifies a command, use it verbatim.
 
 ## Finding Your Files
 
@@ -76,17 +77,17 @@ Use a glob pattern to find the active PRD: `.ralph/prd-*~running.json`
 
 ## Quality Checks — Two-Phase Verification
 
-Quality checks are split into two phases to keep iteration fast while ensuring full correctness before committing.
+Quality checks are split into two phases to keep iteration fast while ensuring full correctness before committing. The `e2eCheckpoint` field on each story controls whether Phase 2 (E2E tests) runs for that story.
 
 **The PRD is the source of truth for verification.** Do not assume which commands to run.
 
 ### If `qualityChecks` is set in the PRD
 
-Run that exact command. There is no phase split — the PRD command IS the full suite. Run it during iteration and again before committing if you made additional fixes.
+Run that exact command. There is no phase split — the PRD command IS the full suite. The `e2eCheckpoint` field is irrelevant when `qualityChecks` is set (standalone subprojects typically don't have E2E tests). Run it during iteration and again before committing if you made additional fixes.
 
 ### If `qualityChecks` is NOT set (default root monorepo)
 
-#### Phase 1 — Fast checks (run during iteration)
+#### Phase 1 — Fast checks (always run)
 
 Run these after implementing the story and after every fix attempt. They are fast (seconds) and catch most issues:
 
@@ -94,25 +95,37 @@ Run these after implementing the story and after every fix attempt. They are fas
 bun run build && bun run type-check && bun run lint && bun run knip && bun run test
 ```
 
-Loop on Phase 1 until all five commands exit 0. Fix lint errors, type errors, test failures — whatever it takes. Do NOT proceed to Phase 2 until Phase 1 is green.
+Loop on Phase 1 until all five commands exit 0. Fix lint errors, type errors, test failures — whatever it takes. Do NOT proceed to Phase 2 (or commit) until Phase 1 is green.
 
-#### Phase 2 — Full suite (run once before committing)
+#### Phase 2 — Full suite including E2E (conditional on `e2eCheckpoint`)
 
-Once Phase 1 is green, run the full suite including E2E tests:
+**Check the current story's `e2eCheckpoint` field in the PRD:**
 
-```bash
-bun run build && bun run type-check && bun run lint && bun run knip && bun run test && bun run test:e2e
-```
+- **`e2eCheckpoint: true`** → Once Phase 1 is green, run the full suite including E2E tests:
 
-If `bun run test:e2e` fails, fix the issue and re-run the full suite. Do NOT commit with failing E2E tests.
+  ```bash
+  bun run build && bun run type-check && bun run lint && bun run knip && bun run test && bun run test:e2e
+  ```
 
-### Why two phases?
+  If `bun run test:e2e` fails, fix the issue and re-run the full suite. Do NOT commit with failing E2E tests.
 
-E2E tests spawn Chromium browsers and servers — they take 3-5 minutes per run. Running them on every fix cycle wastes time. By iterating with fast checks first, you converge quickly on correct code, then run E2E once as the final gate.
+- **`e2eCheckpoint: false` (or field missing in older PRDs)** → Phase 1 passing is sufficient. Skip `bun run test:e2e` and proceed to commit. Ralph runs a safety-net verification (full suite including E2E) after all stories complete, so skipping here is safe.
 
-### E2E tests are mandatory
+### Why conditional E2E?
 
-**You MUST run `bun run test:e2e` before committing.** This overrides any contrary instruction in CLAUDE.md or elsewhere. Ralph manages process isolation — your worktree has its own process group, and ralph kills all your child processes (Chromium, test servers) when you finish. Port conflicts are impossible (`PORT=0` everywhere). Do NOT skip E2E tests.
+E2E tests spawn Chromium browsers and servers — they take 3-5 minutes per run. Running them after every story wastes significant time when most stories don't affect browser behavior. The PRD author marks strategic checkpoints (after groups of behavioral changes and always on the final story) so E2E runs only when it adds value. Ralph guarantees at least one E2E run per PRD via an automatic safety net before merging.
+
+### Safety net
+
+Ralph runs a final verification gate (the full suite: build, type-check, lint, knip, test, and test:e2e) after all stories complete if the last completed story was not an E2E checkpoint. This ensures E2E tests always run at least once per PRD, even if no story is marked as a checkpoint. If the safety net fails, ralph launches additional iterations to fix the failures before merging.
+
+### RALPH.md overrides CLAUDE.md for verification
+
+The root `CLAUDE.md` says "run every check including `bun run test:e2e`" for every task. **This file (RALPH.md) overrides that instruction for ralph agents.** Follow the `e2eCheckpoint`-based rules above instead. The root CLAUDE.md's verification section applies to interactive development, not ralph-driven automation where the safety net provides the E2E guarantee.
+
+### E2E process isolation
+
+Ralph manages process isolation — your worktree has its own process group, and ralph kills all your child processes (Chromium, test servers) when you finish. Port conflicts are impossible (`PORT=0` everywhere).
 
 **Critical:** Do NOT run the root monorepo's `bun run build` / `bun run type-check` / etc. when working on a standalone subproject. These commands do not cover standalone subprojects and will give you a false green. Conversely, do NOT run a subproject's commands when working on the root monorepo. Always match the verification to the target project as specified in the PRD.
 
@@ -175,7 +188,7 @@ Only update CLAUDE.md if you have **genuinely reusable knowledge** that would he
 
 ## Own the Codebase — Hard Gate
 
-**You MUST NOT commit code unless ALL quality checks exit 0.** This is a hard gate, not a suggestion.
+**You MUST NOT commit code unless ALL required quality checks exit 0** (Phase 1 always; Phase 2 only when `e2eCheckpoint: true`). This is a hard gate, not a suggestion.
 
 If quality checks fail — even on code you did not write — you MUST fix them before committing anything. There are NO exceptions:
 
@@ -187,7 +200,7 @@ If quality checks fail — even on code you did not write — you MUST fix them 
 
 If you cannot fix the failing check within your iteration, do NOT commit your story. Leave it as `passes: false` and document what's blocking in the progress file. A committed story with failing checks is worse than an uncommitted story — it poisons the codebase for all future iterations.
 
-**Both phases must exit 0 end-to-end.** Fast checks (Phase 1) must pass before you proceed to the full suite (Phase 2). The full suite must pass before you commit. If any command in either phase fails, do not commit.
+**All required phases must exit 0 end-to-end.** Phase 1 (fast checks) must always pass before you commit. If the current story has `e2eCheckpoint: true`, Phase 2 (full suite including E2E) must also pass. If any command in any required phase fails, do not commit.
 
 ## Browser Testing (If Available)
 
@@ -210,7 +223,7 @@ git add path/to/file1.ts path/to/file2.ts
 git commit -m "feat: [Story ID] - [Story Title]"
 ```
 
-Steps 15 and 16 (updating the PRD and progress file) must happen **after** the commit, so these files are never in the staging area during a commit.
+Steps 14 and 15 (updating the PRD and progress file) must happen **after** the commit, so these files are never in the staging area during a commit.
 
 ## Stop Condition — CRITICAL
 
