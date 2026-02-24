@@ -1,3 +1,138 @@
+## v0.0.24
+
+### Features
+
+- US-007 - Update CLAUDE.md to reflect the new command surface
+- US-006 - Add safety guard to dev:mcp for missing dist/
+- US-005 - Remove knip from pre-commit hook
+- US-004 - Unify check commands and rename check:all to check:everything
+- US-003 - Consolidate and clean up root package.json scripts
+- US-002 - Make type-check a true --noEmit check and fix check pipeline
+- US-001 - Fix dev orchestrator missing --dev flag for MCP server
+- US-015 - Standardize sendSuccessResult/sendErrorResult usage across all browser commands
+- US-014 - Add unit tests for browser command handler parameter validation
+- US-013 - Add unit tests for iife-injection.ts and tab-state.ts
+- US-012 - Add unit tests for tool-dispatch.ts dispatch pipeline
+- US-011 - Standardize string param validation with requireStringParam across browser commands
+- US-010 - Fix tab-state.ts race condition and extract affected-plugins logic
+- US-006 - Group ServerState file-watching fields into fileWatching sub-object
+- US-009 - Split interaction-commands.ts, fix visibility bug, add requireStringParam
+- US-005 - Extract HTTP route handlers from monolithic createHandleFetch closure
+- US-008 - Refactor offscreen/index.ts: extract duplicated patterns and reduce module-level state
+- US-004 - Add unit tests for adapter-files exec script wrapping and cleanup
+- US-007 - Deduplicate tab collection and teardown logic in iife-injection.ts
+- US-003 - Add dedicated unit tests for extension-handlers confirmation and progress flows
+- US-006 - Extract background.ts onMessage handler into dispatch map with testable handlers
+- US-002 - Extract shared extractToolsArray helper to deduplicate tools.json parsing
+- US-005 - Add wrapSync error boundary and standardize async handler patterns in message-router.ts
+- US-015 - Update .ralph/RALPH.md and .claude/skills/ralph/SKILL.md with new commands
+- US-014 - Update docs/CLAUDE.md with new check command
+- US-004 - Extract confirmation badge/notification logic from message-router.ts
+- US-013 - Update plugins/README.md and plugins/CLAUDE.md with new commands
+- US-012 - Update README.md with new commands
+- US-003 - Extract tab.stateChanged payload builder and deduplicate notification dispatch
+- US-011 - Update CONTRIBUTING.md with new commands and workflows
+- US-001 - Add SIDE_PANEL_WINDOWS_KEY constant and side panel state persistence helpers
+- US-010 - Update root CLAUDE.md with new commands and workflows
+- US-009 - Sync plugin .prettierrc with root configuration
+- US-002 - Extract shared constants for magic numbers across the extension
+- US-006 - Move adaptersDirReady flag from adapter-files.ts module scope to ServerState
+- US-008 - Expand `check:all` to include docs and plugins
+- US-007 - Add `check` script to docs and plugin package.json files
+- US-006 - Add dev:mcp, build:tsc, test:unit, and storybook aliases
+- US-001 - Define JSON-RPC error code constants and replace all magic numbers
+- US-005 - Extract BROWSER_TOOL_NAMES constant to break loader.ts → browser-tools dependency
+- US-005 - Add root-level plugin convenience scripts
+- US-004 - Add root-level docs convenience scripts
+- US-004 - Move rate-limit state from http-routes.ts module scope to ServerState
+- US-003 - Add startup banner and ready message to dev.ts
+- US-003 - Extract handleBrowserToolCall and handlePluginToolCall into mcp-tool-dispatch.ts
+- US-002 - Add colored ANSI prefixes to dev.ts process output
+- US-001 - Add clean and clean:all scripts to root package.json
+- US-002 - Extract extension WebSocket message handlers into extension-handlers.ts
+- US-001 - Extract adapter and exec file I/O from extension-protocol.ts into adapter-files.ts
+- US-006 - Migrate remaining browser command handlers to use shared helpers
+- US-005 - Add unit tests for browser command helpers
+- US-004 - Fix shadow-padding asymmetry in Footer
+- US-004 - Extract browser command helpers for param validation and script result extraction
+- US-003 - Fix shadow-padding asymmetry in ConfirmationDialog actions bar
+- US-002 - Fix shadow-margin asymmetry in ConfirmationDialog outer wrapper
+- US-005 - Extract serializePluginForExtension helper in extension-protocol.ts
+- US-001 - Fix shadow-padding asymmetry in App.tsx main content area and search bar
+- US-003 - Split browser-commands.ts into domain-grouped modules
+- US-004 - Expand EXTENSION_COPY_EXCLUDE_PATTERN to exclude storybook and non-runtime artifacts
+- US-004 - Extract runNpmGlobal helper in plugin-management.ts
+- US-002 - Add unit tests for dispatch-helpers.ts
+- US-003 - Add safety guards against accidental host config access in tests
+- US-003 - Extract sendPluginManagementError helper in extension-protocol.ts
+- US-002 - Deduplicate getConfigDir/getConfigPath in plugin-management.ts
+- US-002 - Extract sendJsonRpcError helper in extension-protocol.ts
+- US-001 - Move ensureSdkVersionInManifest from fixtures.ts to global-setup.ts
+- US-001 - Extract shared dispatch helpers for tab-fallback loop
+- US-001 - Remove dead listEnabledTools from registry.ts
+- US-003 - Add RetroUI Progress primitive
+- US-004 — track confirmation dialog by ID instead of array index
+- US-003 — replace hand-built countdown bar with retro Progress primitive
+- US-002 - Add RetroUI Badge primitive
+- US-002 — replace inline badge spans in PluginCard with retro Badge primitive
+- US-001 - Add RetroUI Menu primitive
+- US-001 — replace hand-styled dropdown with retro Menu primitive
+- add e2eCheckpoint field for conditional E2E testing in ralph
+- replace hand-rolled AllowAlwaysButton dropdown with Radix DropdownMenu
+- lift Tooltip.Provider to App.tsx for skip-delay behavior
+- add orphan guard to e2e subprocess servers
+
+### Bug Fixes
+
+- auto-reload extension after secret rotation
+- secret rotation via POST /reload and MCP client config improvements
+- remove duplicate tab.syncAll on WebSocket reconnect
+- resolve plugin names to official scope and support private package discovery
+- prevent test:e2e pre-build from polluting ~/.opentabs/config.json
+- US-016 - Remove side-panel from clean targets (source files, not build artifacts)
+- make ErrorBoundary reload button full-width inside Alert card
+- stack ConfirmationDialog action buttons vertically to prevent wrapping at narrow widths
+- isolate ralph plugin builds from real config to prevent stale 'Failed to load' errors
+- add chrome API mock and TooltipProvider to Storybook preview
+- use workspace:\* for @opentabs-dev/shared in mcp-server
+- update @opentabs-dev/shared dependency and add missing type annotations
+- add type="button" and cursor-pointer to FailedPluginCard button
+- eliminate flaky onDeactivate lifecycle hook test
+- strip @opentabs-dev scope in pluginNameFromPackage and align E2E tests with current UI
+
+### Refactoring
+
+- US-003 — fix Text export style and document raw Radix usage in PluginCard
+- use workspace:\* for all intra-workspace deps, simplify publish, pre-build ralph worktrees
+- US-002 — remove unused asChild from Loader and dead AccordionHeader
+- US-001 — use cn() consistently in Input and NumberStepper
+- US-002 — add explicit dependency array to ref-sync effect in App.tsx
+- US-001 — extract notification handler from App.tsx useEffect
+- extract matchesTool predicate to deduplicate tool filtering logic
+- extract updatePluginTools helper to DRY setPlugins pattern in PluginCard
+
+### Documentation
+
+- update CLAUDE.md to reflect automatic extension reload on secret rotation
+- add E2E flaky test guidance and pre-build trust note to RALPH.md
+- add UI component preference hierarchy with retro theme requirement
+
+### Chores
+
+- add storybook-static to .gitignore and .prettierignore
+- increase local Playwright workers from 4 to 8
+
+### Other
+
+- remove side panel auto-restore feature (chrome.sidePanel.open requires user gesture)
+
+### Other
+
+- Add scope validation step to ralph skill for quality/refactoring tasks
+- redistribute root CLAUDE.md content to package-specific CLAUDE.md files
+- refactor NumberStepper to use native input[type=number] and fix port sync
+- add NumberStepper component to replace hidden click-to-edit port editor
+
 ## v0.0.23
 
 ### Features
