@@ -260,7 +260,7 @@ await buildExtension();
 
 // 4. Start MCP server with bun --hot
 console.log(`${devPrefix} Starting MCP server (bun --hot)...`);
-const mcp = Bun.spawn(['bun', '--hot', 'platform/mcp-server/dist/index.js'], {
+const mcp = Bun.spawn(['bun', '--hot', 'platform/mcp-server/dist/index.js', '--dev'], {
   cwd: ROOT,
   stdio: ['ignore', 'pipe', 'pipe'],
 });
