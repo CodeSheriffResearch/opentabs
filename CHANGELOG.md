@@ -1,3 +1,17 @@
+## v0.0.25
+
+### Features
+
+- add opentabs update command
+
+### Bug Fixes
+
+- publish script auto-updates plugin deps and rebuilds plugins
+
+### Other
+
+- update ralph skill: widen scope validation to include resource leaks, defensive guards, and architectural inconsistencies
+
 ## v0.0.24
 
 ### Features
