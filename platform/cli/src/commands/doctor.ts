@@ -2,7 +2,14 @@
  * `opentabs doctor` command — diagnoses the entire OpenTabs setup.
  */
 
-import { getConfigPath, getExtensionDir, getLocalPluginsFromConfig, readConfig, resolvePluginPath } from '../config.js';
+import {
+  getConfigPath,
+  getExtensionDir,
+  getLocalPluginsFromConfig,
+  readAuthSecret,
+  readConfig,
+  resolvePluginPath,
+} from '../config.js';
 import { parsePort, resolvePort } from '../parse-port.js';
 import { ADAPTER_FILENAME, TOOLS_FILENAME } from '@opentabs-dev/shared';
 import pc from 'picocolors';
@@ -322,7 +329,7 @@ const handleDoctor = async (options: DoctorOptions): Promise<void> => {
   results.push(configResult);
 
   // 3. MCP server health
-  const secret = config && typeof config.secret === 'string' ? config.secret : null;
+  const secret = await readAuthSecret();
   const { result: serverResult, data: healthData } = await checkServerHealth(port, secret);
   results.push(serverResult);
 
