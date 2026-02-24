@@ -40,7 +40,7 @@ for (const pkg of readdirSync(platformDir, { withFileTypes: true })) {
 // dist/ under e2e/
 remove(join(repoRoot, 'e2e', 'dist'));
 
-// Generated icons (produced by build:icons)
+// Generated icons (produced by scripts/generate-icons.ts during build)
 remove(join(repoRoot, 'platform', 'browser-extension', 'icons'));
 
 // *.tsbuildinfo files under platform/

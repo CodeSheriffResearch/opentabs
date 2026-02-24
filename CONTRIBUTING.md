@@ -76,7 +76,7 @@ bun run build  # builds, registers, and notifies the server
 **Unit tests:**
 
 ```bash
-bun run test        # or: bun run test:unit (alias)
+bun run test
 ```
 
 **E2E tests** (requires the test plugin to be built):
@@ -90,33 +90,32 @@ This builds the `e2e-test` plugin automatically, then runs Playwright.
 **All quality checks at once:**
 
 ```bash
-bun run check       # build + type-check + lint + format + knip + unit tests
-bun run check:all   # everything above + E2E tests + docs checks + plugin checks
+bun run check       # build + lint + format + knip + unit tests
+bun run check:everything   # everything above + E2E tests + docs checks + plugin checks
 ```
 
-| Command                 | What it does                                                    |
-| ----------------------- | --------------------------------------------------------------- |
-| `bun run build`         | Production build (tsc + extension)                              |
-| `bun run build:tsc`     | TypeScript only (no extension bundle or icons)                  |
-| `bun run build:docs`    | Build docs site                                                 |
-| `bun run build:plugins` | Build all plugins (install + build each)                        |
-| `bun run type-check`    | TypeScript type checking                                        |
-| `bun run lint`          | ESLint                                                          |
-| `bun run format:check`  | Prettier formatting                                             |
-| `bun run knip`          | Unused exports and dependencies                                 |
-| `bun run test`          | Unit tests (Bun test runner)                                    |
-| `bun run test:unit`     | Unit tests (alias for `test`)                                   |
-| `bun run test:e2e`      | E2E tests (Playwright)                                          |
-| `bun run check`         | All root checks (build through unit tests)                      |
-| `bun run check:all`     | Everything: root + E2E + docs + plugins                         |
-| `bun run check:docs`    | Docs quality checks (build + type-check + lint + knip + format) |
-| `bun run check:plugins` | Plugin quality checks (type-check + lint + format)              |
-| `bun run dev`           | Full dev mode (tsc watch + MCP server + extension)              |
-| `bun run dev:mcp`       | MCP server only with hot reload                                 |
-| `bun run dev:docs`      | Docs dev server                                                 |
-| `bun run storybook`     | Storybook dev server (extension components)                     |
-| `bun run clean`         | Remove all build artifacts                                      |
-| `bun run clean:all`     | Remove build artifacts + node_modules everywhere                |
+| Command                    | What it does                                                    |
+| -------------------------- | --------------------------------------------------------------- |
+| `bun run build`            | Production build (tsc + extension, incremental)                 |
+| `bun run build:force`      | Full clean rebuild (non-incremental)                            |
+| `bun run build:docs`       | Build docs site                                                 |
+| `bun run build:plugins`    | Build all plugins (install + build each)                        |
+| `bun run type-check`       | TypeScript type checking (--noEmit, no file emission)           |
+| `bun run lint`             | ESLint                                                          |
+| `bun run format:check`     | Prettier formatting                                             |
+| `bun run knip`             | Unused exports and dependencies                                 |
+| `bun run test`             | Unit tests (Bun test runner)                                    |
+| `bun run test:e2e`         | E2E tests (builds e2e-test plugin + Playwright)                 |
+| `bun run check`            | All root checks (build + lint + format + knip + unit tests)     |
+| `bun run check:everything` | Everything: root + E2E + docs + plugins                         |
+| `bun run check:docs`       | Docs quality checks (build + type-check + lint + knip + format) |
+| `bun run check:plugins`    | Plugin quality checks (type-check + lint + format)              |
+| `bun run dev`              | Full dev mode (tsc watch + MCP server + extension)              |
+| `bun run dev:mcp`          | MCP server only with hot reload                                 |
+| `bun run dev:docs`         | Docs dev server                                                 |
+| `bun run storybook`        | Storybook dev server (extension components)                     |
+| `bun run clean`            | Remove all build artifacts                                      |
+| `bun run clean:all`        | Remove build artifacts + node_modules everywhere                |
 
 All checks must pass before merging.
 
@@ -242,6 +241,6 @@ This bumps versions, rebuilds, and publishes in dependency order. See [CLAUDE.md
 
 1. Create a feature branch: `git checkout -b my-feature`
 2. Make your changes and commit with a clear message
-3. Run `bun run check:all` to verify everything passes
+3. Run `bun run check:everything` to verify everything passes
 4. Push your branch: `git push -u origin my-feature`
 5. Open a pull request against `main` with a description of what changed and why
