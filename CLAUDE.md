@@ -85,9 +85,8 @@ Each subdirectory has its own `CLAUDE.md` with package-specific details.
 
 ```bash
 # Build
-bun run build           # Build all packages (tsc --build + extension bundle + icons)
-bun run build:tsc       # TypeScript only (no extension bundling or icons)
-bun run build:icons     # Generate extension icons from SVG
+bun run build           # Build all packages (incremental tsc --build + extension bundle + icons)
+bun run build:force     # Full clean rebuild (tsc --build --force + extension bundle + icons)
 bun run build:plugins   # Build all plugins (install + build each)
 bun run build:docs      # Build docs site (next build)
 
@@ -97,11 +96,11 @@ bun run dev:mcp         # MCP server only with hot reload (lightweight alternati
 bun run dev:docs        # Docs dev server (next dev)
 
 # Quality checks
-bun run check           # Root checks: build + type-check + lint + format:check + knip + test
+bun run check           # Root checks: build + lint + format:check + knip + test
 bun run check:everything # Everything: root checks + E2E + docs + plugins
-bun run check:docs      # Docs checks: build + type-check + lint + knip + format:check
+bun run check:docs      # Docs checks (delegates to docs/package.json check script)
 bun run check:plugins   # Plugin checks: type-check + lint + format:check (all plugins)
-bun run type-check      # TypeScript check (tsc --noEmit)
+bun run type-check      # TypeScript check (tsc --build --noEmit, fast non-emitting verification)
 bun run lint            # ESLint check
 bun run lint:fix        # ESLint auto-fix
 bun run format          # Prettier format
@@ -114,7 +113,6 @@ bun run type-check:docs # TypeScript check docs
 
 # Test
 bun run test            # Unit tests (bun test platform/)
-bun run test:unit       # Alias for test
 bun run test:e2e        # E2E tests (Playwright)
 
 # Clean
