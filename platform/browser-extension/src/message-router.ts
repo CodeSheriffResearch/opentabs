@@ -309,8 +309,10 @@ const handlePluginUpdate = async (params: Record<string, unknown>): Promise<void
 
   // Report updated tab state to the server after re-injection so the MCP
   // server's tabMapping reflects the new adapter's readiness immediately.
+  // updateLastKnownState goes through the plugin lock to avoid interleaving
+  // with concurrent checkTabChanged / checkTabRemoved for the same plugin.
   const newState = await computePluginTabState(meta);
-  updateLastKnownState(meta.name, newState.state);
+  await updateLastKnownState(meta.name, newState.state);
   sendTabStateNotification(meta.name, newState);
 
   // Notify the side panel so it refreshes its plugin list without user interaction

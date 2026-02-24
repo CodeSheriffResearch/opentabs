@@ -10,7 +10,7 @@ import {
 import { injectPluginsIntoTab, reinjectStoredPlugins } from './iife-injection.js';
 import { invalidatePluginCache } from './plugin-storage.js';
 import { initSidePanelToggle } from './side-panel-toggle.js';
-import { checkTabStateChanges } from './tab-state.js';
+import { checkTabChanged, checkTabRemoved } from './tab-state.js';
 import type { InternalMessage } from './extension-messages.js';
 
 // --- Side panel toggle ---
@@ -69,26 +69,22 @@ chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
     // the state check races with injection and often reports 'unavailable'
     // even when the adapter would pass isReady().
     injectPluginsIntoTab(tabId, tab.url)
-      .then(() => checkTabStateChanges(tabId, changeInfo))
+      .then(() => checkTabChanged(tabId, changeInfo))
       .catch((err: unknown) => console.warn('[opentabs] tab injection failed:', err));
   } else if (changeInfo.url) {
-    checkTabStateChanges(tabId, changeInfo).catch((err: unknown) =>
-      console.warn('[opentabs] tab state check failed:', err),
-    );
+    checkTabChanged(tabId, changeInfo).catch((err: unknown) => console.warn('[opentabs] tab state check failed:', err));
   }
 });
 
 chrome.tabs.onRemoved.addListener(tabId => {
-  checkTabStateChanges(tabId, undefined, true).catch((err: unknown) =>
-    console.warn('[opentabs] tab state check failed:', err),
-  );
+  checkTabRemoved(tabId).catch((err: unknown) => console.warn('[opentabs] tab state check failed:', err));
 });
 
 chrome.tabs.onReplaced.addListener((addedTabId, removedTabId) => {
   // Chrome fires onReplaced when a prerendered page promotes to a visible tab.
   // Handle the removed tab as closed, then inject adapters into the replacement
   // and recompute state — same sequencing as the onUpdated status=complete path.
-  checkTabStateChanges(removedTabId, undefined, true).catch((err: unknown) =>
+  checkTabRemoved(removedTabId).catch((err: unknown) =>
     console.warn('[opentabs] tab state check failed for replaced tab:', err),
   );
   chrome.tabs
@@ -97,7 +93,7 @@ chrome.tabs.onReplaced.addListener((addedTabId, removedTabId) => {
       if (tab.url) {
         await injectPluginsIntoTab(addedTabId, tab.url);
       }
-      await checkTabStateChanges(addedTabId, { status: 'complete' });
+      await checkTabChanged(addedTabId, { status: 'complete' });
     })
     .catch((err: unknown) => console.warn('[opentabs] tab replacement handling failed:', err));
 });
