@@ -101,12 +101,13 @@ Multiple PRDs can be `~running` simultaneously (one per worker). This skill writ
 
 1. Receive a feature description or task from the user
 2. **Determine the target project** (see "Identifying the Target Project" above)
-3. Ask 3-5 essential clarifying questions (with lettered options) if the request is ambiguous
+3. Ask 3-5 essential clarifying questions (with lettered options) if the request is ambiguous — do NOT ask about story size (always small) or single-vs-multiple PRDs (AI decides)
 4. **Validate scope** — for quality/refactoring tasks, read the code and discard any candidate stories that are subjective preferences rather than genuine issues
-5. Generate the PRD file with `~draft` suffix and NO timestamp (safe from premature pickup)
-6. Publish: use a shell command to rename with the current timestamp (ensures accurate ordering)
+5. **Decide PRD structure** — split into multiple PRDs if the work divides cleanly into independent groups (see "Single vs Multiple PRDs"); keep as one PRD if stories are tightly coupled
+6. Generate PRD file(s) with `~draft` suffix and NO timestamp (safe from premature pickup)
+7. Publish: use a shell command to rename with the current timestamp (ensures accurate ordering)
 
-**Important:** Do NOT start implementing. Do NOT launch ralph. Just create the PRD file. The ralph daemon (`ralph.sh`) must already be running and will pick up the file automatically.
+**Important:** Do NOT start implementing. Do NOT launch ralph. Just create the PRD file(s). The ralph daemon (`ralph.sh`) must already be running and will pick them up automatically.
 
 ---
 
@@ -129,8 +130,9 @@ Ask only critical questions where the initial prompt is ambiguous. Skip this ste
 
 - **Scope:** What exactly should be done?
 - **Boundaries:** What should it NOT do?
-- **Story size:** Small focused stories vs medium batches?
 - **Success criteria:** How do we know it's done?
+
+Do NOT ask about story size or single-vs-multiple PRDs — these are decided by the AI (see "Story Rules" and "Single vs Multiple PRDs" below).
 
 ### Format Questions Like This:
 
@@ -140,9 +142,9 @@ Ask only critical questions where the initial prompt is ambiguous. Skip this ste
    B. Option two
    C. Option three
 
-2. What scope of changes per story?
-   A. Small and focused (1-3 files per story, higher success rate)
-   B. Medium batches (group related fixes, fewer iterations)
+2. What should this NOT change?
+   A. Option one
+   B. Option two
 ```
 
 This lets users respond with "1A, 2B" for quick iteration.
@@ -262,11 +264,11 @@ mv .ralph/prd-improve-sdk-error-handling~draft.json ".ralph/prd-$(date '+%Y-%m-%
 
 ## Story Rules
 
-### Size: One Context Window
+### Size: Always Small
 
-Each story must be completable in ONE iteration (one fresh AI session with no memory of previous work).
+**Always create small, focused stories.** Each story must be completable in ONE iteration (one fresh AI session with no memory of previous work). Small stories have a dramatically higher success rate than medium or large ones. Never ask the user whether to use small or large stories — always default to small.
 
-**Right-sized stories:**
+**Right-sized stories (1-3 files):**
 
 - Fix a bug in a single module
 - Add a new tool or endpoint
@@ -276,9 +278,9 @@ Each story must be completable in ONE iteration (one fresh AI session with no me
 
 **Too big (split these):**
 
-- "Refactor the entire module" -- split by file or concern
-- "Add a new service" -- split into: scaffold, API client, individual endpoints, tests
-- "Fix all lint errors" -- split by package or error category
+- "Refactor the entire module" — split by file or concern
+- "Add a new service" — split into: scaffold, API client, individual endpoints, tests
+- "Fix all lint errors" — split by package or error category
 
 **Rule of thumb:** If you cannot describe the change in 2-3 sentences, it is too big.
 
@@ -293,9 +295,18 @@ Stories execute in priority order (1 = first). Earlier stories must not depend o
 3. Frontend / UI changes
 4. Tests and documentation
 
+### Single vs Multiple PRDs
+
+The AI decides whether to create one PRD or multiple — do not ask the user. The decision is based on dependency structure:
+
+- **One PRD** when stories are tightly coupled — they touch the same files, share types, or must be applied in strict sequence. Splitting tightly coupled work across PRDs risks merge conflicts and ordering issues. A single PRD ensures one worker handles them sequentially in the correct order.
+- **Multiple PRDs** when the work can be cleanly divided into independent groups that touch different modules or files. Multiple PRDs let ralph dispatch them to separate workers in parallel, completing the batch faster. Split by module boundary (e.g., one PRD for `plugin-sdk/`, another for `mcp-server/`).
+
+**Rule of thumb:** If splitting into two PRDs would cause both workers to edit the same files, keep it as one PRD. If the groups are independent, split them so workers run in parallel.
+
 ### Minimize Merge Conflicts Across PRDs
 
-Ralph runs workers in parallel. When two workers finish, their branches are merged sequentially into main. If both touched the same files, the second merge will conflict. Ralph preserves the conflicting branch for manual resolution and moves on.
+When creating multiple PRDs, merge conflicts are the main risk. Ralph merges completed branches sequentially into main. If two workers touched the same files, the second merge will conflict. Ralph preserves the conflicting branch for manual resolution and moves on.
 
 **To reduce conflicts:**
 
