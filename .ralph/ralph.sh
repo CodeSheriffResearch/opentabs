@@ -616,42 +616,33 @@ dispatch_prd() {
   # Copy worker.sh into the worktree so the container can execute it.
   cp "$SCRIPT_DIR/worker.sh" "$worktree_dir/.ralph/worker.sh"
 
-  # Install dependencies in the worktree (on the host — bun's global cache
-  # makes this fast, and the resulting node_modules/ is bind-mounted into
-  # the container along with the rest of the worktree).
-  echo -e "$(ts) ${CYAN}[${tag}]${RESET} ${DIM}Installing dependencies...${RESET}"
-  if ! (cd "$worktree_dir" && bun install --frozen-lockfile 2>&1 | tail -1); then
-    echo -e "$(ts) ${CYAN}[${tag}]${RESET} ${RED}bun install failed. Aborting worker.${RESET}"
-    remove_worktree "$worktree_dir"
-    if [ "$resume_branch" = false ]; then
-      git branch -D "$branch_name" 2>/dev/null || true
-    fi
-    mv "$prd_file" "${prd_file/\~running.json/.json}" 2>/dev/null || true
-    return 1
-  fi
-
-  # Pre-build: ensure the worktree has fresh dist/ artifacts.
-  echo -e "$(ts) ${CYAN}[${tag}]${RESET} ${DIM}Building platform packages...${RESET}"
-  if ! (cd "$worktree_dir" && bun run build 2>&1 | tail -3); then
-    echo -e "$(ts) ${CYAN}[${tag}]${RESET} ${RED}bun run build failed. Aborting worker.${RESET}"
-    remove_worktree "$worktree_dir"
-    if [ "$resume_branch" = false ]; then
-      git branch -D "$branch_name" 2>/dev/null || true
-    fi
-    mv "$prd_file" "${prd_file/\~running.json/.json}" 2>/dev/null || true
-    return 1
-  fi
-
-  # Build the e2e-test plugin (standalone, outside workspace).
+  # Install dependencies and build inside a Docker container.
+  # Native binaries (esbuild, playwright) are platform-specific — bun install
+  # on macOS produces darwin binaries that fail inside the Linux container.
+  # Running install+build inside the container ensures Linux-native binaries.
+  echo -e "$(ts) ${CYAN}[${tag}]${RESET} ${DIM}Installing dependencies + building (in Docker)...${RESET}"
+  local setup_script="cd $worktree_dir && bun install --frozen-lockfile 2>&1 | tail -1 && bun run build 2>&1 | tail -3"
+  # Build e2e-test plugin if it exists
   if [ -f "$worktree_dir/plugins/e2e-test/package.json" ]; then
-    echo -e "$(ts) ${CYAN}[${tag}]${RESET} ${DIM}Building e2e-test plugin...${RESET}"
-    local plugin_tmp_config
-    plugin_tmp_config=$(mktemp -d)
-    (cd "$worktree_dir/plugins/e2e-test" \
-      && bun install --frozen-lockfile 2>&1 | tail -1 \
-      && OPENTABS_CONFIG_DIR="$plugin_tmp_config" bun run build 2>&1 | tail -1) || \
-      echo -e "$(ts) ${CYAN}[${tag}]${RESET} ${YELLOW}e2e-test plugin build failed (non-fatal).${RESET}"
-    rm -rf "$plugin_tmp_config"
+    local plugin_tmp_config="/tmp/opentabs-plugin-config-$$"
+    setup_script="$setup_script && cd $worktree_dir/plugins/e2e-test && bun install --frozen-lockfile 2>&1 | tail -1 && OPENTABS_CONFIG_DIR=$plugin_tmp_config bun run build 2>&1 | tail -1"
+  fi
+  if ! docker run --rm \
+    --user "$(id -u):$(id -g)" \
+    -e "HOME=$HOME" \
+    -v "$worktree_dir:$worktree_dir" \
+    -v "$PROJECT_DIR/.git:$PROJECT_DIR/.git" \
+    --network host \
+    -w "$worktree_dir" \
+    "$DOCKER_IMAGE" \
+    "bash -c '$setup_script'"; then
+    echo -e "$(ts) ${CYAN}[${tag}]${RESET} ${RED}Setup (install+build) failed in Docker. Aborting worker.${RESET}"
+    remove_worktree "$worktree_dir"
+    if [ "$resume_branch" = false ]; then
+      git branch -D "$branch_name" 2>/dev/null || true
+    fi
+    mv "$prd_file" "${prd_file/\~running.json/.json}" 2>/dev/null || true
+    return 1
   fi
 
   # --- Launch Docker container ---
