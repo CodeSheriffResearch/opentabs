@@ -55,6 +55,7 @@ const config: KnipConfig = {
     '**/storybook-static/**',
     '.ralph/worktrees/**',
     '.claude/worktrees/**',
+    '.tmp/**',
   ],
   ignoreExportsUsedInFile: true,
 };

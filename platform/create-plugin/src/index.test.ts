@@ -1,6 +1,5 @@
 import { afterEach, beforeEach, describe, expect, test } from 'bun:test';
 import { existsSync, mkdirSync, mkdtempSync, rmSync } from 'node:fs';
-import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 
 const CLI_PATH = resolve(import.meta.dirname, '..', 'dist', 'index.js');
@@ -21,12 +20,21 @@ const runCli = (
   };
 };
 
+// Temp directories must live on the same filesystem as the project root so
+// that bun's `file:` dep resolution can hardlink package contents. In Docker,
+// os.tmpdir() returns /tmp (a container tmpfs) which is a different filesystem
+// from the bind-mounted worktree — bun creates empty cache entries instead of
+// proper hardlinks, causing tsc to fail with "Cannot find module".
+const PROJECT_ROOT = resolve(import.meta.dirname, '..', '..', '..');
+const TEMP_BASE = join(PROJECT_ROOT, '.tmp', 'create-plugin-test');
+
 describe('create-opentabs-plugin CLI', () => {
   let tmpDir: string;
   let configDir: string;
 
   beforeEach(() => {
-    tmpDir = mkdtempSync(join(tmpdir(), 'opentabs-create-plugin-test-'));
+    mkdirSync(TEMP_BASE, { recursive: true });
+    tmpDir = mkdtempSync(join(TEMP_BASE, 'run-'));
     configDir = join(tmpDir, '.opentabs');
     mkdirSync(configDir, { recursive: true });
   });

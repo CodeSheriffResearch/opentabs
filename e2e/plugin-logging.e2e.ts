@@ -21,14 +21,28 @@ test.describe('Plugin logging — full pipeline', () => {
   }) => {
     const page = await setupToolTest(mcpServer, testServer, extensionContext, mcpClient);
 
+    // Record log buffer size before the tool call so we can detect new entries.
+    const healthBefore = await mcpServer.health();
+    const bufferBefore = healthBefore?.pluginDetails?.find(p => p.name === 'e2e-test')?.logBufferSize ?? 0;
+
     const prefix = `e2e-log-${Date.now()}`;
     const output = await callToolExpectSuccess(mcpClient, mcpServer, 'e2e-test_log_levels', { prefix });
     expect(output.ok).toBe(true);
     expect(output.levels).toEqual(['debug', 'info', 'warning', 'error']);
 
-    // Wait for log entries to propagate through the pipeline (batched every 100ms,
-    // then relayed via WebSocket, then processed by MCP server)
-    await waitForLog(mcpServer, `${prefix} error-message`, 15_000);
+    // Poll /health until at least 4 new log entries arrive in the server's
+    // in-memory buffer. This is more reliable than watching stdout because the
+    // log pipeline is fire-and-forget at every hop — stdout polling can miss
+    // entries due to buffering, whereas /health reads the buffer directly.
+    await mcpServer.waitForHealth(h => {
+      const buf = h.pluginDetails?.find(p => p.name === 'e2e-test')?.logBufferSize ?? 0;
+      return buf >= bufferBefore + 4;
+    }, 10_000);
+
+    // Log entries are in the buffer and console.log was called on the same code
+    // path, so stdout should contain them. Use waitForLog as a short sanity
+    // check (entries should already be there — just need stdout flush).
+    await waitForLog(mcpServer, `${prefix} error-message`, 5_000);
 
     // Verify all four log levels appeared in server logs
     const allLogs = mcpServer.logs.join('\n');

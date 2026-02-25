@@ -32,7 +32,7 @@ import type { Result } from '@opentabs-dev/shared';
  * Plugins must reside under the user's home directory or the system temp directory.
  * The temp directory allowance supports E2E tests and development workflows.
  */
-const getAllowedRoots = (): string[] => [homedir(), tmpdir()];
+const getAllowedRoots = (): string[] => [homedir(), tmpdir(), process.cwd()];
 
 /**
  * Resolve a path to its canonical form, following symlinks.

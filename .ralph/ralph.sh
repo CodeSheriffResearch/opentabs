@@ -627,17 +627,15 @@ dispatch_prd() {
     local plugin_tmp_config="/tmp/opentabs-plugin-config-$$"
     setup_script="$setup_script && cd $worktree_dir/plugins/e2e-test && bun install --frozen-lockfile 2>&1 | tail -1 && OPENTABS_CONFIG_DIR=$plugin_tmp_config bun run build 2>&1 | tail -1"
   fi
-  mkdir -p "$HOME/.opentabs"
-  if ! docker run --rm \
-    --user "$(id -u):$(id -g)" \
-    -e "HOME=$HOME" \
+  if ! docker run --rm --init --ipc=host \
+    --shm-size=2g \
+    -e "HOME=/tmp/worker" \
     -v "$worktree_dir:$worktree_dir" \
     -v "$PROJECT_DIR/.git:$PROJECT_DIR/.git" \
-    -v "$HOME/.opentabs:$HOME/.opentabs" \
     --network host \
     -w "$worktree_dir" \
     "$DOCKER_IMAGE" \
-    "bash -c '$setup_script'"; then
+    "bash -c 'mkdir -p /tmp/worker && $setup_script'"; then
     echo -e "$(ts) ${CYAN}[${tag}]${RESET} ${RED}Setup (install+build) failed in Docker. Aborting worker.${RESET}"
     remove_worktree "$worktree_dir"
     if [ "$resume_branch" = false ]; then
@@ -697,52 +695,35 @@ dispatch_prd() {
   fi
 
   # Build the docker run command.
-  # Key mounts:
-  #   - Worktree at /workspace (read-write — the agent commits here)
-  #   - Claude CLI config at /root/.claude and /root/.claude.json (read-only — auth)
-  #   - Git config for commit identity
-  #   - Host's .git directory for worktree operations (git needs the main repo's objects)
+  #
+  # The container is self-contained — the only host mounts are the worktree
+  # (read-write for git commits) and the main .git directory (for worktree
+  # resolution). All other writes (HOME, .opentabs, .claude, node caches)
+  # stay inside the container's filesystem and are discarded on exit.
+  #
+  # Key flags:
+  #   --init      Tini as PID 1 to reap zombie processes (Chromium forks helpers)
+  #   --ipc=host  Required for Chromium IPC (without it, Chrome crashes)
+  #   --shm-size  Chromium uses /dev/shm heavily; default 64MB causes OOM crashes
   local -a DOCKER_ARGS=()
   DOCKER_ARGS+=(--name "$container_name")
   DOCKER_ARGS+=(--detach)
-  # SHM size for Chromium (default 64MB causes crashes with multiple tabs)
+  DOCKER_ARGS+=(--init)
+  DOCKER_ARGS+=(--ipc=host)
   DOCKER_ARGS+=(--shm-size=2g)
-  # Mount the worktree at its original host path so the .git file's absolute
-  # path back to the main repo resolves correctly inside the container.
-  # Git worktrees store a .git file (not directory) containing:
-  #   gitdir: /Users/.../project/.git/worktrees/<name>
-  # Both the worktree and the main .git must be mounted at their original
-  # host paths for bidirectional resolution to work.
+  # Container-local HOME — all writes (claude sessions, node caches, .opentabs)
+  # go here and are discarded when the container exits. No host pollution.
+  DOCKER_ARGS+=(-e "HOME=/tmp/worker")
+  # Mount the worktree at its original host path. Git worktrees store a .git
+  # file containing `gitdir: /path/to/.git/worktrees/<name>` — both the
+  # worktree and the main .git must be at their original host paths for
+  # bidirectional resolution to work.
   DOCKER_ARGS+=(-v "$worktree_dir:$worktree_dir")
-  # Symlink /workspace -> worktree path so worker.sh can use a fixed path
   DOCKER_ARGS+=(-e "WORKER_WORKTREE_DIR=$worktree_dir")
-  # Mount the main repo's .git directory at its original host path.
-  # The worktree's .git file points here via an absolute path, and
-  # .git/worktrees/<name>/commondir uses relative paths to reach .git/objects.
-  # Read-write because git commit writes to .git/objects and refs.
+  # Main repo's .git directory — read-write because git commit writes to
+  # .git/objects and refs.
   DOCKER_ARGS+=(-v "$PROJECT_DIR/.git:$PROJECT_DIR/.git")
-  # Run as the current host user — Claude CLI refuses --dangerously-skip-permissions
-  # as root, and file ownership in the bind-mounted worktree must match the host.
-  DOCKER_ARGS+=(--user "$(id -u):$(id -g)")
-  DOCKER_ARGS+=(-e "HOME=$HOME")
-  # Claude CLI auth and config (read-write — claude writes debug logs, session
-  # data, todos, and stats to ~/.claude/ and ~/.claude.json at runtime)
-  if [ -d "$HOME/.claude" ]; then
-    DOCKER_ARGS+=(-v "$HOME/.claude:$HOME/.claude")
-  fi
-  if [ -f "$HOME/.claude.json" ]; then
-    DOCKER_ARGS+=(-v "$HOME/.claude.json:$HOME/.claude.json")
-  fi
-  # Git config (read-only — for user identity in commits)
-  if [ -f "$HOME/.gitconfig" ]; then
-    DOCKER_ARGS+=(-v "$HOME/.gitconfig:$HOME/.gitconfig:ro")
-  fi
-  # OpenTabs config dir — bun run build copies the extension to
-  # ~/.opentabs/extension/, and the MCP server reads config from here.
-  mkdir -p "$HOME/.opentabs"
-  DOCKER_ARGS+=(-v "$HOME/.opentabs:$HOME/.opentabs")
-  # Network: use host network so the container can reach the LLM proxy
-  # (e.g., http://192.168.2.2:4000) and any other local services.
+  # Host networking — container can reach local LLM proxies and services.
   DOCKER_ARGS+=(--network host)
 
   # Start the container. It runs worker.sh which executes the agent loop.
@@ -753,7 +734,7 @@ dispatch_prd() {
     "${DOCKER_ENV_ARGS[@]}" \
     -w "$worktree_dir" \
     "$DOCKER_IMAGE" \
-    "bash $worktree_dir/.ralph/worker.sh" \
+    "mkdir -p /tmp/worker && bash $worktree_dir/.ralph/worker.sh" \
     >/dev/null 2>&1; then
     echo -e "$(ts) ${CYAN}[${tag}]${RESET} ${RED}Failed to start Docker container. Aborting worker.${RESET}"
     remove_worktree "$worktree_dir"

@@ -8,3 +8,4 @@ test-results
 plugins
 .ralph/worktrees
 .claude/worktrees
+.tmp

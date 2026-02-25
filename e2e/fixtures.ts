@@ -880,6 +880,11 @@ const createExtensionCopy = (
 // while keeping the desktop clear.
 const SHOW_BROWSER = process.env['HEADED'] === '1';
 
+// Detect Docker container — /.dockerenv exists in all Docker containers.
+// Used to add Chromium flags required for running in containers (no sandbox,
+// no GPU, /dev/shm workaround).
+const IN_DOCKER = fs.existsSync('/.dockerenv');
+
 /**
  * Launch a Chromium browser context with the OpenTabs extension loaded.
  *
@@ -887,6 +892,11 @@ const SHOW_BROWSER = process.env['HEADED'] === '1';
  * launches Chromium in persistent-context mode with the extension enabled.
  * Uses `--headless=new` by default (supports extensions); set HEADED=1
  * to show the browser window for debugging.
+ *
+ * When running inside a Docker container, additional Chromium flags are added:
+ *   --no-sandbox       (required for non-root users in containers)
+ *   --disable-gpu      (no GPU available in containers)
+ *   --disable-dev-shm-usage  (use /tmp instead of /dev/shm to avoid OOM)
  *
  * Returns the browser context, the temp directory path (for cleanup),
  * the extension directory path (for adapter symlinks), and the MCP port.
@@ -910,6 +920,11 @@ const launchExtensionContext = async (
       '--disable-features=Translate',
       '--disable-popup-blocking',
       ...(SHOW_BROWSER ? [] : ['--headless=new']),
+      // Docker container flags — Chromium needs special handling when running
+      // in Linux containers (no sandbox, no GPU, /dev/shm workaround).
+      ...(IN_DOCKER
+        ? ['--no-sandbox', '--disable-gpu', '--disable-dev-shm-usage', '--disable-software-rasterizer']
+        : []),
     ],
     timeout: 30_000,
   });
@@ -922,26 +937,65 @@ const launchExtensionContext = async (
  *
  * Polls `context.serviceWorkers()` and `context.pages()` until a page
  * with 'background' in its URL is found. Returns the service worker
- * as a Playwright Page handle. Throws after `timeoutMs` if not found.
+ * as a Playwright Page handle.
+ *
+ * In Docker containers, Playwright can miss the service worker `attach` event
+ * if Chrome creates it before CDP instrumentation is ready (Playwright issue
+ * #39075). When polling times out, we use CDP to stop all service workers and
+ * force Chrome to restart them — this time Playwright's instrumentation is
+ * ready and catches the event.
+ *
+ * Throws after `timeoutMs` if not found even after CDP restart.
  */
 const getBackgroundPage = async (context: BrowserContext, timeoutMs = 15_000): Promise<Page> => {
-  const deadline = Date.now() + timeoutMs;
+  // In Docker, service worker initialization is slower and the race condition
+  // is more likely. Use a longer timeout.
+  const effectiveTimeout = IN_DOCKER ? Math.max(timeoutMs, 30_000) : timeoutMs;
 
-  while (Date.now() < deadline) {
-    for (const sw of context.serviceWorkers()) {
-      if (sw.url().includes('background')) {
-        return sw as unknown as Page;
+  /** Poll service workers and background pages until `deadlineMs`. */
+  const poll = async (deadlineMs: number): Promise<Page | null> => {
+    while (Date.now() < deadlineMs) {
+      for (const sw of context.serviceWorkers()) {
+        if (sw.url().includes('background')) return sw as unknown as Page;
       }
-    }
-    for (const page of context.pages()) {
-      if (page.url().includes('background')) {
-        return page;
+      for (const page of context.pages()) {
+        if (page.url().includes('background')) return page;
       }
+      await new Promise(r => setTimeout(r, 300));
     }
-    await new Promise(r => setTimeout(r, 300));
+    return null;
+  };
+
+  const deadline = Date.now() + effectiveTimeout;
+
+  // Phase 1: Standard polling — works in most cases.
+  const phase1Deadline = IN_DOCKER ? Math.min(Date.now() + 10_000, deadline) : deadline;
+  const found = await poll(phase1Deadline);
+  if (found) return found;
+
+  // Phase 2 (Docker only): CDP-based service worker restart.
+  // If standard polling failed, the service worker may have started before
+  // Playwright's CDP instrumentation was ready. Force a restart so Playwright
+  // catches the new worker.
+  if (IN_DOCKER) {
+    const targetPage = context.pages()[0];
+    if (targetPage) {
+      try {
+        const cdp = await context.newCDPSession(targetPage);
+        await cdp.send('ServiceWorker.enable');
+        await cdp.send('ServiceWorker.stopAllWorkers');
+        await cdp.detach();
+      } catch {
+        // CDP session may fail if the page is already closed — continue polling.
+      }
+      await new Promise(r => setTimeout(r, 1_000));
+    }
+
+    const retryFound = await poll(deadline);
+    if (retryFound) return retryFound;
   }
 
-  throw new Error(`Could not find extension background page within ${timeoutMs}ms`);
+  throw new Error(`Could not find extension background page within ${effectiveTimeout}ms`);
 };
 
 // ---------------------------------------------------------------------------

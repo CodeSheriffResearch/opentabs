@@ -1,14 +1,10 @@
 # Ralph Worker Container — isolated execution environment for AI coding agents.
 #
-# This image contains everything a ralph worker needs to run autonomously:
-#   - Bun (package manager + runtime)
-#   - Node.js (Playwright test runner)
-#   - Git (commits inside the mounted worktree)
-#   - Claude CLI (AI agent)
-#   - Playwright Chromium (E2E tests, headless)
-#   - jq (PRD parsing)
+# Based on the official Playwright Docker image which includes Chromium and all
+# required system dependencies (X11 libs, fonts, dbus, etc.) pre-configured and
+# tested by the Playwright team. We add Bun, Claude CLI, Git config, and jq.
 #
-# The host's git worktree is bind-mounted at /workspace. The container runs
+# The host's git worktree is bind-mounted into the container. The container runs
 # the agent session, which may spawn Playwright, Chromium, test servers, etc.
 # When the container is killed (docker kill), cgroups guarantee ALL child
 # processes die atomically — no orphans, no pattern matching, no cleanup loops.
@@ -16,41 +12,18 @@
 # Build:  docker build -t ralph-worker -f .ralph/Dockerfile .
 # Usage:  (managed by ralph.sh — not invoked directly)
 
-# --- Stage 1: Base system with all runtimes ---
-
-FROM node:22-bookworm-slim AS base
+FROM mcr.microsoft.com/playwright:v1.58.2-noble
 
 # Avoid interactive prompts during package installation
 ENV DEBIAN_FRONTEND=noninteractive
 
-# System dependencies for Chromium (Playwright) and general tooling
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    curl \
-    unzip \
-    git \
+# Remove browsers we don't need (the base image includes all of them) and
+# install additional tooling for ralph workers.
+RUN rm -rf /ms-playwright/firefox-* /ms-playwright/webkit-* \
+    && apt-get update && apt-get install -y --no-install-recommends \
     jq \
-    # Chromium runtime dependencies (headless mode still needs these libs)
-    libnss3 \
-    libnspr4 \
-    libdbus-1-3 \
-    libatk1.0-0 \
-    libatk-bridge2.0-0 \
-    libcups2 \
-    libdrm2 \
-    libxkbcommon0 \
-    libxcomposite1 \
-    libxdamage1 \
-    libxfixes3 \
-    libxrandr2 \
-    libgbm1 \
-    libpango-1.0-0 \
-    libcairo2 \
-    libasound2 \
-    libatspi2.0-0 \
-    libwayland-client0 \
-    # Git operations may need ssh for some remote configurations
-    openssh-client \
-    ca-certificates \
+    procps \
+    unzip \
     && rm -rf /var/lib/apt/lists/*
 
 # --- Install Bun ---
@@ -65,12 +38,6 @@ RUN curl -fsSL https://bun.sh/install | bash -s "bun-v1.3.9" \
 # Install globally so it's available as `claude` in PATH.
 RUN npm install -g @anthropic-ai/claude-code@latest \
     && claude --version
-
-# --- Install Playwright Chromium ---
-# Install just chromium (not firefox/webkit) to keep the image small.
-# The version must match the @playwright/test version in the project.
-# npx playwright install handles downloading the correct browser build.
-RUN npx playwright@1.58.2 install chromium --with-deps
 
 # --- Container configuration ---
 

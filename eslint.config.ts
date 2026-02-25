@@ -46,6 +46,7 @@ const config: Linter.Config[] = [
       '**/.storybook/**/*.mjs',
       '.ralph/worktrees/**',
       '.claude/worktrees/**',
+      '.tmp/**',
     ],
   },
   // Main TypeScript/TSX rules

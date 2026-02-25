@@ -354,9 +354,12 @@ describe('isAllowedPluginPath', () => {
     expect(await isAllowedPluginPath(homedir())).toBe(true);
   });
 
-  test('rejects path that is prefix of home but not a child', async () => {
-    const home = homedir();
-    expect(await isAllowedPluginPath(home + 'bar')).toBe(false);
+  test('uses separator boundary — string prefix without separator is rejected', async () => {
+    // getAllowedRoots includes tmpdir (always '/tmp' on POSIX).
+    // '/tmpevil' shares the string prefix '/tmp' but is NOT a child of it
+    // because it lacks the path separator. This verifies the check compares
+    // against `root + sep`, not just `root`.
+    expect(await isAllowedPluginPath('/tmpevil')).toBe(false);
   });
 
   test('rejects path with .. traversal that escapes home', async () => {
