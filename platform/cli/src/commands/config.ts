@@ -171,8 +171,8 @@ const fetchToolNames = async (port: number): Promise<string[] | null> => {
   }
 };
 
-const handleListTools = async (): Promise<void> => {
-  const port = resolvePort({});
+const handleListTools = async (options: { port?: number }): Promise<void> => {
+  const port = resolvePort(options);
   const tools = await fetchToolNames(port);
 
   if (!tools) {
@@ -397,7 +397,7 @@ const suggestKey = (input: string): string | null => {
 
 const handleConfigSet = async (key: string, value: string | undefined, options: { port?: number }): Promise<void> => {
   if (key === TOOL_PREFIX) {
-    return handleListTools();
+    return handleListTools(options);
   }
 
   if (!value) {
