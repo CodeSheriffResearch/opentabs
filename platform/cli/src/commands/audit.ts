@@ -9,7 +9,7 @@
 import { isTimeout } from './status.js';
 import { getConfigDir, isConnectionRefused, readAuthSecret } from '../config.js';
 import { resolvePort } from '../parse-port.js';
-import { toErrorMessage } from '@opentabs-dev/shared';
+import { fileExists as runtimeFileExists, getFileSize, readFile, toErrorMessage } from '@opentabs-dev/shared';
 import { InvalidArgumentError } from 'commander';
 import pc from 'picocolors';
 import { join } from 'node:path';
@@ -125,14 +125,13 @@ const handleAuditFromFile = async (options: AuditOptions): Promise<void> => {
     sinceMs = parseDuration(options.since);
   }
 
-  const auditFile = Bun.file(auditPath);
-  if (!(await auditFile.exists())) {
+  if (!(await runtimeFileExists(auditPath))) {
     console.log(pc.dim('No audit log file found at ' + auditPath));
     return;
   }
 
   const MAX_AUDIT_FILE_SIZE = 10 * 1024 * 1024; // 10MB
-  const fileSize = auditFile.size;
+  const fileSize = await getFileSize(auditPath);
   if (fileSize > MAX_AUDIT_FILE_SIZE) {
     console.error(
       pc.red(
@@ -144,7 +143,7 @@ const handleAuditFromFile = async (options: AuditOptions): Promise<void> => {
     return;
   }
 
-  const raw = await auditFile.text();
+  const raw = await readFile(auditPath);
   const lines = raw.split('\n').filter(line => line.trim().length > 0);
 
   let entries: AuditEntry[] = [];

@@ -7,7 +7,7 @@
  */
 
 import { log } from './logger.js';
-import { platformExec, toErrorMessage } from '@opentabs-dev/shared';
+import { spawnProcessSync, toErrorMessage } from '@opentabs-dev/shared';
 import type { ServerState, OutdatedPlugin } from './state.js';
 
 /** Result of checking a single plugin for updates */
@@ -23,14 +23,12 @@ type CheckResult = { kind: 'outdated'; entry: OutdatedPlugin } | { kind: 'up-to-
  */
 export const fetchLatestVersion = (packageName: string): string | null => {
   try {
-    const result = Bun.spawnSync([platformExec('npm'), 'view', packageName, 'version'], {
-      stdio: ['ignore', 'pipe', 'pipe'],
-    });
+    const result = spawnProcessSync('npm', ['view', packageName, 'version']);
     if (result.exitCode !== 0) {
-      log.debug(`npm view failed for ${packageName}: ${result.stderr.toString().trim()}`);
+      log.debug(`npm view failed for ${packageName}: ${result.stderr.trim()}`);
       return null;
     }
-    const version = result.stdout.toString().trim();
+    const version = result.stdout.trim();
     return version || null;
   } catch (e: unknown) {
     log.debug(`Failed to fetch latest version for ${packageName}: ${toErrorMessage(e)}`);

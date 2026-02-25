@@ -13,11 +13,20 @@ import {
   TOOLS_FILENAME,
   atomicWrite,
   DEFAULT_PORT,
+  deleteFile,
+  fileExists,
   getConfigDir,
   getConfigPath,
+  getEnv,
+  getFileSize,
   parsePluginPackageJson,
+  readFile,
+  sha256,
+  spawnProcessSync,
   toErrorMessage,
+  writeFile as runtimeWriteFile,
 } from '@opentabs-dev/shared';
+import { build as esbuild } from 'esbuild';
 import pc from 'picocolors';
 import { z } from 'zod';
 import { mkdirSync, rmSync, statSync, watch } from 'node:fs';
@@ -114,8 +123,7 @@ const resolvePluginPathForComparison = (storedPath: string, configDir: string): 
  */
 const registerInConfig = async (projectDir: string): Promise<boolean> => {
   const configPath = getConfigPath();
-  const configFile = Bun.file(configPath);
-  if (!(await configFile.exists())) {
+  if (!(await fileExists(configPath))) {
     console.warn(pc.yellow('Warning: Config file not found — skipping auto-registration.'));
     console.warn(pc.yellow(`  Run ${pc.cyan('opentabs start')} to create ~/.opentabs/config.json`));
     return false;
@@ -128,7 +136,7 @@ const registerInConfig = async (projectDir: string): Promise<boolean> => {
     // Re-read config inside the lock to get the latest state
     let config: Record<string, unknown>;
     try {
-      const parsed: unknown = JSON.parse(await Bun.file(configPath).text());
+      const parsed: unknown = JSON.parse(await readFile(configPath));
       if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) {
         console.warn(pc.yellow('Warning: Config file is not a JSON object — skipping auto-registration.'));
         return false;
@@ -165,12 +173,11 @@ const registerInConfig = async (projectDir: string): Promise<boolean> => {
  */
 const notifyServer = async (): Promise<void> => {
   const authJsonPath = join(getConfigDir(), 'extension', 'auth.json');
-  const authFile = Bun.file(authJsonPath);
-  if (!(await authFile.exists())) return;
+  if (!(await fileExists(authJsonPath))) return;
 
   let secret: string | undefined;
   try {
-    const parsed: unknown = JSON.parse(await authFile.text());
+    const parsed: unknown = JSON.parse(await readFile(authJsonPath));
     if (typeof parsed === 'object' && parsed !== null && !Array.isArray(parsed)) {
       const record = parsed as Record<string, unknown>;
       if (typeof record.secret === 'string') secret = record.secret;
@@ -181,7 +188,8 @@ const notifyServer = async (): Promise<void> => {
 
   if (!secret) return;
 
-  const port = Bun.env.OPENTABS_PORT ? Number(Bun.env.OPENTABS_PORT) : DEFAULT_PORT;
+  const portEnv = getEnv('OPENTABS_PORT');
+  const port = portEnv ? Number(portEnv) : DEFAULT_PORT;
   if (!Number.isFinite(port) || port < 1 || port > 65535) return;
 
   try {
@@ -418,8 +426,8 @@ const readAndValidateIcons = async (projectDir: string): Promise<IconResult> => 
   const iconPath = join(projectDir, 'icon.svg');
   const inactivePath = join(projectDir, 'icon-inactive.svg');
 
-  const hasIcon = await Bun.file(iconPath).exists();
-  const hasInactive = await Bun.file(inactivePath).exists();
+  const hasIcon = await fileExists(iconPath);
+  const hasInactive = await fileExists(inactivePath);
 
   // No icons — nothing to do
   if (!hasIcon && !hasInactive) {
@@ -435,7 +443,7 @@ const readAndValidateIcons = async (projectDir: string): Promise<IconResult> => 
   }
 
   // Read and validate icon.svg
-  const iconContent = await Bun.file(iconPath).text();
+  const iconContent = await readFile(iconPath);
   const iconValidation = validateIconSvg(iconContent, 'icon.svg');
   if (!iconValidation.valid) {
     throw new Error(`icon.svg validation failed:\n${iconValidation.errors.map(e => `  - ${e}`).join('\n')}`);
@@ -445,7 +453,7 @@ const readAndValidateIcons = async (projectDir: string): Promise<IconResult> => 
 
   if (hasInactive) {
     // Manual override: read and validate icon-inactive.svg
-    const inactiveContent = await Bun.file(inactivePath).text();
+    const inactiveContent = await readFile(inactivePath);
     const inactiveStructValidation = validateIconSvg(inactiveContent, 'icon-inactive.svg');
     if (!inactiveStructValidation.valid) {
       throw new Error(
@@ -557,13 +565,12 @@ const generatePromptsManifest = (prompts: PromptDefinition[]): ManifestPrompt[] 
  */
 const resolveSdkVersion = async (projectDir: string): Promise<string> => {
   const sdkPkgPath = join(projectDir, 'node_modules', '@opentabs-dev', 'plugin-sdk', 'package.json');
-  const sdkPkgFile = Bun.file(sdkPkgPath);
-  if (!(await sdkPkgFile.exists())) {
+  if (!(await fileExists(sdkPkgPath))) {
     throw new Error('Could not resolve @opentabs-dev/plugin-sdk version. Ensure the package is installed.');
   }
   let sdkPkg: unknown;
   try {
-    sdkPkg = JSON.parse(await sdkPkgFile.text());
+    sdkPkg = JSON.parse(await readFile(sdkPkgPath));
   } catch {
     throw new Error('Could not resolve @opentabs-dev/plugin-sdk version. Ensure the package is installed.');
   }
@@ -765,30 +772,21 @@ if (typeof plugin.onNavigate === 'function') {
   delete (plugin as Record<string, unknown>).onDeactivate;
 }
 `;
-  await Bun.write(wrapperPath, wrapperCode);
+  await runtimeWriteFile(wrapperPath, wrapperCode);
 
   try {
-    const result = await Bun.build({
-      entrypoints: [wrapperPath],
-      outdir: outDir,
+    await esbuild({
+      entryPoints: [wrapperPath],
+      outfile: join(outDir, ADAPTER_FILENAME),
       format: 'iife',
-      target: 'browser',
+      platform: 'browser',
+      bundle: true,
       minify: false,
-      sourcemap: 'external',
-      naming: ADAPTER_FILENAME,
-      external: [],
+      sourcemap: 'linked',
+      external: ['node:*'],
     });
-
-    if (!result.success) {
-      const messages = result.logs.map(log => (log.message ? log.message : JSON.stringify(log))).join('\n');
-      throw new Error(`IIFE bundling failed:\n${messages}`);
-    }
   } finally {
-    try {
-      await Bun.file(wrapperPath).delete();
-    } catch {
-      // best-effort cleanup
-    }
+    await deleteFile(wrapperPath);
   }
 };
 
@@ -815,13 +813,13 @@ const runBuild = async (projectDir: string): Promise<void> => {
   const startTime = performance.now();
 
   // Step 1: Read and validate package.json (must have opentabs field)
-  const pkgJsonFile = Bun.file(join(projectDir, 'package.json'));
-  if (!(await pkgJsonFile.exists())) {
+  const pkgJsonPath = join(projectDir, 'package.json');
+  if (!(await fileExists(pkgJsonPath))) {
     throw new Error('No valid package.json found in current directory. Run this command from a plugin directory.');
   }
   let pkgJsonRaw: unknown;
   try {
-    pkgJsonRaw = JSON.parse(await pkgJsonFile.text());
+    pkgJsonRaw = JSON.parse(await readFile(pkgJsonPath));
   } catch {
     throw new Error('No valid package.json found in current directory. Run this command from a plugin directory.');
   }
@@ -836,21 +834,21 @@ const runBuild = async (projectDir: string): Promise<void> => {
   const entryPoint = resolve(projectDir, 'dist', 'index.js');
   const sourceEntry = resolve(projectDir, 'src', 'index.ts');
 
-  if (!(await Bun.file(entryPoint).exists())) {
-    const sourceExists = await Bun.file(sourceEntry).exists();
+  if (!(await fileExists(entryPoint))) {
+    const sourceExists = await fileExists(sourceEntry);
     if (!sourceExists) {
       throw new Error(
         `Neither compiled output (${entryPoint}) nor source (${sourceEntry}) found. Is this a plugin directory?`,
       );
     }
     console.log(pc.dim('Compiled output not found, running tsc...'));
-    const tscResult = Bun.spawnSync(['tsc'], { cwd: projectDir, stdio: ['ignore', 'pipe', 'pipe'] });
+    const tscResult = spawnProcessSync('tsc', [], { cwd: projectDir });
     if (tscResult.exitCode !== 0) {
-      const stderr = tscResult.stderr.toString().trim();
-      const stdout = tscResult.stdout.toString().trim();
+      const stderr = tscResult.stderr.trim();
+      const stdout = tscResult.stdout.trim();
       throw new Error(`tsc failed:\n${stderr || stdout || 'Unknown error'}`);
     }
-    if (!(await Bun.file(entryPoint).exists())) {
+    if (!(await fileExists(entryPoint))) {
       throw new Error(`tsc succeeded but ${entryPoint} was not created. Check your tsconfig.json outDir setting.`);
     }
   }
@@ -897,8 +895,8 @@ const runBuild = async (projectDir: string): Promise<void> => {
   // Read the bundled IIFE and compute its SHA-256 hash. The hash is computed
   // from the core IIFE content (before the __adapterHash setter is appended).
   const iifePath = join(distDir, ADAPTER_FILENAME);
-  const iifeContent = await Bun.file(iifePath).text();
-  const adapterHash = new Bun.CryptoHasher('sha256').update(iifeContent).digest('hex');
+  const iifeContent = await readFile(iifePath);
+  const adapterHash = sha256(iifeContent);
 
   // Append a self-contained snippet that sets the adapter hash and then freezes
   // the adapter entry to prevent cross-adapter tampering. The freeze must happen
@@ -913,19 +911,17 @@ const runBuild = async (projectDir: string): Promise<void> => {
   const hashAndFreeze = `
 (function(){var o=(globalThis).__openTabs;if(o&&o.adapters&&o.adapters[${JSON.stringify(plugin.name)}]){var a=o.adapters[${JSON.stringify(plugin.name)}];a.__adapterHash=${JSON.stringify(adapterHash)};if(a.tools&&Array.isArray(a.tools)){for(var i=0;i<a.tools.length;i++){Object.freeze(a.tools[i]);}Object.freeze(a.tools);}Object.freeze(a);Object.defineProperty(o.adapters,${JSON.stringify(plugin.name)},{value:a,writable:false,configurable:false,enumerable:true});Object.defineProperty(o,"adapters",{value:o.adapters,writable:false,configurable:false});}})();
 `;
-  await Bun.write(iifePath, iifeContent + hashAndFreeze);
-  const iifeFile = Bun.file(iifePath);
-  if (await iifeFile.exists()) {
-    const iifeSize = (await iifeFile.stat()).size;
+  await runtimeWriteFile(iifePath, iifeContent + hashAndFreeze);
+  if (await fileExists(iifePath)) {
+    const iifeSize = await getFileSize(iifePath);
     console.log(`  Written: ${pc.bold(`dist/${ADAPTER_FILENAME}`)} (${formatBytes(iifeSize)})`);
   } else {
     console.log(pc.dim(`  dist/${ADAPTER_FILENAME} not generated`));
   }
 
   const sourceMapPath = join(distDir, ADAPTER_SOURCE_MAP_FILENAME);
-  const sourceMapFile = Bun.file(sourceMapPath);
-  if (await sourceMapFile.exists()) {
-    const sourceMapSize = (await sourceMapFile.stat()).size;
+  if (await fileExists(sourceMapPath)) {
+    const sourceMapSize = await getFileSize(sourceMapPath);
     console.log(`  Written: ${pc.bold(`dist/${ADAPTER_SOURCE_MAP_FILENAME}`)} (${formatBytes(sourceMapSize)})`);
   } else {
     console.log(pc.dim('  Source map not generated'));
@@ -939,7 +935,7 @@ const runBuild = async (projectDir: string): Promise<void> => {
   console.log(pc.dim(`Generating ${TOOLS_FILENAME}...`));
   const manifest = generateManifest(plugin, sdkVersion, icons);
   const toolsJsonPath = join(distDir, TOOLS_FILENAME);
-  await Bun.write(toolsJsonPath, JSON.stringify(manifest, null, 2) + '\n');
+  await runtimeWriteFile(toolsJsonPath, JSON.stringify(manifest, null, 2) + '\n');
   const toolCount = manifest.tools.length;
   const resourceCount = manifest.resources.length;
   const promptCount = manifest.prompts.length;

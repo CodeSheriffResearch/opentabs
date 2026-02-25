@@ -15,7 +15,11 @@ import {
   OFFICIAL_SCOPE,
   normalizePluginName,
   isValidPluginPackageName,
+  readFile,
+  readJsonFile,
   resolvePluginPackageCandidates,
+  spawnProcess,
+  spawnProcessSync,
   platformExec,
 } from '@opentabs-dev/shared';
 import { mkdir } from 'node:fs/promises';
@@ -54,68 +58,41 @@ interface PluginInstallResult {
 // ---------------------------------------------------------------------------
 
 // ---------------------------------------------------------------------------
-// npm subprocess timeout (60 seconds, with 5s SIGKILL grace period)
+// npm subprocess timeout
 // ---------------------------------------------------------------------------
 
 const NPM_SUBPROCESS_TIMEOUT_MS = 60_000;
-const SIGKILL_GRACE_MS = 5_000;
 
 /**
  * Run an npm command globally with the given package name.
- * Applies a 60s timeout (SIGTERM → 5s grace → SIGKILL), and races proc.exited
- * against an overall deadline so the function never hangs.
+ * Applies a 60s timeout via Promise.race against the spawnProcess result.
  *
  * @throws Error with code -32603 and data { stderr, stdout } on non-zero exit or timeout
  */
 const runNpmGlobal = async (command: string, packageName: string): Promise<{ stdout: string; stderr: string }> => {
-  const proc = Bun.spawn([platformExec('npm'), command, '-g', packageName], {
-    stdout: 'pipe',
-    stderr: 'pipe',
+  const resultPromise = spawnProcess(platformExec('npm'), [command, '-g', packageName]);
+
+  const timeoutPromise = new Promise<never>((_, reject) => {
+    setTimeout(
+      () => reject(new Error(`npm ${command} timed out after ${NPM_SUBPROCESS_TIMEOUT_MS}ms`)),
+      NPM_SUBPROCESS_TIMEOUT_MS,
+    );
   });
 
-  let sigkillTimerId: ReturnType<typeof setTimeout> | undefined;
+  const result = await Promise.race([resultPromise, timeoutPromise]);
 
-  const timeoutId = setTimeout(() => {
-    proc.kill();
-    sigkillTimerId = setTimeout(() => {
-      try {
-        proc.kill('SIGKILL');
-      } catch {
-        // Process may have already exited
-      }
-    }, SIGKILL_GRACE_MS);
-  }, NPM_SUBPROCESS_TIMEOUT_MS);
-
-  const [stdout, stderr] = await Promise.all([new Response(proc.stdout).text(), new Response(proc.stderr).text()]);
-
-  let deadlineTimerId: ReturnType<typeof setTimeout> | undefined;
-  const overallDeadlineMs = NPM_SUBPROCESS_TIMEOUT_MS + SIGKILL_GRACE_MS + 5_000;
-  const exitCode = await Promise.race([
-    proc.exited,
-    new Promise<never>((_, reject) => {
-      deadlineTimerId = setTimeout(
-        () => reject(new Error(`npm ${command} for ${packageName} timed out after ${NPM_SUBPROCESS_TIMEOUT_MS}ms`)),
-        overallDeadlineMs,
-      );
-    }),
-  ]);
-
-  clearTimeout(timeoutId);
-  if (sigkillTimerId !== undefined) clearTimeout(sigkillTimerId);
-  if (deadlineTimerId !== undefined) clearTimeout(deadlineTimerId);
-
-  if (exitCode !== 0) {
-    log.error(`npm ${command} failed for ${packageName}: exit code ${exitCode}, stderr: ${stderr}`);
-    const error = new Error(`npm ${command} failed (exit code ${exitCode})`) as Error & {
+  if (result.exitCode !== 0) {
+    log.error(`npm ${command} failed for ${packageName}: exit code ${result.exitCode}, stderr: ${result.stderr}`);
+    const error = new Error(`npm ${command} failed (exit code ${result.exitCode})`) as Error & {
       code: number;
       data: { stderr: string; stdout: string };
     };
     error.code = -32603;
-    error.data = { stderr, stdout };
+    error.data = { stderr: result.stderr, stdout: result.stdout };
     throw error;
   }
 
-  return { stdout, stderr };
+  return { stdout: result.stdout, stderr: result.stderr };
 };
 
 // ---------------------------------------------------------------------------
@@ -140,19 +117,17 @@ interface NpmSearchJsonEntry {
  */
 const searchNpmPlugins = (query?: string): PluginSearchResult[] => {
   const searchTerm = query ? `keywords:opentabs-plugin ${query}` : 'keywords:opentabs-plugin';
-  const result = Bun.spawnSync([platformExec('npm'), 'search', searchTerm, '--json'], {
-    stdio: ['ignore', 'pipe', 'pipe'],
-  });
+  const result = spawnProcessSync('npm', ['search', searchTerm, '--json']);
 
   if (result.exitCode !== 0) {
-    const stderr = result.stderr.toString().trim();
+    const stderr = result.stderr.trim();
     const error = new Error(stderr || 'npm search failed') as Error & { code: number };
     error.code = -32603;
     throw error;
   }
 
   try {
-    const entries = JSON.parse(result.stdout.toString().trim()) as NpmSearchJsonEntry[];
+    const entries = JSON.parse(result.stdout.trim()) as NpmSearchJsonEntry[];
     return entries.map(entry => ({
       name: entry.name,
       description: entry.description ?? '',
@@ -345,7 +320,7 @@ const removeLocalPlugin = async (state: { configWriteMutex: Promise<void> }, plu
 
     let raw: string;
     try {
-      raw = await Bun.file(configPath).text();
+      raw = await readFile(configPath);
     } catch {
       log.warn('Cannot remove local plugin — config file unreadable');
       return;
@@ -387,8 +362,7 @@ const removeLocalPlugin = async (state: { configWriteMutex: Promise<void> }, plu
 
       // Check if the package.json name matches
       try {
-        const pkgRaw = await Bun.file(join(resolvedPath, 'package.json')).text();
-        const pkg = JSON.parse(pkgRaw) as Record<string, unknown>;
+        const pkg = (await readJsonFile(join(resolvedPath, 'package.json'))) as Record<string, unknown>;
         const pkgName = typeof pkg.name === 'string' ? pkg.name : '';
         const derivedPkgName = pluginNameFromPackage(pkgName);
         if (derivedPkgName === pluginName || pkgName === pluginName) {

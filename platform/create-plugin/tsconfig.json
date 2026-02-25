@@ -5,7 +5,7 @@
     "rootDir": "src",
     "types": ["bun-types"]
   },
-  "references": [{ "path": "../plugin-sdk" }, { "path": "../cli" }],
+  "references": [{ "path": "../plugin-sdk" }, { "path": "../cli" }, { "path": "../shared" }],
   "include": ["src"],
   "exclude": ["src/**/*.test.ts"]
 }

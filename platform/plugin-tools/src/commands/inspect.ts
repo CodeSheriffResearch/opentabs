@@ -4,7 +4,7 @@
  * a human-readable summary of tools, resources, and prompts.
  */
 
-import { TOOLS_FILENAME, parsePluginPackageJson } from '@opentabs-dev/shared';
+import { TOOLS_FILENAME, fileExists, parsePluginPackageJson, readFile } from '@opentabs-dev/shared';
 import pc from 'picocolors';
 import { join } from 'node:path';
 import type { ManifestPrompt, ManifestResource, ManifestTool } from '@opentabs-dev/shared';
@@ -45,15 +45,14 @@ const truncate = (s: string, maxLen: number): string => (s.length > maxLen ? s.s
 const handleInspect = async (options: { json?: boolean }, projectDir: string = process.cwd()): Promise<void> => {
   // Read dist/tools.json
   const toolsJsonPath = join(projectDir, 'dist', TOOLS_FILENAME);
-  const toolsJsonFile = Bun.file(toolsJsonPath);
-  if (!(await toolsJsonFile.exists())) {
+  if (!(await fileExists(toolsJsonPath))) {
     console.error(pc.red('No manifest found. Run opentabs-plugin build first.'));
     process.exit(1);
   }
 
   let manifest: ToolsJsonManifest;
   try {
-    const parsed: unknown = JSON.parse(await toolsJsonFile.text());
+    const parsed: unknown = JSON.parse(await readFile(toolsJsonPath));
     if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) {
       throw new Error('not an object');
     }
@@ -81,10 +80,10 @@ const handleInspect = async (options: { json?: boolean }, projectDir: string = p
   let pluginName = '(unknown)';
   let pluginVersion = '(unknown)';
   let displayName: string | undefined;
-  const pkgJsonFile = Bun.file(join(projectDir, 'package.json'));
-  if (await pkgJsonFile.exists()) {
+  const pkgJsonPath = join(projectDir, 'package.json');
+  if (await fileExists(pkgJsonPath)) {
     try {
-      const pkgJsonRaw: unknown = JSON.parse(await pkgJsonFile.text());
+      const pkgJsonRaw: unknown = JSON.parse(await readFile(pkgJsonPath));
       const result = parsePluginPackageJson(pkgJsonRaw, projectDir);
       if (result.ok) {
         pluginName = result.value.name;

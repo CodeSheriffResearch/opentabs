@@ -13,6 +13,29 @@
 export { atomicWrite, isWindows, platformExec, safeChmod } from './cross-platform.js';
 
 // ---------------------------------------------------------------------------
+// Runtime compatibility layer (Node.js / Bun)
+// ---------------------------------------------------------------------------
+
+export {
+  isBun,
+  readFile,
+  readJsonFile,
+  writeFile,
+  fileExists,
+  deleteFile,
+  getFileSize,
+  readFileSlice,
+  spawnProcess,
+  spawnProcessSync,
+  spawnStreaming,
+  spawnInherit,
+  getEnv,
+  getArgv,
+  sha256,
+} from './runtime.js';
+export type { SpawnResult, SpawnOptions, StreamingProcess } from './runtime.js';
+
+// ---------------------------------------------------------------------------
 // Error utilities
 // ---------------------------------------------------------------------------
 

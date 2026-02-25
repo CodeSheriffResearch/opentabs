@@ -10,6 +10,10 @@
 
 import { resolve } from 'node:path';
 
+if (typeof Bun === 'undefined') {
+  process.exit(0);
+}
+
 const ROOT = resolve(import.meta.dirname, '..');
 
 interface PackageJson {

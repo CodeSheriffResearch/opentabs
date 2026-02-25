@@ -1,7 +1,7 @@
 import {
   checkAuthSecret,
   checkBrowser,
-  checkBunVersion,
+  checkRuntime,
   checkConfigFile,
   checkExtensionConnected,
   checkMcpClientConfig,
@@ -53,14 +53,14 @@ describe('checkExtensionConnected', () => {
 });
 
 // ---------------------------------------------------------------------------
-// checkBunVersion
+// checkRuntime
 // ---------------------------------------------------------------------------
 
-describe('checkBunVersion', () => {
-  test('returns pass result with current Bun version', () => {
-    const result: CheckResult = checkBunVersion();
+describe('checkRuntime', () => {
+  test('returns pass result with current runtime version', () => {
+    const result: CheckResult = checkRuntime();
     expect(result.ok).toBe(true);
-    expect(result.label).toBe('Bun runtime');
+    expect(result.label).toBe('Runtime');
     expect(result.detail).toContain(Bun.version);
   });
 });

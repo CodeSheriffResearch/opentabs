@@ -11,7 +11,14 @@ import {
   resolvePluginPath,
 } from '../config.js';
 import { parsePort, resolvePort } from '../parse-port.js';
-import { ADAPTER_FILENAME, TOOLS_FILENAME } from '@opentabs-dev/shared';
+import {
+  ADAPTER_FILENAME,
+  TOOLS_FILENAME,
+  fileExists as runtimeFileExists,
+  isBun,
+  readFile,
+  readJsonFile,
+} from '@opentabs-dev/shared';
 import pc from 'picocolors';
 import { existsSync } from 'node:fs';
 import { homedir } from 'node:os';
@@ -47,12 +54,11 @@ const fail = (label: string, detail: string, hint: string): CheckResult => ({
   fatal: true,
 });
 
-const checkBunVersion = (): CheckResult => {
-  const bunVersion = typeof Bun !== 'undefined' ? Bun.version : undefined;
-  if (bunVersion) {
-    return pass('Bun runtime', `v${bunVersion}`);
+const checkRuntime = (): CheckResult => {
+  if (isBun) {
+    return pass('Runtime', `Bun v${Bun.version}`);
   }
-  return fail('Bun runtime', 'not detected', 'Install Bun: https://bun.sh');
+  return pass('Runtime', `Node.js ${process.version}`);
 };
 
 const checkConfigFile = async (): Promise<{ result: CheckResult; config: Record<string, unknown> | null }> => {
@@ -135,7 +141,7 @@ const checkExtensionInstalled = async (): Promise<{ result: CheckResult; version
   }
 
   const versionPath = join(extensionDir, '.opentabs-version');
-  const versionFile = (await Bun.file(versionPath).exists()) ? await Bun.file(versionPath).text() : null;
+  const versionFile = (await runtimeFileExists(versionPath)) ? await readFile(versionPath) : null;
   return {
     result: pass('Extension installed', extensionDir),
     versionFile: versionFile?.trim() ?? null,
@@ -146,7 +152,7 @@ const checkExtensionVersion = async (installedVersion: string | null): Promise<C
   const cliDir = dirname(fileURLToPath(import.meta.url));
   let cliVersion = 'unknown';
   try {
-    const pkgJson = JSON.parse(await Bun.file(join(cliDir, '..', '..', 'package.json')).text()) as { version: string };
+    const pkgJson = JSON.parse(await readFile(join(cliDir, '..', '..', 'package.json'))) as { version: string };
     cliVersion = pkgJson.version;
   } catch {
     return warn(
@@ -235,7 +241,7 @@ const checkMcpClientConfig = async (
   for (const client of clients) {
     if (!existsSync(client.path)) continue;
     try {
-      const content = await Bun.file(client.path).text();
+      const content = await readFile(client.path);
       const parsed: unknown = JSON.parse(content);
       if (
         parsed !== null &&
@@ -303,7 +309,7 @@ const checkPlugins = async (config: Record<string, unknown> | null): Promise<Che
 
     let pluginName = pluginPath;
     try {
-      const pkgData: unknown = await Bun.file(join(resolvedPath, 'package.json')).json();
+      const pkgData: unknown = await readJsonFile(join(resolvedPath, 'package.json'));
       if (pkgData !== null && typeof pkgData === 'object' && 'name' in pkgData) {
         const d = pkgData as { name: string };
         pluginName = d.name;
@@ -408,8 +414,8 @@ const handleDoctor = async (options: DoctorOptions): Promise<void> => {
   const port = resolvePort(options);
   const results: CheckResult[] = [];
 
-  // 1. Bun version
-  results.push(checkBunVersion());
+  // 1. Runtime version
+  results.push(checkRuntime());
 
   // 2. Browser
   results.push(checkBrowser());
@@ -495,7 +501,7 @@ Examples:
 export {
   checkAuthSecret,
   checkBrowser,
-  checkBunVersion,
+  checkRuntime,
   checkConfigFile,
   checkExtensionConnected,
   checkMcpClientConfig,

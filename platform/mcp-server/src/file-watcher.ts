@@ -5,7 +5,7 @@
  * to dist/tools.json and dist/adapter.iife.js. On change:
  * - IIFE change → re-read, send plugin.update to extension
  * - tools.json change → re-read tools AND IIFE, re-register MCP tools, notify MCP clients.
- *   Both files are re-read on tools.json change because `bun run build` typically produces
+ *   Both files are re-read on tools.json change because `npm run build` typically produces
  *   both new tools and a new IIFE simultaneously. Re-reading the IIFE here avoids
  *   a brief race where the extension has new tool definitions pointing at old adapter code.
  *
@@ -24,7 +24,14 @@ import { getConfigDir } from './config.js';
 import { extractToolsArray, loadPlugin } from './loader.js';
 import { log } from './logger.js';
 import { buildRegistry } from './registry.js';
-import { ADAPTER_FILENAME, ADAPTER_SOURCE_MAP_FILENAME, TOOLS_FILENAME, isOk } from '@opentabs-dev/shared';
+import {
+  ADAPTER_FILENAME,
+  ADAPTER_SOURCE_MAP_FILENAME,
+  TOOLS_FILENAME,
+  fileExists as runtimeFileExists,
+  isOk,
+  readFile,
+} from '@opentabs-dev/shared';
 import { statSync, watch } from 'node:fs';
 import { join } from 'node:path';
 import type { ServerState, FileWatcherEntry, RegisteredPlugin } from './state.js';
@@ -63,7 +70,7 @@ const readFileWithRetry = async (path: string, maxRetries = 3, initialDelayMs = 
   let delay = initialDelayMs;
   for (let attempt = 0; attempt <= maxRetries; attempt++) {
     try {
-      return await Bun.file(path).text();
+      return await readFile(path);
     } catch (err) {
       if (attempt === maxRetries) throw err;
       await new Promise(r => setTimeout(r, delay));
@@ -76,7 +83,7 @@ const readFileWithRetry = async (path: string, maxRetries = 3, initialDelayMs = 
 /**
  * Check if a file exists.
  */
-const fileExists = async (path: string): Promise<boolean> => Bun.file(path).exists();
+const fileExists = async (path: string): Promise<boolean> => runtimeFileExists(path);
 
 /**
  * Get the mtimeMs for a file, or null if the file does not exist or stat fails.
@@ -270,7 +277,7 @@ const parseToolsJson = (raw: string, filePath: string): ManifestTool[] | null =>
 /**
  * Handle a dist/tools.json file change for a local plugin.
  *
- * Also re-reads the IIFE from disk because `bun run build` typically updates
+ * Also re-reads the IIFE from disk because `npm run build` typically updates
  * both tools.json and IIFE simultaneously. Without this, the tools.json watcher
  * would send a plugin.update with the old IIFE, and the extension would
  * briefly have new tool definitions pointing at stale adapter code until
@@ -543,7 +550,7 @@ const startConfigWatching = (state: ServerState, callbacks: FileWatcherCallbacks
 /**
  * Start periodic mtime polling as a fallback for stale fs.watch() watchers.
  *
- * fs.watch() can go stale on macOS (FSEvents bug in long-running Bun processes)
+ * fs.watch() can go stale on macOS (FSEvents bug in long-running processes)
  * and Linux (inotify limits). This polling loop stats every watched file and
  * config.json on a fixed interval. If a file's mtime is newer than what was
  * last recorded, the appropriate handler is invoked — the same handler that

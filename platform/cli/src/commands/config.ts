@@ -12,7 +12,13 @@ import {
 } from '../config.js';
 import { notifyServer } from '../notify-server.js';
 import { resolvePort } from '../parse-port.js';
-import { atomicWrite, generateSecret, toErrorMessage } from '@opentabs-dev/shared';
+import {
+  atomicWrite,
+  deleteFile as runtimeDeleteFile,
+  fileExists as runtimeFileExists,
+  generateSecret,
+  toErrorMessage,
+} from '@opentabs-dev/shared';
 import pc from 'picocolors';
 import { existsSync } from 'node:fs';
 import { mkdir } from 'node:fs/promises';
@@ -309,7 +315,7 @@ const handleSetLocalPluginsAdd = async (value: string, options: { port?: number 
 
   if (!existsSync(pluginPath)) {
     console.log(pc.yellow(`Warning: Path does not exist: ${pluginPath}`));
-  } else if (!(await Bun.file(join(pluginPath, 'package.json')).exists())) {
+  } else if (!existsSync(join(pluginPath, 'package.json'))) {
     console.log(pc.yellow(`Warning: No package.json found at ${pluginPath}. Plugin may not load.`));
   }
 
@@ -426,9 +432,8 @@ interface ConfigResetOptions {
 
 const handleConfigReset = async (options: ConfigResetOptions): Promise<void> => {
   const configPath = getConfigPath();
-  const configFile = Bun.file(configPath);
 
-  if (!(await configFile.exists())) {
+  if (!(await runtimeFileExists(configPath))) {
     console.log(`No config file found at ${configPath}`);
     return;
   }
@@ -442,7 +447,7 @@ const handleConfigReset = async (options: ConfigResetOptions): Promise<void> => 
     process.exit(1);
   }
 
-  await configFile.delete();
+  await runtimeDeleteFile(configPath);
   console.log(`${pc.green('Config file deleted:')} ${configPath}`);
   console.log(pc.dim('Run opentabs start to regenerate.'));
 };

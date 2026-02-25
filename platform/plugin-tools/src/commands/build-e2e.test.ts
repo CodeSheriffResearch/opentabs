@@ -135,8 +135,8 @@ describe('opentabs-plugin build E2E', () => {
       const iifeContent = await iifeFile.text();
       expect(iifeContent.length).toBeGreaterThan(0);
 
-      // IIFE should start with '(' (arrow function or classic function IIFE)
-      expect(iifeContent.startsWith('(')).toBe(true);
+      // IIFE should contain the self-invoking wrapper pattern
+      expect(iifeContent).toContain('(() => {');
     });
 
     test('adapter.iife.js contains __adapterHash assignment', async () => {

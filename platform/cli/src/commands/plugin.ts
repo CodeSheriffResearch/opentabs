@@ -19,8 +19,12 @@ import {
   OFFICIAL_SCOPE,
   PLUGIN_PREFIX,
   normalizePluginName,
+  readFile,
   resolvePluginPackageCandidates,
   platformExec,
+  spawnInherit,
+  spawnProcess,
+  spawnProcessSync,
   toErrorMessage,
 } from '@opentabs-dev/shared';
 import pc from 'picocolors';
@@ -43,10 +47,8 @@ interface NpmSearchPackage {
  * Delegates auth to npm itself (reads ~/.npmrc), supporting private packages.
  */
 const packageExistsOnNpm = (pkg: string): boolean => {
-  const result = Bun.spawnSync([platformExec('npm'), 'view', pkg, 'version'], {
-    stdio: ['ignore', 'pipe', 'pipe'],
-  });
-  return result.exitCode === 0 && result.stdout.toString().trim().length > 0;
+  const result = spawnProcessSync('npm', ['view', pkg, 'version']);
+  return result.exitCode === 0 && result.stdout.trim().length > 0;
 };
 
 /**
@@ -73,15 +75,11 @@ const resolvePackageName = (name: string): string | null => {
  */
 const warnIfNotPlugin = async (pkg: string): Promise<void> => {
   try {
-    const proc = Bun.spawn([platformExec('npm'), 'root', '-g'], {
-      stdout: 'pipe',
-      stderr: 'pipe',
-    });
-    const globalRoot = (await new Response(proc.stdout).text()).trim();
-    await proc.exited;
+    const rootResult = await spawnProcess('npm', ['root', '-g']);
+    const globalRoot = rootResult.stdout.trim();
 
     const pkgJsonPath = join(globalRoot, pkg, 'package.json');
-    const pkgJsonText = await Bun.file(pkgJsonPath).text();
+    const pkgJsonText = await readFile(pkgJsonPath);
     const pkgJson = JSON.parse(pkgJsonText) as Record<string, unknown>;
 
     const hasOpentabsField = typeof pkgJson.opentabs === 'object' && pkgJson.opentabs !== null;
@@ -119,10 +117,7 @@ const handlePluginInstall = async (name: string, options: { port?: number }): Pr
 
   console.log(`Installing ${pc.bold(pkg)}...`);
 
-  const proc = Bun.spawn([platformExec('npm'), 'install', '-g', pkg], {
-    stdio: ['inherit', 'inherit', 'inherit'],
-  });
-  const exitCode = await proc.exited;
+  const exitCode = await spawnInherit(platformExec('npm'), ['install', '-g', pkg]);
 
   if (exitCode !== 0) {
     console.error(pc.red(`npm install failed (exit code ${exitCode}).`));
@@ -153,7 +148,7 @@ const removeFromLocalPlugins = async (pkg: string): Promise<void> => {
     const resolved = resolvePluginPath(entry, configPath);
     const pkgJsonPath = join(resolved, 'package.json');
     try {
-      const pkgJson: unknown = JSON.parse(await Bun.file(pkgJsonPath).text());
+      const pkgJson: unknown = JSON.parse(await readFile(pkgJsonPath));
       if (typeof pkgJson === 'object' && pkgJson !== null && (pkgJson as Record<string, unknown>).name === pkg) {
         continue;
       }
@@ -198,10 +193,7 @@ const handlePluginRemove = async (name: string, options: PluginRemoveOptions): P
 
   console.log(`Removing ${pc.bold(pkg)}...`);
 
-  const proc = Bun.spawn([platformExec('npm'), 'uninstall', '-g', pkg], {
-    stdio: ['inherit', 'inherit', 'inherit'],
-  });
-  const exitCode = await proc.exited;
+  const exitCode = await spawnInherit(platformExec('npm'), ['uninstall', '-g', pkg]);
 
   if (exitCode !== 0) {
     console.error(pc.red(`npm uninstall failed (exit code ${exitCode}).`));
@@ -221,13 +213,10 @@ const handlePluginRemove = async (name: string, options: PluginRemoveOptions): P
  */
 const fetchPackageInfo = (pkg: string): NpmSearchPackage | null => {
   try {
-    const result = Bun.spawnSync(
-      [platformExec('npm'), 'view', pkg, 'name', 'description', 'version', 'maintainers', '--json'],
-      { stdio: ['ignore', 'pipe', 'pipe'] },
-    );
+    const result = spawnProcessSync('npm', ['view', pkg, 'name', 'description', 'version', 'maintainers', '--json']);
     if (result.exitCode !== 0) return null;
 
-    const data = JSON.parse(result.stdout.toString().trim()) as Record<string, unknown>;
+    const data = JSON.parse(result.stdout.trim()) as Record<string, unknown>;
     const name = typeof data.name === 'string' ? data.name : pkg;
     const version = typeof data.version === 'string' ? data.version : null;
     if (!version) return null;
@@ -282,13 +271,11 @@ interface NpmSearchJsonEntry {
  */
 const npmSearchPlugins = (query?: string): NpmSearchPackage[] => {
   const searchTerm = query ? `keywords:opentabs-plugin ${query}` : 'keywords:opentabs-plugin';
-  const result = Bun.spawnSync([platformExec('npm'), 'search', searchTerm, '--json'], {
-    stdio: ['ignore', 'pipe', 'pipe'],
-  });
+  const result = spawnProcessSync('npm', ['search', searchTerm, '--json']);
   if (result.exitCode !== 0) return [];
 
   try {
-    const entries = JSON.parse(result.stdout.toString().trim()) as NpmSearchJsonEntry[];
+    const entries = JSON.parse(result.stdout.trim()) as NpmSearchJsonEntry[];
     return entries.map(entry => ({
       name: entry.name,
       description: entry.description,
@@ -405,7 +392,7 @@ const readLocalPluginInfo = async (
   pluginDir: string,
 ): Promise<{ name: string; displayName: string; version: string | null; toolCount: number } | null> => {
   try {
-    const pkgJsonText = await Bun.file(join(pluginDir, 'package.json')).text();
+    const pkgJsonText = await readFile(join(pluginDir, 'package.json'));
     const pkgJson = JSON.parse(pkgJsonText) as Record<string, unknown>;
     const name = typeof pkgJson.name === 'string' ? pkgJson.name : null;
     if (!name) return null;
@@ -419,7 +406,7 @@ const readLocalPluginInfo = async (
 
     let toolCount = 0;
     try {
-      const toolsJsonText = await Bun.file(join(pluginDir, 'dist', TOOLS_FILENAME)).text();
+      const toolsJsonText = await readFile(join(pluginDir, 'dist', TOOLS_FILENAME));
       const toolsJson = JSON.parse(toolsJsonText) as Record<string, unknown>;
       const tools = Array.isArray(toolsJson.tools) ? toolsJson.tools : [];
       toolCount = tools.length;
@@ -439,12 +426,8 @@ const readLocalPluginInfo = async (
 const scanNpmPlugins = async (): Promise<ListPluginEntry[]> => {
   const entries: ListPluginEntry[] = [];
   try {
-    const proc = Bun.spawn([platformExec('npm'), 'list', '-g', '--json', '--depth=0'], {
-      stdout: 'pipe',
-      stderr: 'pipe',
-    });
-    const stdout = await new Response(proc.stdout).text();
-    await proc.exited;
+    const result = await spawnProcess(platformExec('npm'), ['list', '-g', '--json', '--depth=0']);
+    const stdout = result.stdout;
 
     const data = JSON.parse(stdout) as Record<string, unknown>;
     const deps = typeof data.dependencies === 'object' && data.dependencies !== null ? data.dependencies : {};
