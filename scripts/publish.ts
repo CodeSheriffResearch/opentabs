@@ -257,9 +257,10 @@ const main = async (): Promise<void> => {
     console.log(`  ${pkg}/package.json → ${version}`);
   }
 
-  // 3. Rebuild
+  // 3. Sync lockfile with bumped versions, then rebuild
   console.log('');
-  console.log('==> Rebuilding with new versions...');
+  console.log('==> Syncing lockfile and rebuilding with new versions...');
+  run(['bun', 'install']);
   run(['bun', 'run', 'build:force']);
 
   // 4. Publish packages in dependency order
