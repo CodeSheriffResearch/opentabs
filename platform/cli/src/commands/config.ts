@@ -284,6 +284,7 @@ const handleSetPort = async (value: string, options: { port?: number }): Promise
 
   await atomicWriteConfig(configPath, JSON.stringify(config, null, 2) + '\n');
   console.log(`port: ${pc.cyan(String(newPort))}`);
+  console.log(pc.yellow('Restart the MCP server for the port change to take effect.'));
   await notifyServer({ port: options.port, warnIfNotRunning: true });
 };
 
