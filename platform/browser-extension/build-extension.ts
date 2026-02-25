@@ -39,6 +39,10 @@ for (const { entrypoint, outfile, label } of entries) {
       minify: false,
       // Write directly to the exact output path, overwriting the tsc-produced file.
       allowOverwrite: true,
+      // @opentabs-dev/shared exports runtime utilities that import node: builtins.
+      // The extension only uses shared's constants and types — mark node builtins
+      // as external so esbuild doesn't try to resolve them in the browser bundle.
+      external: ['node:*'],
     });
 
     console.log(`[opentabs:build:${label}] Bundled successfully`);

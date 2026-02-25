@@ -25,6 +25,7 @@ await build({
   // without a package.json "exports" map. esbuild needs .mjs in its resolve extensions
   // to find these files.
   resolveExtensions: ['.tsx', '.ts', '.jsx', '.js', '.mjs', '.css', '.json'],
+  external: ['node:*'],
   define: {
     'process.env.NODE_ENV': '"production"',
   },
