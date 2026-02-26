@@ -88,21 +88,24 @@ const formatDuration = (ms: number): string => {
 };
 
 const COL_TIME = 15;
-const COL_TOOL = 30;
+const COL_TOOL_MIN = 'Tool'.length;
 const COL_STATUS = 4;
 const COL_DURATION = 10;
 
 const printAuditTable = (entries: AuditEntry[]): void => {
+  const maxToolLen = entries.reduce((max, e) => Math.max(max, e.tool.length), 0);
+  const colTool = Math.max(COL_TOOL_MIN, maxToolLen) + 2;
+
   console.log(
     pc.bold(
-      `${'Time'.padEnd(COL_TIME)}${'Tool'.padEnd(COL_TOOL)}${'OK'.padEnd(COL_STATUS)}${'Duration'.padEnd(COL_DURATION)}`,
+      `${'Time'.padEnd(COL_TIME)}${'Tool'.padEnd(colTool)}${'OK'.padEnd(COL_STATUS)}${'Duration'.padEnd(COL_DURATION)}`,
     ),
   );
-  console.log(pc.dim('─'.repeat(COL_TIME + COL_TOOL + COL_STATUS + COL_DURATION)));
+  console.log(pc.dim('─'.repeat(COL_TIME + colTool + COL_STATUS + COL_DURATION)));
 
   for (const entry of entries) {
     const time = formatTimestamp(entry.timestamp).padEnd(COL_TIME);
-    const tool = entry.tool.padEnd(COL_TOOL);
+    const tool = entry.tool.padEnd(colTool);
     // Pad the plain-text icon to the column width, then colorize.
     // Colorizing after padding ensures ANSI escape codes don't affect alignment.
     const icon = entry.success ? '✓' : '✗';
