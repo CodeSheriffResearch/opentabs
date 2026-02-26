@@ -576,4 +576,54 @@ describe('checkMcpClientConfig', () => {
     expect(result.ok).toBe(true);
     expect(result.detail).toContain('First');
   });
+
+  test('returns pass when OpenCode config has opentabs entry in mcp field', async () => {
+    const configDir = join(TEST_BASE_DIR, 'mcp-opencode');
+    mkdirSync(configDir, { recursive: true });
+    const configPath = join(configDir, 'opencode.json');
+    await Bun.write(
+      configPath,
+      JSON.stringify({ mcp: { opentabs: { command: 'opentabs', args: ['start', '--mcp'] } } }),
+    );
+
+    const result = await checkMcpClientConfig([{ name: 'OpenCode', path: configPath }]);
+    expect(result.ok).toBe(true);
+    expect(result.label).toBe('MCP client config');
+    expect(result.detail).toContain('OpenCode');
+    expect(result.detail).toContain(configPath);
+  });
+
+  test('returns warn when OpenCode config has mcp field but no opentabs entry', async () => {
+    const configDir = join(TEST_BASE_DIR, 'mcp-opencode-no-opentabs');
+    mkdirSync(configDir, { recursive: true });
+    const configPath = join(configDir, 'opencode.json');
+    await Bun.write(configPath, JSON.stringify({ mcp: { other: { command: 'other' } } }));
+
+    const result = await checkMcpClientConfig([{ name: 'OpenCode', path: configPath }]);
+    expect(result.ok).toBe(false);
+    expect(result.fatal).toBe(false);
+    expect(result.detail).toContain('no MCP client configured');
+  });
+
+  test('returns warn hint mentioning OpenCode when no client is configured', async () => {
+    const result = await checkMcpClientConfig([
+      { name: 'Claude Code', path: join(TEST_BASE_DIR, 'nonexistent3', 'mcp.json') },
+      { name: 'Cursor', path: join(TEST_BASE_DIR, 'nonexistent4', 'mcp.json') },
+      { name: 'OpenCode', path: join(TEST_BASE_DIR, 'nonexistent5', 'opencode.json') },
+    ]);
+    expect(result.ok).toBe(false);
+    expect(result.hint).toContain('OpenCode');
+    expect(result.hint).toContain('opencode.json');
+  });
+
+  test('prefers mcpServers format over mcp format when both are present', async () => {
+    const configDir = join(TEST_BASE_DIR, 'mcp-both-formats');
+    mkdirSync(configDir, { recursive: true });
+    const configPath = join(configDir, 'config.json');
+    await Bun.write(configPath, JSON.stringify({ mcpServers: { opentabs: {} }, mcp: { opentabs: {} } }));
+
+    const result = await checkMcpClientConfig([{ name: 'Both', path: configPath }]);
+    expect(result.ok).toBe(true);
+    expect(result.detail).toContain('Both');
+  });
 });

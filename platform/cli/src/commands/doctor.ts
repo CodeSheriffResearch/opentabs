@@ -235,6 +235,7 @@ interface McpClientLocation {
 const defaultMcpClientLocations = (): McpClientLocation[] => [
   { name: 'Claude Code', path: join(homedir(), '.claude', 'settings', 'mcp.json') },
   { name: 'Cursor', path: join(process.cwd(), '.cursor', 'mcp.json') },
+  { name: 'OpenCode', path: join(process.cwd(), 'opencode.json') },
 ];
 
 const checkMcpClientConfig = async (
@@ -245,15 +246,19 @@ const checkMcpClientConfig = async (
     try {
       const content = await readFile(client.path, 'utf-8');
       const parsed: unknown = JSON.parse(content);
-      if (
-        parsed !== null &&
-        typeof parsed === 'object' &&
-        'mcpServers' in parsed &&
-        parsed.mcpServers !== null &&
-        typeof parsed.mcpServers === 'object' &&
-        'opentabs' in parsed.mcpServers
-      ) {
-        return pass('MCP client config', `${client.name} (${client.path})`);
+      if (parsed !== null && typeof parsed === 'object') {
+        const hasMcpServersOpentabs =
+          'mcpServers' in parsed &&
+          parsed.mcpServers !== null &&
+          typeof parsed.mcpServers === 'object' &&
+          'opentabs' in parsed.mcpServers;
+
+        const hasMcpOpentabs =
+          'mcp' in parsed && parsed.mcp !== null && typeof parsed.mcp === 'object' && 'opentabs' in parsed.mcp;
+
+        if (hasMcpServersOpentabs || hasMcpOpentabs) {
+          return pass('MCP client config', `${client.name} (${client.path})`);
+        }
       }
     } catch {
       // File exists but isn't valid JSON — skip to next client
@@ -263,7 +268,7 @@ const checkMcpClientConfig = async (
   return warn(
     'MCP client config',
     'no MCP client configured for OpenTabs',
-    'Add an "opentabs" entry to ~/.claude/settings/mcp.json (Claude Code) or .cursor/mcp.json (Cursor)',
+    'Add an "opentabs" entry to ~/.claude/settings/mcp.json (Claude Code), .cursor/mcp.json (Cursor), or opencode.json (OpenCode)',
   );
 };
 
