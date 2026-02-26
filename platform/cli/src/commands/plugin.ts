@@ -407,6 +407,7 @@ const handlePluginSearch = (query?: string): void => {
 interface PluginListOptions {
   port?: number;
   json?: boolean;
+  verbose?: boolean;
 }
 
 interface HealthPluginDetail {
@@ -416,6 +417,7 @@ interface HealthPluginDetail {
   tabState: string;
   source?: string;
   sdkVersion?: string | null;
+  tools?: string[];
 }
 
 interface HealthFailedPlugin {
@@ -430,6 +432,7 @@ interface ListPluginEntry {
   source: 'npm' | 'local';
   tabState: string | null;
   toolCount: number;
+  toolNames?: string[];
 }
 
 /**
@@ -437,7 +440,13 @@ interface ListPluginEntry {
  */
 const readLocalPluginInfo = async (
   pluginDir: string,
-): Promise<{ name: string; displayName: string; version: string | null; toolCount: number } | null> => {
+): Promise<{
+  name: string;
+  displayName: string;
+  version: string | null;
+  toolCount: number;
+  toolNames: string[];
+} | null> => {
   try {
     const pkgJsonText = await readFile(join(pluginDir, 'package.json'), 'utf-8');
     const pkgJson = JSON.parse(pkgJsonText) as Record<string, unknown>;
@@ -452,16 +461,18 @@ const readLocalPluginInfo = async (
     const version = typeof pkgJson.version === 'string' ? pkgJson.version : null;
 
     let toolCount = 0;
+    let toolNames: string[] = [];
     try {
       const toolsJsonText = await readFile(join(pluginDir, 'dist', TOOLS_FILENAME), 'utf-8');
       const toolsJson = JSON.parse(toolsJsonText) as Record<string, unknown>;
-      const tools = Array.isArray(toolsJson.tools) ? toolsJson.tools : [];
+      const tools = Array.isArray(toolsJson.tools) ? (toolsJson.tools as Record<string, unknown>[]) : [];
       toolCount = tools.length;
+      toolNames = tools.map(t => (typeof t.name === 'string' ? t.name : null)).filter((n): n is string => n !== null);
     } catch {
       // dist/tools.json may not exist (plugin not built yet)
     }
 
-    return { name, displayName, version, toolCount };
+    return { name, displayName, version, toolCount, toolNames };
   } catch {
     return null;
   }
@@ -538,6 +549,9 @@ const handlePluginList = async (options: PluginListOptions): Promise<void> => {
         const sourceLabel = p.source === 'local' ? pc.dim('(local)') : pc.dim('(npm)');
         const sdkWarning = p.sdkVersion === null ? ` ${pc.yellow('⚠ no SDK version')}` : '';
         console.log(`  ${p.displayName} ${sourceLabel} ${pc.dim('—')} ${state} ${pc.dim('·')} ${tools}${sdkWarning}`);
+        if (options.verbose && p.tools && p.tools.length > 0) {
+          console.log(`      ${pc.dim(p.tools.join(', '))}`);
+        }
       }
 
       if (failedPlugins.length > 0) {
@@ -574,6 +588,7 @@ const handlePluginList = async (options: PluginListOptions): Promise<void> => {
         source: 'local',
         tabState: null,
         toolCount: info.toolCount,
+        toolNames: info.toolNames,
       });
     } else {
       localEntries.push({
@@ -615,6 +630,9 @@ const handlePluginList = async (options: PluginListOptions): Promise<void> => {
     const parts = [p.displayName, sourceLabel, pc.dim('—'), version];
     if (tools) parts.push(pc.dim('·'), tools);
     console.log(`  ${parts.join(' ')}`);
+    if (options.verbose && p.toolNames && p.toolNames.length > 0) {
+      console.log(`      ${pc.dim(p.toolNames.join(', '))}`);
+    }
   }
 };
 
@@ -649,11 +667,13 @@ Examples:
     .description('List installed plugins')
     .option('--port <number>', 'Server port (default: 9515)', parsePort)
     .option('--json', 'Output machine-readable JSON')
+    .option('-v, --verbose', 'Show tool names for each plugin')
     .addHelpText(
       'after',
       `
 Examples:
   $ opentabs plugin list
+  $ opentabs plugin list --verbose
   $ opentabs plugin list --json
   $ opentabs plugin list --port 3000`,
     )
