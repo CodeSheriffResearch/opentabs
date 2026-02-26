@@ -40,7 +40,7 @@
 ### Tech Stack
 
 - **Language**: TypeScript (strict, ES Modules)
-- **Runtime**: Node.js 20+ (production); Bun + npm (development, testing, publishing)
+- **Runtime**: Node.js 22+ (production); Bun + npm (development, testing, publishing)
 - **Build**: `tsc --build` (composite project references)
 - **Testing**: Playwright (E2E)
 - **UI**: React 19, Tailwind CSS 4 (side panel only)
@@ -280,7 +280,7 @@ For full repository verification including docs and plugins, use `bun run check:
 
 ### Runtime Compatibility
 
-Published packages (CLI, browser-extension, MCP server, plugin-tools, create-plugin) run on **Node.js 20+**. Platform contributors use **Bun** for development, testing, and monorepo management, and **npm** for registry authentication and publishing.
+Published packages (CLI, browser-extension, MCP server, plugin-tools, create-plugin) run on **Node.js 22+**. Platform contributors use **Bun** for development, testing, and monorepo management, and **npm** for registry authentication and publishing.
 
 **Production code** (`platform/*/src/`): Uses Node.js APIs directly (`node:fs/promises`, `node:child_process`, `node:crypto`, `process.env`, `process.argv`). Bun runs all Node.js APIs natively, so no compatibility layer is needed.
 

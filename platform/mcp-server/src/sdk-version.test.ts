@@ -11,10 +11,16 @@ describe('sdkVersion', () => {
   });
 
   test('matches the plugin-sdk package.json version', async () => {
-    const { join, dirname } = await import('node:path');
-    const { fileURLToPath } = await import('node:url');
+    const nodePath = await import('node:path');
+    const nodeUrl = await import('node:url');
 
-    const sdkPkgPath = join(dirname(fileURLToPath(import.meta.url)), '..', '..', 'plugin-sdk', 'package.json');
+    const sdkPkgPath = nodePath.join(
+      nodePath.dirname(nodeUrl.fileURLToPath(import.meta.url)),
+      '..',
+      '..',
+      'plugin-sdk',
+      'package.json',
+    );
     const pkgJson = (await Bun.file(sdkPkgPath).json()) as { version: string };
 
     expect(sdkVersion).toBe(pkgJson.version);
