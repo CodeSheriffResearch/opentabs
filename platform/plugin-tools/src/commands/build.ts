@@ -924,6 +924,12 @@ const runBuild = async (projectDir: string): Promise<void> => {
     const pathKey = process.platform === 'win32' ? 'Path' : 'PATH';
     const envWithBin = { ...process.env, [pathKey]: `${binDir}${pathSep}${process.env[pathKey] ?? ''}` };
     const tscResult = spawnSync('tsc', [], { cwd: projectDir, env: envWithBin });
+    if (tscResult.error) {
+      if ((tscResult.error as NodeJS.ErrnoException).code === 'ENOENT') {
+        throw new Error('tsc not found — run npm install to install TypeScript');
+      }
+      throw tscResult.error;
+    }
     if ((tscResult.status ?? 1) !== 0) {
       const stderr = tscResult.stderr.toString().trim();
       const stdout = tscResult.stdout.toString().trim();

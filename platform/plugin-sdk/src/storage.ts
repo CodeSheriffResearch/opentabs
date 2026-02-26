@@ -76,19 +76,24 @@ export const removeSessionStorage = (key: string): void => {
 
 /**
  * Reads a cookie by name from `document.cookie`. Handles URI-encoded values.
- * Returns null if the cookie is not found.
+ * Returns null if the cookie is not found or if cookie access throws
+ * (e.g., SecurityError in sandboxed iframes).
  */
 export const getCookie = (name: string): string | null => {
-  const prefix = `${name}=`;
-  const entries = document.cookie.split('; ');
-  for (const entry of entries) {
-    if (entry.startsWith(prefix)) {
-      try {
-        return decodeURIComponent(entry.slice(prefix.length));
-      } catch {
-        return entry.slice(prefix.length);
+  try {
+    const prefix = `${name}=`;
+    const entries = document.cookie.split('; ');
+    for (const entry of entries) {
+      if (entry.startsWith(prefix)) {
+        try {
+          return decodeURIComponent(entry.slice(prefix.length));
+        } catch {
+          return entry.slice(prefix.length);
+        }
       }
     }
+    return null;
+  } catch {
+    return null;
   }
-  return null;
 };

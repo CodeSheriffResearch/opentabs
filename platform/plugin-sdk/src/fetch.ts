@@ -91,15 +91,18 @@ export const fetchFromPage = async (url: string, init?: FetchFromPageOptions): P
 export const fetchJSONImpl = async (url: string, init?: FetchFromPageOptions, schema?: z.ZodType): Promise<unknown> => {
   const response = await fetchFromPage(url, init);
 
-  if (response.status === 204 || response.headers.get('content-length') === '0') {
-    return undefined;
-  }
-
   let data: unknown;
-  try {
-    data = await response.json();
-  } catch {
-    throw ToolError.validation(`fetchJSON: failed to parse JSON response from ${url}`);
+  if (response.status === 204 || response.headers.get('content-length') === '0') {
+    if (!schema) {
+      return undefined;
+    }
+    data = undefined;
+  } else {
+    try {
+      data = await response.json();
+    } catch {
+      throw ToolError.validation(`fetchJSON: failed to parse JSON response from ${url}`);
+    }
   }
 
   if (schema) {

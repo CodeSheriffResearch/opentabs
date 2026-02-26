@@ -114,6 +114,10 @@ beforeAll(() => {
         });
       }
 
+      if (url.pathname === '/no-content') {
+        return new Response(null, { status: 204 });
+      }
+
       return new Response('Not Found', { status: 404 });
     },
   });
@@ -363,6 +367,25 @@ describe('fetchJSON', () => {
   test('returns unchecked cast when schema is omitted (backward compat)', async () => {
     const data = await fetchJSON<{ status: string }>(`${baseUrl}/ok`);
     expect(data.status).toBe('success');
+  });
+
+  test('returns undefined for 204 response when no schema is provided', async () => {
+    const data = await fetchJSON(`${baseUrl}/no-content`);
+    expect(data).toBeUndefined();
+  });
+
+  test('throws ToolError.validation for 204 response when schema is provided', async () => {
+    const schema = z.object({ status: z.string() });
+    try {
+      await fetchJSON(`${baseUrl}/no-content`, undefined, schema);
+      expect.unreachable('should have thrown');
+    } catch (error) {
+      expect(error).toBeInstanceOf(ToolError);
+      const toolError = error as ToolError;
+      expect(toolError.code).toBe('VALIDATION_ERROR');
+      expect(toolError.category).toBe('validation');
+      expect(toolError.message).toContain('failed schema validation');
+    }
   });
 });
 

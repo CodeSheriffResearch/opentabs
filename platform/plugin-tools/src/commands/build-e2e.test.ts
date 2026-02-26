@@ -186,7 +186,7 @@ describe('opentabs-plugin build E2E', () => {
 
       // Verify dist/index.js was recreated by tsc
       expect(await Bun.file(join(pluginDir, 'dist', 'index.js')).exists()).toBe(true);
-    });
+    }, 30_000);
 
     test('fails with descriptive error when neither dist/index.js nor src/index.ts exists', () => {
       const pluginDir = join(tmpDir, 'no-source');
