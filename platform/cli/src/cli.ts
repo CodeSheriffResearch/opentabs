@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 
 import {
+  handleStatus,
   registerAuditCommand,
   registerConfigCommand,
   registerDoctorCommand,
@@ -30,7 +31,8 @@ const program = new Command('opentabs')
     `\nEnvironment:
   OPENTABS_PORT         MCP server port (overridden by --port)
   OPENTABS_CONFIG_DIR   Config directory (default: ~/.opentabs)`,
-  );
+  )
+  .action((_options, command: Command) => handleStatus(command.optsWithGlobals()));
 
 registerStartCommand(program);
 registerStatusCommand(program);

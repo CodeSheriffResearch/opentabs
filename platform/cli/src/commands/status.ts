@@ -176,4 +176,4 @@ Examples:
     .action((_options: StatusOptions, command: Command) => handleStatus(command.optsWithGlobals()));
 };
 
-export { colorTabState, formatUptime, isTimeout, registerStatusCommand };
+export { colorTabState, formatUptime, handleStatus, isTimeout, registerStatusCommand };
