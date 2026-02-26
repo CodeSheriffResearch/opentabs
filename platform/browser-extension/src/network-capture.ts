@@ -8,6 +8,9 @@ import { toErrorMessage } from '@opentabs-dev/shared';
 /** Maximum character length for request bodies before truncation. */
 const MAX_BODY_LENGTH = 102_400;
 
+/** How long a pending request entry lives before it is pruned as stale (ms). */
+const PENDING_REQUEST_TTL_MS = 60_000;
+
 /** Headers whose values are replaced with '[REDACTED]' before returning to MCP clients. */
 const SENSITIVE_HEADERS = new Set([
   'authorization',
@@ -164,6 +167,19 @@ chrome.debugger.onEvent.addListener((source: chrome.debugger.Debuggee, method: s
     const requestId = paramsRecord?.requestId as string | undefined;
     const request = paramsRecord?.request as Record<string, unknown> | undefined;
     if (!requestId || !request) return;
+
+    // Prune stale entries to prevent unbounded growth from requests that never complete
+    const now = Date.now();
+    for (const [id, pending] of state.pendingRequests) {
+      if (pending.timestamp !== undefined && now - pending.timestamp > PENDING_REQUEST_TTL_MS) {
+        state.pendingRequests.delete(id);
+      }
+    }
+    for (const [id, req] of state.requestIdToRequest) {
+      if (now - req.timestamp > PENDING_REQUEST_TTL_MS) {
+        state.requestIdToRequest.delete(id);
+      }
+    }
 
     const url = stringProp(request, 'url', '');
 
