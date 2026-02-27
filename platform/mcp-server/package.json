@@ -24,7 +24,7 @@
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.26.0",
-    "@opentabs-dev/shared": "workspace:*",
+    "@opentabs-dev/shared": "*",
     "ajv": "^8.18.0",
     "ws": "^8.19.0",
     "zod": "^4.3.6"

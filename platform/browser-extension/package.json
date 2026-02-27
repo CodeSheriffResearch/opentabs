@@ -21,7 +21,7 @@
     "storybook:build": "storybook build -o storybook-static"
   },
   "dependencies": {
-    "@opentabs-dev/shared": "workspace:*",
+    "@opentabs-dev/shared": "*",
     "@radix-ui/react-accordion": "^1.2.1",
     "@radix-ui/react-dropdown-menu": "^2.1.16",
     "@radix-ui/react-progress": "^1.1.8",
