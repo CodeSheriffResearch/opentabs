@@ -2,7 +2,7 @@
 
 ## Overview
 
-Plugins in `plugins/` are **fully standalone projects** — exactly as if created by an external developer using `create-opentabs-plugin`. They are NOT part of the root bun workspace.
+Plugins in `plugins/` are **fully standalone projects** — exactly as if created by an external developer using `create-opentabs-plugin`. They are NOT part of the root npm workspace.
 
 ## Plugin Isolation
 
@@ -10,11 +10,11 @@ Each plugin:
 
 - Has its own `package.json`, `tsconfig.json`, `.prettierrc`, and `.gitignore`
 - Depends on published `@opentabs-dev/*` npm packages (not `file:` or `workspace:` links)
-- Has its own `node_modules/` and `bun.lock`
+- Has its own `node_modules/` and `package-lock.json`
 - Is **excluded** from root `eslint`, `prettier`, `knip`, and `tsc --build`
 - Must build and type-check independently: `cd plugins/<name> && npm run build`
 
-The root tooling (`bun run build`, `bun run lint`, etc.) does NOT cover plugins. When changing platform packages that plugins depend on (`shared`, `plugin-sdk`, `plugin-tools`), publish new versions to npm and update plugin dependencies.
+The root tooling (`npm run build`, `npm run lint`, etc.) does NOT cover plugins. When changing platform packages that plugins depend on (`shared`, `plugin-sdk`, `plugin-tools`), publish new versions to npm and update plugin dependencies.
 
 ## Adding a New Plugin
 
@@ -46,6 +46,6 @@ npm run check   # build + type-check + lint + format:check
 From the repo root, you can build or check all plugins at once:
 
 ```bash
-bun run build:plugins   # Build all plugins (install + build each)
-bun run check:plugins   # Type-check + lint + format:check all plugins
+npm run build:plugins   # Build all plugins (install + build each)
+npm run check:plugins   # Type-check + lint + format:check all plugins
 ```

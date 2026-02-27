@@ -84,16 +84,16 @@ npm whoami
 The `scripts/publish.ts` script handles the entire publish workflow:
 
 ```bash
-bun scripts/publish.ts 0.0.17
+npx tsx scripts/publish.ts 0.0.17
 ```
 
 The script:
 
 1. Verifies npm authentication via `npm whoami`
-2. Runs `bun run build` to compile all packages
+2. Runs `npm run build` to compile all packages
 3. Bumps `"version"` in all seven `platform/*/package.json` files
 4. Updates cross-references between packages (e.g., `plugin-sdk` depends on `shared`)
-5. Runs `bun run build` again with the new versions
+5. Runs `npm run build` again with the new versions
 6. Publishes in dependency order: `shared` → `browser-extension` → `mcp-server` → `plugin-sdk` → `plugin-tools` → `cli` → `create-plugin`
 
 All packages use `"publishConfig": { "access": "restricted" }` — only `@opentabs-dev` org members can install them.
@@ -105,8 +105,8 @@ After publishing new platform package versions, update plugin dependencies:
 ```bash
 cd plugins/slack
 # Update @opentabs-dev/* versions in package.json
-bun install
-bun run build
+npm install
+npm run build
 ```
 
 The `opentabs-plugin build` command embeds the installed SDK version as `sdkVersion` in `dist/tools.json`. The MCP server checks this at discovery time — if a plugin was built with a newer SDK than the server, it is rejected with a clear rebuild message.

@@ -8,8 +8,7 @@ This guide walks you through setting up the OpenTabs monorepo for local developm
 
 ## Prerequisites
 
-- **[Bun](https://bun.sh)** v1.3.9+ (runtime, package manager, bundler, test runner)
-- **[Node.js](https://nodejs.org)** 22+ (required for production runtime and Playwright E2E tests)
+- **[Node.js](https://nodejs.org)** 22+ (runtime, package manager, test runner)
 - **Google Chrome** (for loading the extension)
 - **Git**
 
@@ -18,15 +17,15 @@ This guide walks you through setting up the OpenTabs monorepo for local developm
 ```bash
 git clone https://github.com/opentabs-dev/opentabs.git
 cd opentabs
-bun install
+npm install
 ```
 
-`bun install` resolves all platform packages via the `workspaces` field in the root `package.json`. Plugins in `plugins/` are standalone projects — they have their own `node_modules` and are not part of the workspace.
+`npm install` resolves all platform packages via the `workspaces` field in the root `package.json`. Plugins in `plugins/` are standalone projects — they have their own `node_modules` and are not part of the workspace.
 
 ## Build Everything
 
 ```bash
-bun run build
+npm run build
 ```
 
 This runs the full build pipeline:
@@ -49,13 +48,13 @@ The extension is now installed. It will connect to the MCP server automatically 
 ## Start the Dev Server
 
 ```bash
-bun run dev
+npm run dev
 ```
 
 This starts the dev orchestrator (`scripts/dev.ts`), which runs three processes in parallel:
 
 - **`[tsc]`** — `tsc --build --watch` for incremental TypeScript compilation across all platform packages
-- **`[mcp]`** — the MCP server via `bun --hot`, which hot-reloads when compiled files change
+- **`[mcp]`** — the MCP server via the dev proxy, which hot-reloads when compiled files change
 - **`[ext]`** — extension rebuild pipeline, triggered on each tsc recompilation
 
 All output is labeled with prefixes so you can see which process is speaking:
@@ -72,7 +71,7 @@ All output is labeled with prefixes so you can see which process is speaking:
 When you edit a source file:
 
 1. `tsc --build --watch` detects the change and recompiles
-2. `bun --hot` re-evaluates the MCP server modules (the process stays alive, `globalThis` is preserved)
+2. The dev proxy detects the changed files in `dist/` and restarts the MCP server worker process
 3. The dev orchestrator rebuilds the extension and sends a reload signal via `POST /extension/reload`
 
 MCP server changes take effect immediately after tsc finishes. Chrome extension changes require the extension to receive the reload signal — the side panel reconnects automatically, but you may need to close and reopen it if it was open during the reload.
@@ -108,15 +107,15 @@ The MCP server has two modes:
     <Table.Row>
       <Table.Cell className="font-medium">Hot reload</Table.Cell>
       <Table.Cell>Not used</Table.Cell>
-      <Table.Cell>Via `bun --hot`</Table.Cell>
+      <Table.Cell>Via dev proxy (restarts worker on `dist/` changes)</Table.Cell>
     </Table.Row>
   </Table.Body>
 </Table>
 
-`bun run dev` uses `bun --hot` for server hot reload. To enable dev mode file watchers, set `OPENTABS_DEV=1` or pass `--dev` to the server:
+`npm run dev` uses the dev proxy for server hot reload. To enable dev mode file watchers, set `OPENTABS_DEV=1` or pass `--dev` to the server:
 
 ```bash
-OPENTABS_DEV=1 bun run dev
+OPENTABS_DEV=1 npm run dev
 ```
 
 ## Build a Test Plugin
@@ -125,8 +124,8 @@ Plugins are standalone projects outside the workspace. To test changes to the pl
 
 ```bash
 cd plugins/e2e-test
-bun install
-bun run build
+npm install
+npm run build
 ```
 
 The `opentabs-plugin build` command auto-registers the plugin in `~/.opentabs/config.json` (under `localPlugins`) and calls `POST /reload` to notify the running MCP server. No restart needed.
@@ -135,8 +134,8 @@ For a real plugin with more tools, try the Slack plugin:
 
 ```bash
 cd plugins/slack
-bun install
-bun run build
+npm install
+npm run build
 ```
 
 ## Quality Checks
@@ -144,12 +143,12 @@ bun run build
 Run all checks before committing:
 
 ```bash
-bun run build         # Full production build
-bun run type-check    # TypeScript (tsc --build)
-bun run lint          # ESLint
-bun run knip          # Unused code detection
-bun run test          # Unit tests (bun test platform/)
-bun run test:e2e      # E2E tests (Playwright)
+npm run build         # Full production build
+npm run type-check    # TypeScript (tsc --build)
+npm run lint          # ESLint
+npm run knip          # Unused code detection
+npm run test          # Unit tests (Vitest)
+npm run test:e2e      # E2E tests (Playwright)
 ```
 
 Every command must exit 0. The pre-commit hook runs Prettier and ESLint on staged files via `lint-staged`.
@@ -159,33 +158,33 @@ Every command must exit 0. The pre-commit hook runs Prettier and ESLint on stage
 E2E tests use Playwright with Chromium. Each test gets its own MCP server instance, test web server, and isolated config directory — so tests run fully in parallel.
 
 ```bash
-bun run test:e2e                          # Run all E2E tests
-bunx playwright test tool-dispatch        # Run a specific test file
-bunx playwright test --headed             # Run with visible browser
+npm run test:e2e                          # Run all E2E tests
+npx playwright test tool-dispatch        # Run a specific test file
+npx playwright test --headed             # Run with visible browser
 ```
 
 Test files live in `e2e/` and follow the `*.e2e.ts` naming convention. Fixtures in `e2e/fixtures.ts` handle server lifecycle, extension loading, and test server setup.
 
 ### Unit Tests
 
-Unit tests use Bun's built-in test runner:
+Unit tests use Vitest:
 
 ```bash
-bun run test                              # Run all unit tests
-bun test platform/mcp-server/             # Run tests for a specific package
+npm run test                              # Run all unit tests
+npx vitest run platform/mcp-server/      # Run tests for a specific package
 ```
 
 ## Project Structure
 
 <MonorepoStructure />
 
-The `platform/` packages are linked via Bun workspaces. Changes to any platform package are immediately visible to other packages after tsc recompiles.
+The `platform/` packages are linked via npm workspaces. Changes to any platform package are immediately visible to other packages after tsc recompiles.
 
 Plugins in `plugins/` are fully standalone — they depend on published `@opentabs-dev/*` npm packages, not workspace links. When you change the SDK or plugin tools, you need to publish new versions and update plugin dependencies (see [Publishing](/docs/contributing/publishing)).
 
 ## Reloading the Extension After Code Changes
 
-The Chrome extension does **not** auto-reload from `chrome://extensions/`. After `bun run build` (or after the dev orchestrator's `[ext]` rebuild), the dev orchestrator sends a reload signal via `POST /extension/reload`. If you're not using `bun run dev`, reload manually:
+The Chrome extension does **not** auto-reload from `chrome://extensions/`. After `npm run build` (or after the dev orchestrator's `[ext]` rebuild), the dev orchestrator sends a reload signal via `POST /extension/reload`. If you're not using `npm run dev`, reload manually:
 
 1. Open `chrome://extensions/`
 2. Find the "OpenTabs" extension card

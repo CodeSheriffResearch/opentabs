@@ -2,8 +2,7 @@
 
 ## Prerequisites
 
-- [Bun](https://bun.sh/) >= 1.3.9
-- [Node.js](https://nodejs.org/) >= 20 (Playwright E2E tests run under Node.js)
+- [Node.js](https://nodejs.org/) >= 22
 - Google Chrome (for extension development and E2E tests)
 - Git
 
@@ -12,11 +11,11 @@
 ```bash
 git clone https://github.com/opentabs-dev/opentabs.git
 cd opentabs
-bun install
-bun run build
+npm install
+npm run build
 ```
 
-If builds get into a bad state, reset with `bun run clean` (removes all `dist/` and `.tsbuildinfo` files) then `bun run build` again. Use `bun run clean:all` to also remove `node_modules/` everywhere.
+If builds get into a bad state, reset with `npm run clean` (removes all `dist/` and `.tsbuildinfo` files) then `npm run build` again. Use `npm run clean:all` to also remove `node_modules/` everywhere.
 
 Load the Chrome extension:
 
@@ -29,35 +28,35 @@ Load the Chrome extension:
 **Full dev mode** (recommended):
 
 ```bash
-bun run dev
+npm run dev
 ```
 
-This starts `tsc --build --watch`, the MCP server with `bun --hot`, and auto-rebuilds the Chrome extension on source changes. Output is color-coded by subprocess (`[tsc]`, `[mcp]`, `[ext]`) and a startup banner shows the MCP server URL and extension path when everything is ready. You still need to manually reload the extension from `chrome://extensions/` after rebuilds.
+This starts `tsc --build --watch`, the MCP server with the dev proxy for hot reload, and auto-rebuilds the Chrome extension on source changes. Output is color-coded by subprocess (`[tsc]`, `[mcp]`, `[ext]`) and a startup banner shows the MCP server URL and extension path when everything is ready. You still need to manually reload the extension from `chrome://extensions/` after rebuilds.
 
 **MCP server only** (lightweight alternative for server-only work):
 
 ```bash
-bun run dev:mcp
+npm run dev:mcp
 ```
 
-This starts just the MCP server with `bun --hot` for hot reload — no tsc watcher or extension rebuilds. Useful when you're only changing server code and want faster iteration.
+This starts just the MCP server with the dev proxy for hot reload — no tsc watcher or extension rebuilds. Useful when you're only changing server code and want faster iteration.
 
 **Manual workflow:**
 
 ```bash
-bun run build        # Build everything
+npm run build        # Build everything
 opentabs start       # Start the MCP server
 ```
 
 ### MCP Server Changes
 
-In dev mode, the server hot-reloads automatically when `tsc` recompiles. Without dev mode: rebuild (`bun run build`) and restart the server.
+In dev mode, the server hot-reloads automatically when `tsc` recompiles. Without dev mode: rebuild (`npm run build`) and restart the server.
 
 ### Chrome Extension Changes
 
 The extension never auto-reloads. After building:
 
-1. `bun run build`
+1. `npm run build`
 2. Open `chrome://extensions/` and click the reload icon on the OpenTabs card
 3. Reopen the side panel if it was open
 
@@ -67,8 +66,8 @@ Plugin builds auto-register and notify the running MCP server:
 
 ```bash
 cd plugins/<name>
-bun install    # first time only
-bun run build  # builds, registers, and notifies the server
+npm install    # first time only
+npm run build  # builds, registers, and notifies the server
 ```
 
 ## Running Tests
@@ -76,13 +75,13 @@ bun run build  # builds, registers, and notifies the server
 **Unit tests:**
 
 ```bash
-bun run test
+npm run test
 ```
 
 **E2E tests** (requires the test plugin to be built):
 
 ```bash
-bun run test:e2e
+npm run test:e2e
 ```
 
 This builds the `e2e-test` plugin automatically, then runs Playwright.
@@ -90,32 +89,32 @@ This builds the `e2e-test` plugin automatically, then runs Playwright.
 **All quality checks at once:**
 
 ```bash
-bun run check       # build + lint + format + knip + unit tests
-bun run check:everything   # everything above + E2E tests + docs checks + plugin checks
+npm run check       # build + lint + format + knip + unit tests
+npm run check:everything   # everything above + E2E tests + docs checks + plugin checks
 ```
 
 | Command                    | What it does                                                    |
 | -------------------------- | --------------------------------------------------------------- |
-| `bun run build`            | Production build (tsc + extension, incremental)                 |
-| `bun run build:force`      | Full clean rebuild (non-incremental)                            |
-| `bun run build:docs`       | Build docs site                                                 |
-| `bun run build:plugins`    | Build all plugins (install + build each)                        |
-| `bun run type-check`       | TypeScript type checking (--noEmit, no file emission)           |
-| `bun run lint`             | ESLint                                                          |
-| `bun run format:check`     | Prettier formatting                                             |
-| `bun run knip`             | Unused exports and dependencies                                 |
-| `bun run test`             | Unit tests (Bun test runner)                                    |
-| `bun run test:e2e`         | E2E tests (builds e2e-test plugin + Playwright)                 |
-| `bun run check`            | All root checks (build + lint + format + knip + unit tests)     |
-| `bun run check:everything` | Everything: root + E2E + docs + plugins                         |
-| `bun run check:docs`       | Docs quality checks (build + type-check + lint + knip + format) |
-| `bun run check:plugins`    | Plugin quality checks (type-check + lint + format)              |
-| `bun run dev`              | Full dev mode (tsc watch + MCP server + extension)              |
-| `bun run dev:mcp`          | MCP server only with hot reload                                 |
-| `bun run dev:docs`         | Docs dev server                                                 |
-| `bun run storybook`        | Storybook dev server (extension components)                     |
-| `bun run clean`            | Remove all build artifacts                                      |
-| `bun run clean:all`        | Remove build artifacts + node_modules everywhere                |
+| `npm run build`            | Production build (tsc + extension, incremental)                 |
+| `npm run build:force`      | Full clean rebuild (non-incremental)                            |
+| `npm run build:docs`       | Build docs site                                                 |
+| `npm run build:plugins`    | Build all plugins (install + build each)                        |
+| `npm run type-check`       | TypeScript type checking (--noEmit, no file emission)           |
+| `npm run lint`             | ESLint                                                          |
+| `npm run format:check`     | Prettier formatting                                             |
+| `npm run knip`             | Unused exports and dependencies                                 |
+| `npm run test`             | Unit tests (Vitest)                                             |
+| `npm run test:e2e`         | E2E tests (builds e2e-test plugin + Playwright)                 |
+| `npm run check`            | All root checks (build + lint + format + knip + unit tests)     |
+| `npm run check:everything` | Everything: root + E2E + docs + plugins                         |
+| `npm run check:docs`       | Docs quality checks (build + type-check + lint + knip + format) |
+| `npm run check:plugins`    | Plugin quality checks (type-check + lint + format)              |
+| `npm run dev`              | Full dev mode (tsc watch + MCP server + extension)              |
+| `npm run dev:mcp`          | MCP server only with hot reload                                 |
+| `npm run dev:docs`         | Docs dev server                                                 |
+| `npm run storybook`        | Storybook dev server (extension components)                     |
+| `npm run clean`            | Remove all build artifacts                                      |
+| `npm run clean:all`        | Remove build artifacts + node_modules everywhere                |
 
 All checks must pass before merging.
 
@@ -131,9 +130,9 @@ The project uses [Husky](https://typicode.github.io/husky/) for git hooks:
 
 **Pre-push** (runs before every push):
 
-- `bun run build` — full production build
-- `bun run type-check` — TypeScript type checking
-- `bun run test` — unit tests
+- `npm run build` — full production build
+- `npm run type-check` — TypeScript type checking
+- `npm run test` — unit tests
 
 If any hook command fails, the git operation is aborted. Fix the issue before retrying.
 
@@ -171,7 +170,7 @@ Import `test` and `expect` from `./fixtures.js` (not from `@playwright/test` dir
 
 OpenTabs spans four processes — each has its own debugging surface:
 
-**MCP Server** (Bun process):
+**MCP Server** (Node.js process):
 
 - Log file: `~/.opentabs/server.log`
 - CLI: `opentabs logs -f` to follow logs in real time, or `opentabs logs` for recent output
@@ -197,15 +196,15 @@ OpenTabs spans four processes — each has its own debugging surface:
 **E2E test failures:**
 
 - Playwright traces are saved to `test-results/` on failure (configured via `trace: 'retain-on-failure'`)
-- View traces: `bunx playwright show-trace test-results/<test-name>/trace.zip`
-- HTML report: `bunx playwright show-report`
+- View traces: `npx playwright show-trace test-results/<test-name>/trace.zip`
+- HTML report: `npx playwright show-report`
 - Video recordings are also retained on failure
 
 ## Code Conventions
 
 Key rules (see [CLAUDE.md](CLAUDE.md) for the full list):
 
-- **Bun-first APIs** — use `Bun.file()`, `Bun.write()`, `Bun.env` instead of Node.js equivalents where possible
+- **Node.js APIs** — use `node:fs/promises`, `node:child_process`, `node:crypto`, `process.env`, `process.argv`
 - **No `eslint-disable` comments** — fix the underlying issue
 - **No TODO/FIXME/HACK comments** — fix it now or don't commit
 - **Delete unused code** — dead code is noise
@@ -225,7 +224,7 @@ See [CLAUDE.md](CLAUDE.md) for the full architecture documentation, plugin disco
 3. Add `tsconfig.json` with `composite: true` and project references to dependencies
 4. Reference the new package from the root `tsconfig.json`
 5. The root `package.json` uses `"workspaces": ["platform/*"]`, so it is automatically included
-6. Run `bun install` to link the workspace
+6. Run `npm install` to link the workspace
 
 ## Publishing
 
@@ -241,6 +240,6 @@ This bumps versions, rebuilds, and publishes in dependency order. See [CLAUDE.md
 
 1. Create a feature branch: `git checkout -b my-feature`
 2. Make your changes and commit with a clear message
-3. Run `bun run check:everything` to verify everything passes
+3. Run `npm run check:everything` to verify everything passes
 4. Push your branch: `git push -u origin my-feature`
 5. Open a pull request against `main` with a description of what changed and why

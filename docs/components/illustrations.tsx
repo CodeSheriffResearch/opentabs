@@ -887,7 +887,7 @@ export const MonorepoStructure = () => (
         fontFamily="var(--font-mono), monospace"
         fill="var(--color-foreground)"
         opacity="0.45">
-        Core platform packages (bun workspaces)
+        Core platform packages (npm workspaces)
       </text>
 
       {/* platform sub-entries */}
@@ -1124,7 +1124,7 @@ export const MonorepoStructure = () => (
         fill="var(--color-foreground)"
         opacity="0.4"
         textAnchor="middle">
-        platform/ linked via Bun workspaces · plugins/ are standalone
+        platform/ linked via npm workspaces · plugins/ are standalone
       </text>
     </svg>
   </div>
@@ -2744,7 +2744,7 @@ export const InstallPaths = () => (
         fontFamily="var(--font-mono), monospace"
         fill="var(--color-primary)"
         textAnchor="middle">
-        git clone + bun install
+        git clone + npm install
       </text>
       <rect x="516" y="94" width="164" height="22" fill="var(--color-foreground)" />
       <text
@@ -2754,7 +2754,7 @@ export const InstallPaths = () => (
         fontFamily="var(--font-mono), monospace"
         fill="var(--color-primary)"
         textAnchor="middle">
-        bun run build
+        npm run build
       </text>
       <text
         x="598"

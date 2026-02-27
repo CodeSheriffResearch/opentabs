@@ -40,9 +40,9 @@
 ### Tech Stack
 
 - **Language**: TypeScript (strict, ES Modules)
-- **Runtime**: Node.js 22+ (production); Bun + npm (development, testing, publishing)
+- **Runtime**: Node.js 22+
 - **Build**: `tsc --build` (composite project references)
-- **Testing**: Playwright (E2E)
+- **Testing**: Vitest (unit), Playwright (E2E)
 - **UI**: React 19, Tailwind CSS 4 (side panel only)
 - **Chrome Extension**: Manifest V3
 
@@ -50,14 +50,14 @@
 
 ```
 opentabs/
-├── platform/                      # Core platform packages (bun workspaces)
+├── platform/                      # Core platform packages (npm workspaces)
 │   ├── mcp-server/                # MCP server — plugin discovery, tool dispatch
 │   ├── browser-extension/         # Chrome extension (MV3)
 │   ├── plugin-sdk/                # Plugin authoring SDK
 │   ├── plugin-tools/              # Plugin developer CLI (opentabs-plugin)
 │   ├── cli/                       # User-facing CLI (opentabs)
 │   └── create-plugin/             # Plugin scaffolding CLI
-├── plugins/                       # Example plugins (fully standalone, NOT in bun workspaces)
+├── plugins/                       # Example plugins (fully standalone, NOT in npm workspaces)
 ├── e2e/                           # Playwright E2E tests
 ├── docs/                          # Documentation site (Next.js)
 └── .ralph/                        # Parallel task daemon
@@ -85,61 +85,61 @@ Each subdirectory has its own `CLAUDE.md` with package-specific details.
 
 ```bash
 # Build
-bun run build           # Build all packages (incremental tsc --build + extension bundle + icons)
-bun run build:force     # Full clean rebuild (tsc --build --force + extension bundle + icons)
-bun run build:plugins   # Build all plugins (install + build each)
-bun run build:docs      # Build docs site (next build)
+npm run build           # Build all packages (incremental tsc --build + extension bundle + icons)
+npm run build:force     # Full clean rebuild (tsc --build --force + extension bundle + icons)
+npm run build:plugins   # Build all plugins (install + build each)
+npm run build:docs      # Build docs site (next build)
 
 # Dev
-bun run dev             # Full dev mode (tsc watch + MCP server + extension, colored output with startup banner)
-bun run dev:mcp         # MCP server only with hot reload (lightweight alternative to full dev)
-bun run dev:docs        # Docs dev server (next dev)
+npm run dev             # Full dev mode (tsc watch + MCP server + extension, colored output with startup banner)
+npm run dev:mcp         # MCP server only with hot reload (lightweight alternative to full dev)
+npm run dev:docs        # Docs dev server (next dev)
 
 # Quality checks
-bun run check           # Root checks: build + lint + format:check + knip + test
-bun run check:everything # Everything: root checks + E2E + docs + plugins
-bun run check:docs      # Docs checks (delegates to docs/package.json check script)
-bun run check:plugins   # Plugin checks: type-check + lint + format:check (all plugins)
-bun run type-check      # TypeScript check (tsc --build --noEmit, fast non-emitting verification)
-bun run lint            # ESLint check
-bun run lint:fix        # ESLint auto-fix
-bun run format          # Prettier format
-bun run format:check    # Prettier check
-bun run knip            # Unused code detection
+npm run check           # Root checks: build + lint + format:check + knip + test
+npm run check:everything # Everything: root checks + E2E + docs + plugins
+npm run check:docs      # Docs checks (delegates to docs/package.json check script)
+npm run check:plugins   # Plugin checks: type-check + lint + format:check (all plugins)
+npm run type-check      # TypeScript check (tsc --build --noEmit, fast non-emitting verification)
+npm run lint            # ESLint check
+npm run lint:fix        # ESLint auto-fix
+npm run format          # Prettier format
+npm run format:check    # Prettier check
+npm run knip            # Unused code detection
 
 # Docs (from root)
-bun run lint:docs       # ESLint docs
-bun run type-check:docs # TypeScript check docs
+npm run lint:docs       # ESLint docs
+npm run type-check:docs # TypeScript check docs
 
 # Test
-bun run test            # Unit tests (bun test platform/)
-bun run test:e2e        # E2E tests (Playwright)
+npm run test            # Unit tests (Vitest)
+npm run test:e2e        # E2E tests (Playwright)
 
 # Clean
-bun run clean           # Remove build artifacts (dist/, tsbuildinfo, generated icons)
-bun run clean:all       # clean + remove node_modules across all workspaces and plugins
+npm run clean           # Remove build artifacts (dist/, tsbuildinfo, generated icons)
+npm run clean:all       # clean + remove node_modules across all workspaces and plugins
 
 # UI
-bun run storybook       # Launch Storybook dev server (browser extension components)
+npm run storybook       # Launch Storybook dev server (browser extension components)
 
 # Setup
-bun install             # Install dependencies
+npm install             # Install dependencies
 ```
 
-The `bun run` commands above are for **platform contributors** working in the monorepo. Normal users interact via the `opentabs` CLI (which runs on Node.js), and plugin developers use `npm run build` / `npx create-opentabs-plugin`.
+The `npm run` commands above are for **platform contributors** working in the monorepo. Normal users interact via the `opentabs` CLI, and plugin developers use `npm run build` / `npx create-opentabs-plugin`.
 
 ### Loading the Extension
 
-1. `bun run build`
+1. `npm run build`
 2. Open `chrome://extensions/`
 3. Enable Developer mode
 4. Load unpacked → select `~/.opentabs/extension` folder
 
 ### Reloading the Extension After Code Changes
 
-The Chrome extension does NOT auto-reload. After building (`bun run build`), the extension must be manually reloaded:
+The Chrome extension does NOT auto-reload. After building (`npm run build`), the extension must be manually reloaded:
 
-1. `bun run build`
+1. `npm run build`
 2. Open `chrome://extensions/`
 3. Click the refresh icon on the "OpenTabs" card
 4. Close and reopen the side panel if it was open
@@ -157,28 +157,28 @@ opentabs start
 **Dev mode** — MCP server only, with hot reload:
 
 ```bash
-bun run dev:mcp
+npm run dev:mcp
 ```
 
 **Full dev mode** — tsc watch + MCP server + extension build, with colored output and startup banner:
 
 ```bash
-bun run dev
+npm run dev
 ```
 
 ---
 
 ## Development Workflow
 
-All development workflows below assume the MCP server is running in dev mode. Use `bun run dev` for full dev mode (tsc watch + MCP server + extension) or `bun run dev:mcp` for server-only work with hot reload. In production mode, restart the server after any changes.
+All development workflows below assume the MCP server is running in dev mode. Use `npm run dev` for full dev mode (tsc watch + MCP server + extension) or `npm run dev:mcp` for server-only work with hot reload. In production mode, restart the server after any changes.
 
 ### MCP Server Changes (Hot Reload)
 
 ```bash
 # 1. Edit source files in platform/mcp-server/src/
 # 2. Build
-cd platform/mcp-server && bun run build
-# 3. Done — bun --hot detects the change and reinitializes
+cd platform/mcp-server && npm run build
+# 3. Done — the dev proxy detects the change and restarts the worker
 ```
 
 ### Chrome Extension Changes
@@ -186,7 +186,7 @@ cd platform/mcp-server && bun run build
 ```bash
 # 1. Edit source files in platform/browser-extension/src/
 # 2. Build
-bun run build
+npm run build
 # 3. Reload extension from chrome://extensions/
 ```
 
@@ -251,17 +251,17 @@ Every `.ts`/`.tsx` file in the repository must be covered by a tsconfig that `ts
 Once a task is complete, **always run every one of these checks** to verify the change:
 
 ```bash
-bun run build         # Verify production build
-bun run type-check    # TypeScript check (must pass from clean checkout)
-bun run lint          # Check for lint errors
-bun run knip          # Check for unused code
-bun run test          # Unit tests
-bun run test:e2e      # E2E tests (Playwright)
+npm run build         # Verify production build
+npm run type-check    # TypeScript check (must pass from clean checkout)
+npm run lint          # Check for lint errors
+npm run knip          # Check for unused code
+npm run test          # Unit tests
+npm run test:e2e      # E2E tests (Playwright)
 ```
 
 **Every command must exit 0.** A task is not done until all six pass. No exceptions.
 
-For full repository verification including docs and plugins, use `bun run check:everything`.
+For full repository verification including docs and plugins, use `npm run check:everything`.
 
 - If a check fails, **fix it** — even if the failure looks pre-existing or unrelated to your change. You own the codebase.
 - Do not rationalize failures ("that's a known issue", "the build is the real type-check", "this was broken before I started"). If it fails, it is your problem. Fix it or explain to the user why you cannot.
@@ -280,17 +280,15 @@ For full repository verification including docs and plugins, use `bun run check:
 
 ### Runtime Compatibility
 
-Published packages (CLI, browser-extension, MCP server, plugin-tools, create-plugin) run on **Node.js 22+**. Platform contributors use **Bun** for development, testing, and monorepo management, and **npm** for registry authentication and publishing.
+All packages run on **Node.js 22+**. The monorepo uses **npm** workspaces for dependency management and **npm** for registry authentication and publishing.
 
-**Production code** (`platform/*/src/`): Uses Node.js APIs directly (`node:fs/promises`, `node:child_process`, `node:crypto`, `process.env`, `process.argv`). Bun runs all Node.js APIs natively, so no compatibility layer is needed.
+**Production code** (`platform/*/src/`): Uses Node.js APIs directly (`node:fs/promises`, `node:child_process`, `node:crypto`, `process.env`, `process.argv`).
 
-**`isBun`** (exported from `@opentabs-dev/shared`) is used in exactly two places: `platform/mcp-server/src/index.ts` (to call `Bun.serve()` for hot reload in dev mode) and `platform/mcp-server/src/resolver.ts` (to scan Bun's global `node_modules` path). All other production code uses Node.js APIs directly.
+**Build scripts** (`build-*.ts`, `scripts/`): Use esbuild for bundling. Invoked via `npm run` or `npx tsx`. These are contributor-only and do not need to run in production.
 
-**Build scripts** (`build-*.ts`, `scripts/`): Use esbuild for bundling. Invoked via `bun run` in the contributor workflow. These are contributor-only and do not need to run on Node.js.
+**Tests** (`*.test.ts`): Use Vitest. Contributor-only — normal users and plugin developers do not run platform tests.
 
-**Tests** (`*.test.ts`): Use `bun:test`. Contributor-only — normal users and plugin developers do not run platform tests.
-
-**E2E tests** (`e2e/`) run under Playwright's Node.js test runner, so Node.js APIs are correct there.
+**E2E tests** (`e2e/`) run under Playwright's Node.js test runner.
 
 ### Comments
 

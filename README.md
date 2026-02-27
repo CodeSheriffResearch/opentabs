@@ -129,37 +129,37 @@ See the [Plugin Development guide](https://opentabs.ai/docs/guides/plugin-develo
 
 ## Contributing
 
-Work on the OpenTabs platform itself. You need [Bun](https://bun.sh/) (>= 1.3.9), [Node.js](https://nodejs.org/) (v20+), and Google Chrome.
+Work on the OpenTabs platform itself. You need [Node.js](https://nodejs.org/) (v22+) and Google Chrome.
 
 ### Clone and build
 
 ```bash
 git clone https://github.com/opentabs-dev/opentabs.git
 cd opentabs
-bun install
-bun run build
+npm install
+npm run build
 ```
 
 ### Start the dev server
 
 ```bash
-bun run dev
+npm run dev
 ```
 
 ### Run the checks
 
 | Command                    | Description                                          |
 | -------------------------- | ---------------------------------------------------- |
-| `bun run check`            | Run all checks (build, type-check, lint, knip, test) |
-| `bun run check:everything` | All checks + E2E tests + docs + plugins              |
-| `bun run build`            | Build all packages                                   |
-| `bun run type-check`       | TypeScript type checking                             |
-| `bun run lint`             | ESLint                                               |
-| `bun run knip`             | Unused code detection                                |
-| `bun run test`             | Unit tests                                           |
-| `bun run test:e2e`         | E2E tests (Playwright)                               |
-| `bun run dev:mcp`          | MCP server only with hot reload                      |
-| `bun run clean`            | Remove all build artifacts                           |
+| `npm run check`            | Run all checks (build, type-check, lint, knip, test) |
+| `npm run check:everything` | All checks + E2E tests + docs + plugins              |
+| `npm run build`            | Build all packages                                   |
+| `npm run type-check`       | TypeScript type checking                             |
+| `npm run lint`             | ESLint                                               |
+| `npm run knip`             | Unused code detection                                |
+| `npm run test`             | Unit tests                                           |
+| `npm run test:e2e`         | E2E tests (Playwright)                               |
+| `npm run dev:mcp`          | MCP server only with hot reload                      |
+| `npm run clean`            | Remove all build artifacts                           |
 
 All commands must exit 0 before committing.
 

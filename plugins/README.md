@@ -4,7 +4,7 @@ Plugins in this directory are **fully standalone projects** — identical to wha
 
 ## Excluded from root tooling
 
-These plugins are **not** covered by the root `bun run build`, `bun run lint`, `bun run type-check`, `bun run format:check`, or `bun run knip`. Each plugin must be built and checked independently:
+These plugins are **not** covered by the root `npm run build`, `npm run lint`, `npm run type-check`, `npm run format:check`, or `npm run knip`. Each plugin must be built and checked independently:
 
 ```bash
 cd plugins/<name>
@@ -20,8 +20,8 @@ npm run format:check  # prettier
 You can also build and check all plugins from the repo root:
 
 ```bash
-bun run build:plugins   # Build all plugins (install + build each)
-bun run check:plugins   # Type-check + lint + format:check all plugins
+npm run build:plugins   # Build all plugins (install + build each)
+npm run check:plugins   # Type-check + lint + format:check all plugins
 ```
 
 Each plugin also has a `check` script for running all quality checks at once:

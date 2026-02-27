@@ -120,15 +120,15 @@ See the [Plugin Development guide](/docs/guides/plugin-development) for a comple
 
 ## For Contributors
 
-Work on the OpenTabs platform itself. You need **[Bun](https://bun.sh)** (v1.3.9+), **[Node.js](https://nodejs.org)** (v22+), and **Google Chrome**.
+Work on the OpenTabs platform itself. You need **[Node.js](https://nodejs.org)** (v22+) and **Google Chrome**.
 
 ### Clone and build
 
 ```bash
 git clone https://github.com/opentabs-dev/opentabs.git
 cd opentabs
-bun install
-bun run build
+npm install
+npm run build
 ```
 
 ### Load the Chrome extension
@@ -140,10 +140,10 @@ bun run build
 ### Start the dev server
 
 ```bash
-bun run dev
+npm run dev
 ```
 
-This starts the MCP server with Bun's hot reload enabled (contributor-only). When you rebuild platform packages (`bun run build`), Bun re-evaluates modules without restarting the process.
+This starts the MCP server with the dev proxy for hot reload (contributor-only). When you rebuild platform packages (`npm run build`), the dev proxy detects the changes and restarts the worker process.
 
 ### Configure your MCP client
 
@@ -158,12 +158,12 @@ Add it to your MCP client as shown in the [For Users](#configure-your-mcp-client
 ### Run the checks
 
 ```bash
-bun run build         # Build all packages
-bun run type-check    # TypeScript check
-bun run lint          # ESLint
-bun run knip          # Unused code detection
-bun run test          # Unit tests
-bun run test:e2e      # E2E tests (Playwright)
+npm run build         # Build all packages
+npm run type-check    # TypeScript check
+npm run lint          # ESLint
+npm run knip          # Unused code detection
+npm run test          # Unit tests
+npm run test:e2e      # E2E tests (Playwright)
 ```
 
 All commands must exit 0 before committing. See the [Development Setup guide](/docs/contributing/dev-setup) for the full contributor workflow.

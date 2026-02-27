@@ -15,24 +15,24 @@ The OpenTabs documentation site is built with Next.js 16, content-collections fo
 ## Commands
 
 ```bash
-bun run build         # next build (static export)
-bun run type-check    # tsc --noEmit
-bun run lint          # eslint
-bun run knip          # unused code detection
-bun run format:check  # prettier check
-bun run check         # All checks (build + type-check + lint + knip + format:check)
+npm run build         # next build (static export)
+npm run type-check    # tsc --noEmit
+npm run lint          # eslint
+npm run knip          # unused code detection
+npm run format:check  # prettier check
+npm run check         # All checks (build + type-check + lint + knip + format:check)
 ```
 
-All checks must pass. This project has no test suite. `bun run check` runs them all sequentially, stopping on first failure.
+All checks must pass. This project has no test suite. `npm run check` runs them all sequentially, stopping on first failure.
 
 From the repo root, these convenience aliases are available:
 
 ```bash
-bun run dev:docs        # next dev (docs dev server)
-bun run build:docs      # next build
-bun run lint:docs       # eslint
-bun run type-check:docs # tsc --noEmit
-bun run check:docs      # All docs checks from root
+npm run dev:docs        # next dev (docs dev server)
+npm run build:docs      # next build
+npm run lint:docs       # eslint
+npm run type-check:docs # tsc --noEmit
+npm run check:docs      # All docs checks from root
 ```
 
 ## Directory Structure
@@ -110,15 +110,13 @@ All illustrations live in `docs/components/illustrations.tsx` and are registered
 
 ## Runtime and Tooling Context
 
-The docs site itself is a **platform contributor** tool — built and developed using Bun (`bun run build`, `bun run dev:docs`, etc.).
+The docs site is a **platform contributor** tool — built and developed using Node.js and npm (`npm run build`, `npm run dev:docs`, etc.).
 
 The docs _content_, however, covers three audience tiers with different runtime and tooling expectations:
 
-- **Normal users** use **Node.js** and **npm**. Commands in user-facing docs (Quick Start, Installation) should use `npx` / `npm` — never `bun`.
+- **Normal users** use **Node.js** and **npm**. Commands in user-facing docs (Quick Start, Installation) should use `npx` / `npm`.
 - **Plugin developers** use **Node.js** and **npm**. Plugin docs should show `npm run build`, `npx create-opentabs-plugin`, etc.
-- **Platform contributors** use **Bun** (for monorepo management, development, testing, and publishing) and **npm** (for registry authentication). Contributing docs may reference `bun run` commands.
-
-Content targeting normal users or plugin developers must never assume Bun is installed. Only contributing/architecture docs should reference Bun.
+- **Platform contributors** use **Node.js** and **npm**. Contributing docs reference `npm run` commands.
 
 ## Documentation Tone
 

@@ -311,16 +311,16 @@ opentabs start
 ### Dev mode (contributors only)
 
 ```bash
-bun run dev
+npm run dev
 ```
 
 - **File watchers** monitor local plugin `dist/` directories — auto-reloads when plugins are rebuilt
 - **Config watching** detects changes to `config.json` and re-discovers plugins
 - **Hot reload** — rebuilt server files take effect without restarting
 
-Use `bun run dev:mcp` for a lightweight alternative that runs the MCP server only (no tsc watch or extension build).
+Use `npm run dev:mcp` for a lightweight alternative that runs the MCP server only (no tsc watch or extension build).
 
-Dev mode requires Bun and is intended for platform contributors working on the server source code. Normal users and plugin developers use production mode.
+Dev mode is intended for platform contributors working on the server source code. Normal users and plugin developers use production mode.
 
 The `/health` endpoint includes a `mode` field (`"dev"` or `"production"`) to verify which mode the server is running in.
 

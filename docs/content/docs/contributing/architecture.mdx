@@ -10,7 +10,7 @@ OpenTabs has three main components: the **MCP server** (discovers plugins and di
 
 ## MCP Server
 
-The MCP server runs on `localhost:9515` (configurable via `PORT` or `OPENTABS_PORT` env var). It is an HTTP + WebSocket server (using `Bun.serve()` in dev mode, `node:http` + `ws` in production) with two responsibilities:
+The MCP server runs on `localhost:9515` (configurable via `PORT` or `OPENTABS_PORT` env var). It is an HTTP + WebSocket server (`node:http` + `ws`) with two responsibilities:
 
 1. **Plugin discovery** — resolves plugins from npm and local paths, loads their metadata and adapter bundles, and builds an immutable registry
 2. **Request dispatch** — registers plugin tools, resources, and prompts as MCP capabilities, dispatches calls to the Chrome extension via WebSocket, and relays results back to MCP clients
@@ -129,18 +129,16 @@ Trust tier prefixes are added to tool descriptions so AI agents can see the prov
 
 ### Hot Reload Architecture
 
-In dev mode, the MCP server runs under `bun --hot`. The `Bun.serve()` instance is created once and never recreated — its handlers are "pure delegate shells" that read the latest handler functions from a `globalThis`-based hot state at call time. This makes all handler logic hot-reloadable without touching the server or losing open connections.
+In dev mode, the MCP server runs behind a thin dev proxy (`src/dev-proxy.ts`). The proxy holds all HTTP and WebSocket connections while watching `dist/` for `.js` file changes. On change (debounced 300ms), the proxy kills the current worker process and forks a new one. The new worker starts on an ephemeral port, signals its actual port to the proxy via IPC, and the proxy resumes forwarding traffic.
 
 On each hot reload cycle:
 
-1. Bun re-evaluates all modules (but `globalThis` is preserved)
-2. The server re-reads config, re-discovers plugins, and builds a new registry
-3. MCP handlers are re-registered on all active sessions
-4. File watchers are restarted
+1. The dev proxy detects changed `.js` files in `dist/`
+2. The current worker process is killed and a new one is forked
+3. The new worker re-reads config, re-discovers plugins, and builds a new registry
+4. MCP handlers are registered on new sessions
 5. A `sync.full` is sent to the extension with the updated plugin list
 6. MCP clients are notified via `tools/list_changed`
-
-A `_schemaVersion` in the hot state detects structural changes that require a full process restart.
 
 ## Chrome Extension
 

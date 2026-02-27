@@ -14,12 +14,12 @@ ralph.sh (daemon on host, polls .ralph/ for ready PRDs)
   └── Worker 1 → git worktree → Docker container (ralph-worker-1, 5GB/5CPU) → claude --print
 ```
 
-**Host responsibilities** (ralph.sh): PRD discovery, worktree creation, `bun install` + `bun run build`, container lifecycle, branch merging, PRD state machine.
+**Host responsibilities** (ralph.sh): PRD discovery, worktree creation, `npm ci` + `npm run build`, container lifecycle, branch merging, PRD state machine.
 
 **Container responsibilities** (worker.sh): Claude agent execution, stream filtering, E2E safety net, iterative story processing.
 
 Each worker lifecycle:
-1. *Host*: creates worktree → `bun install` → `bun run build` → builds `plugins/e2e-test` → copies PRD into worktree
+1. *Host*: creates worktree → `npm ci` → `npm run build` → builds `plugins/e2e-test` → copies PRD into worktree
 2. *Host*: launches Docker container with worktree bind-mounted
 3. *Container*: runs worker.sh → claude agent loop → commits to branch
 4. *Host*: detects container exit → syncs PRD/progress → merges branch → archives PRD
@@ -69,7 +69,7 @@ docker ps --filter "name=ralph-worker-"
 - **Worktree mounted at its original host path.** Git worktrees contain a `.git` file with an absolute path back to the main repo's `.git/worktrees/<name>` directory. To make git operations work inside the container, the worktree and the main `.git` directory are both mounted at their original host paths. The container's working directory is set to the worktree path via `docker run -w`.
 - **Host network mode.** Containers use `--network host` so the Claude CLI can reach local LLM proxies and any other services on the host network.
 - **Self-contained containers — no host pollution.** Containers use `HOME=/tmp/worker` (container-local). All writes — `.opentabs`, `.claude`, node caches, Playwright profiles — stay inside the container and are discarded on exit. The only host mounts are the worktree (read-write), the main `.git` directory (for worktree resolution), and `~/.npmrc` (read-only, for private npm package auth).
-- **Worktrees are fully set up before the container starts.** Each worktree gets `bun install` (own `node_modules/`), `bun run build` (fresh `dist/` for all platform packages), and the `plugins/e2e-test` plugin is installed and built. This runs inside a setup container (same image). The resulting files are bind-mounted into the worker container.
+- **Worktrees are fully set up before the container starts.** Each worktree gets `npm ci` (own `node_modules/`), `npm run build` (fresh `dist/` for all platform packages), and the `plugins/e2e-test` plugin is installed and built. This runs inside a setup container (same image). The resulting files are bind-mounted into the worker container.
 - **Official Playwright base image.** The Docker image is based on `mcr.microsoft.com/playwright:v1.58.2-noble`, which includes Chromium and all required system dependencies pre-configured and tested by the Playwright team. Firefox and WebKit are removed to save space.
 - **`--ipc=host` is required.** Chromium uses IPC extensively. Without `--ipc=host`, Chrome crashes with SIGTRAP. `--shm-size=2g` is also required (default 64MB is too small for Chromium).
 - **Container resource limits prevent OOM kills.** Each container gets `--memory=5g --cpus=5`. During E2E, each Playwright worker (2 per container, via `CI=1`) spawns an MCP server, a test server, and a Chromium instance (~600 MB each), totaling ~1.5 GB for Playwright alone plus headroom for the Claude CLI and build tools. Without limits, workers running E2E simultaneously can exhaust Docker's ~12 GB memory allocation, triggering `Killed: 9` (OOM) and cascading test failures. The default of 2 ralph workers × 5 GB = 10 GB leaves ~2 GB for Docker overhead.
@@ -81,7 +81,7 @@ docker ps --filter "name=ralph-worker-"
 - **Never merge a branch that has an active worktree.** Check `docker ps --filter "name=ralph-worker-"` and `git worktree list` before manually merging any `ralph-*` branch — the worker may still be committing to it.
 - **`--once` mode drains the full queue.** It doesn't exit after the first batch — it keeps dispatching as slots free up until both active workers AND ready PRDs are zero.
 - **Graceful shutdown preserves in-progress work.** When ralph is killed (SIGTERM/EXIT), cleanup kills all containers, syncs PRD and progress files from worktrees back to main `.ralph/`, reverts PRDs from `~running` to ready, and preserves branches that have unmerged commits. Worktrees (ephemeral checkouts) are removed, but the branch refs survive. On restart, `dispatch_prd` detects the preserved branch and creates a new worktree from it instead of starting fresh from HEAD — so the agent resumes where it left off (the PRD tracks which stories already passed).
-- **Conditional E2E via `e2eCheckpoint`.** Each story in a PRD has an `e2eCheckpoint` boolean field. When `true`, the agent runs Phase 2 (full suite including `bun run test:e2e`) after that story. When `false`, the agent runs only Phase 1 (fast checks). This avoids running expensive E2E tests after every story — the PRD author places checkpoints at strategic boundaries (after groups of behavioral changes, and always on the final story).
+- **Conditional E2E via `e2eCheckpoint`.** Each story in a PRD has an `e2eCheckpoint` boolean field. When `true`, the agent runs Phase 2 (full suite including `npm run test:e2e`) after that story. When `false`, the agent runs only Phase 1 (fast checks). This avoids running expensive E2E tests after every story — the PRD author places checkpoints at strategic boundaries (after groups of behavioral changes, and always on the final story).
 - **E2E safety net.** After all stories complete, worker.sh checks whether the last completed story was an `e2eCheckpoint`. If not, it runs the full verification suite (build, type-check, lint, knip, test, test:e2e) as a safety net. If it fails, it launches up to 3 fix iterations (fresh Claude sessions) to resolve the failures before declaring success. This guarantees E2E tests run at least once per PRD.
 - **Claude CLI credentials via environment variables.** No host config files are mounted. Environment variables from `~/.claude/settings.json` (e.g., `ANTHROPIC_BASE_URL`) are extracted on the host and passed as container env vars. The host's `ANTHROPIC_*` env vars are also forwarded. Claude CLI writes session data to `/tmp/worker/.claude/` inside the container (ephemeral).
 
