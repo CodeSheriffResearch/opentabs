@@ -23,11 +23,14 @@
  *   /jwt-sessionstorage/ — JWT token in sessionStorage with Bearer header API calls
  *   /basicauth-app/     — Basic Auth (Authorization: Basic) header on API calls
  *
- * Start: `bun e2e/analyze-site-test-server.ts`
+ * Start: `npx tsx e2e/analyze-site-test-server.ts`
  * Default port: 0 (dynamic, override with PORT env var)
  */
 
 import './orphan-guard.js';
+import { WebSocketServer } from 'ws';
+import http from 'node:http';
+import type { IncomingMessage, ServerResponse } from 'node:http';
 
 // ---------------------------------------------------------------------------
 // State
@@ -973,868 +976,931 @@ const BASICAUTH_HTML = `<!DOCTYPE html>
 </html>`;
 
 // ---------------------------------------------------------------------------
+// Helpers — node:http request/response utilities
+// ---------------------------------------------------------------------------
+
+const readBody = (req: IncomingMessage): Promise<Record<string, unknown>> =>
+  new Promise(resolve => {
+    const chunks: Buffer[] = [];
+    req.on('data', (chunk: unknown) => {
+      if (Buffer.isBuffer(chunk)) chunks.push(chunk);
+      else if (typeof chunk === 'string') chunks.push(Buffer.from(chunk));
+    });
+    req.on('end', () => {
+      try {
+        const text = Buffer.concat(chunks).toString();
+        resolve(text ? (JSON.parse(text) as Record<string, unknown>) : {});
+      } catch {
+        resolve({});
+      }
+    });
+  });
+
+// ---------------------------------------------------------------------------
 // Server
 // ---------------------------------------------------------------------------
 
 const PORT = process.env.PORT !== undefined ? Number(process.env.PORT) : 0;
 
-const server = Bun.serve({
-  port: PORT,
-  async fetch(req, server) {
-    const url = new URL(req.url);
-    const path = url.pathname;
+const handler = async (req: IncomingMessage, res: ServerResponse): Promise<void> => {
+  const url = new URL(req.url ?? '/', 'http://localhost');
+  const path = url.pathname;
 
-    // --- WebSocket upgrade ---
-    if (path === '/ws') {
-      if (server.upgrade(req)) return undefined as unknown as Response;
-      return new Response('WebSocket upgrade failed', { status: 500 });
-    }
+  // --- WebSocket upgrade ---
+  if (path === '/ws') {
+    // WebSocket upgrade is handled by the http server's 'upgrade' event
+    res.writeHead(400, { 'Content-Type': 'text/plain' });
+    res.end('WebSocket upgrade failed: use ws:// protocol');
+    return;
+  }
 
-    // --- CORS preflight ---
-    if (req.method === 'OPTIONS') {
-      return new Response(null, {
-        headers: {
-          'Access-Control-Allow-Origin': '*',
-          'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
-          'Access-Control-Allow-Headers': 'Content-Type, X-API-Key, Authorization, X-CSRF-Token',
+  // --- CORS preflight ---
+  if (req.method === 'OPTIONS') {
+    res.writeHead(204, {
+      'Access-Control-Allow-Origin': '*',
+      'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
+      'Access-Control-Allow-Headers': 'Content-Type, X-API-Key, Authorization, X-CSRF-Token',
+    });
+    res.end();
+    return;
+  }
+
+  // --- Health check ---
+  if (path === '/control/health') {
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({ ok: true, port: PORT, uptime: (Date.now() - state.startedAt) / 1000 }));
+    return;
+  }
+
+  // ===================================================================
+  // Cookie-session scenario
+  // ===================================================================
+
+  // Page — serves HTML with Set-Cookie header
+  if (path === '/cookie-session/' || path === '/cookie-session') {
+    res.writeHead(200, {
+      'Content-Type': 'text/html',
+      'Set-Cookie': 'connect.sid=s%3Afake-session-id-12345.sig; Path=/; HttpOnly',
+    });
+    res.end(COOKIE_SESSION_HTML);
+    return;
+  }
+
+  // REST API — GET /cookie-session/api/profile
+  if (path === '/cookie-session/api/profile' && req.method === 'GET') {
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    res.end(
+      JSON.stringify({
+        ok: true,
+        user: {
+          id: 'user-1',
+          name: 'Test User',
+          email: 'test@example.com',
         },
-      });
+      }),
+    );
+    return;
+  }
+
+  // REST API — GET /cookie-session/api/items
+  if (path === '/cookie-session/api/items' && req.method === 'GET') {
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    res.end(
+      JSON.stringify({
+        ok: true,
+        items: [
+          { id: 'item-1', name: 'Alpha', description: 'First item' },
+          { id: 'item-2', name: 'Bravo', description: 'Second item' },
+          { id: 'item-3', name: 'Charlie', description: 'Third item' },
+        ],
+        total: 3,
+      }),
+    );
+    return;
+  }
+
+  // REST API — POST /cookie-session/api/items
+  if (path === '/cookie-session/api/items' && req.method === 'POST') {
+    let body: Record<string, unknown> = {};
+    try {
+      body = await readBody(req);
+    } catch {
+      // ignore parse errors
     }
-
-    // --- Health check ---
-    if (path === '/control/health') {
-      return new Response(JSON.stringify({ ok: true, port: PORT, uptime: (Date.now() - state.startedAt) / 1000 }), {
-        headers: { 'Content-Type': 'application/json' },
-      });
-    }
-
-    // ===================================================================
-    // Cookie-session scenario
-    // ===================================================================
-
-    // Page — serves HTML with Set-Cookie header
-    if (path === '/cookie-session/' || path === '/cookie-session') {
-      return new Response(COOKIE_SESSION_HTML, {
-        headers: {
-          'Content-Type': 'text/html',
-          'Set-Cookie': 'connect.sid=s%3Afake-session-id-12345.sig; Path=/; HttpOnly',
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    res.end(
+      JSON.stringify({
+        ok: true,
+        item: {
+          id: 'item-new',
+          name: body.name ?? 'Unnamed',
+          description: body.description ?? '',
         },
-      });
+      }),
+    );
+    return;
+  }
+
+  // REST API — POST /cookie-session/api/update-profile (form target)
+  if (path === '/cookie-session/api/update-profile' && req.method === 'POST') {
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({ ok: true }));
+    return;
+  }
+
+  // ===================================================================
+  // JWT localStorage scenario
+  // ===================================================================
+
+  // Page — serves HTML (JWT is stored client-side via localStorage)
+  if (path === '/jwt-localstorage/' || path === '/jwt-localstorage') {
+    res.writeHead(200, { 'Content-Type': 'text/html' });
+    res.end(JWT_LOCALSTORAGE_HTML);
+    return;
+  }
+
+  // REST API — GET /jwt-localstorage/api/me (requires Bearer token)
+  if (path === '/jwt-localstorage/api/me' && req.method === 'GET') {
+    const authHeader = req.headers['authorization'];
+    if (!authHeader?.startsWith('Bearer ')) {
+      res.writeHead(401, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: 'Unauthorized' }));
+      return;
+    }
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    res.end(
+      JSON.stringify({
+        ok: true,
+        user: {
+          id: 'user-1',
+          name: 'Test User',
+          email: 'test@example.com',
+        },
+      }),
+    );
+    return;
+  }
+
+  // REST API — GET /jwt-localstorage/api/tasks
+  if (path === '/jwt-localstorage/api/tasks' && req.method === 'GET') {
+    const authHeader = req.headers['authorization'];
+    if (!authHeader?.startsWith('Bearer ')) {
+      res.writeHead(401, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: 'Unauthorized' }));
+      return;
+    }
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    res.end(
+      JSON.stringify({
+        ok: true,
+        tasks: [
+          { id: 'task-1', title: 'Review PR', done: false },
+          { id: 'task-2', title: 'Deploy staging', done: true },
+        ],
+        total: 2,
+      }),
+    );
+    return;
+  }
+
+  // REST API — POST /jwt-localstorage/api/tasks
+  if (path === '/jwt-localstorage/api/tasks' && req.method === 'POST') {
+    const authHeader = req.headers['authorization'];
+    if (!authHeader?.startsWith('Bearer ')) {
+      res.writeHead(401, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: 'Unauthorized' }));
+      return;
+    }
+    let body: Record<string, unknown> = {};
+    try {
+      body = await readBody(req);
+    } catch {
+      // ignore parse errors
+    }
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    res.end(
+      JSON.stringify({
+        ok: true,
+        task: {
+          id: 'task-new',
+          title: body.title ?? 'Untitled',
+          done: body.done ?? false,
+        },
+      }),
+    );
+    return;
+  }
+
+  // ===================================================================
+  // GraphQL scenario
+  // ===================================================================
+
+  // Page — serves HTML
+  if (path === '/graphql/' || path === '/graphql-app' || path === '/graphql-app/') {
+    res.writeHead(200, { 'Content-Type': 'text/html' });
+    res.end(GRAPHQL_HTML);
+    return;
+  }
+
+  // GraphQL API — POST /graphql
+  if (path === '/graphql' && req.method === 'POST') {
+    let body: Record<string, unknown> = {};
+    try {
+      body = await readBody(req);
+    } catch {
+      res.writeHead(400, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ errors: [{ message: 'Invalid JSON' }] }));
+      return;
     }
 
-    // REST API — GET /cookie-session/api/profile
-    if (path === '/cookie-session/api/profile' && req.method === 'GET') {
-      return new Response(
+    const query = typeof body.query === 'string' ? body.query : '';
+    const variables = (body.variables ?? {}) as Record<string, unknown>;
+
+    // Minimal GraphQL resolver
+    if (query.includes('GetUsers') || query.includes('users')) {
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(
         JSON.stringify({
-          ok: true,
-          user: {
-            id: 'user-1',
-            name: 'Test User',
-            email: 'test@example.com',
-          },
-        }),
-        { headers: { 'Content-Type': 'application/json' } },
-      );
-    }
-
-    // REST API — GET /cookie-session/api/items
-    if (path === '/cookie-session/api/items' && req.method === 'GET') {
-      return new Response(
-        JSON.stringify({
-          ok: true,
-          items: [
-            { id: 'item-1', name: 'Alpha', description: 'First item' },
-            { id: 'item-2', name: 'Bravo', description: 'Second item' },
-            { id: 'item-3', name: 'Charlie', description: 'Third item' },
-          ],
-          total: 3,
-        }),
-        { headers: { 'Content-Type': 'application/json' } },
-      );
-    }
-
-    // REST API — POST /cookie-session/api/items
-    if (path === '/cookie-session/api/items' && req.method === 'POST') {
-      let body: Record<string, unknown> = {};
-      try {
-        body = (await req.json()) as Record<string, unknown>;
-      } catch {
-        // ignore parse errors
-      }
-      return new Response(
-        JSON.stringify({
-          ok: true,
-          item: {
-            id: 'item-new',
-            name: body.name ?? 'Unnamed',
-            description: body.description ?? '',
-          },
-        }),
-        { headers: { 'Content-Type': 'application/json' } },
-      );
-    }
-
-    // REST API — POST /cookie-session/api/update-profile (form target)
-    if (path === '/cookie-session/api/update-profile' && req.method === 'POST') {
-      return new Response(JSON.stringify({ ok: true }), {
-        headers: { 'Content-Type': 'application/json' },
-      });
-    }
-
-    // ===================================================================
-    // JWT localStorage scenario
-    // ===================================================================
-
-    // Page — serves HTML (JWT is stored client-side via localStorage)
-    if (path === '/jwt-localstorage/' || path === '/jwt-localstorage') {
-      return new Response(JWT_LOCALSTORAGE_HTML, {
-        headers: { 'Content-Type': 'text/html' },
-      });
-    }
-
-    // REST API — GET /jwt-localstorage/api/me (requires Bearer token)
-    if (path === '/jwt-localstorage/api/me' && req.method === 'GET') {
-      const authHeader = req.headers.get('authorization');
-      if (!authHeader?.startsWith('Bearer ')) {
-        return new Response(JSON.stringify({ error: 'Unauthorized' }), {
-          status: 401,
-          headers: { 'Content-Type': 'application/json' },
-        });
-      }
-      return new Response(
-        JSON.stringify({
-          ok: true,
-          user: {
-            id: 'user-1',
-            name: 'Test User',
-            email: 'test@example.com',
-          },
-        }),
-        { headers: { 'Content-Type': 'application/json' } },
-      );
-    }
-
-    // REST API — GET /jwt-localstorage/api/tasks
-    if (path === '/jwt-localstorage/api/tasks' && req.method === 'GET') {
-      const authHeader = req.headers.get('authorization');
-      if (!authHeader?.startsWith('Bearer ')) {
-        return new Response(JSON.stringify({ error: 'Unauthorized' }), {
-          status: 401,
-          headers: { 'Content-Type': 'application/json' },
-        });
-      }
-      return new Response(
-        JSON.stringify({
-          ok: true,
-          tasks: [
-            { id: 'task-1', title: 'Review PR', done: false },
-            { id: 'task-2', title: 'Deploy staging', done: true },
-          ],
-          total: 2,
-        }),
-        { headers: { 'Content-Type': 'application/json' } },
-      );
-    }
-
-    // REST API — POST /jwt-localstorage/api/tasks
-    if (path === '/jwt-localstorage/api/tasks' && req.method === 'POST') {
-      const authHeader = req.headers.get('authorization');
-      if (!authHeader?.startsWith('Bearer ')) {
-        return new Response(JSON.stringify({ error: 'Unauthorized' }), {
-          status: 401,
-          headers: { 'Content-Type': 'application/json' },
-        });
-      }
-      let body: Record<string, unknown> = {};
-      try {
-        body = (await req.json()) as Record<string, unknown>;
-      } catch {
-        // ignore parse errors
-      }
-      return new Response(
-        JSON.stringify({
-          ok: true,
-          task: {
-            id: 'task-new',
-            title: body.title ?? 'Untitled',
-            done: body.done ?? false,
-          },
-        }),
-        { headers: { 'Content-Type': 'application/json' } },
-      );
-    }
-
-    // ===================================================================
-    // GraphQL scenario
-    // ===================================================================
-
-    // Page — serves HTML
-    if (path === '/graphql/' || path === '/graphql-app' || path === '/graphql-app/') {
-      return new Response(GRAPHQL_HTML, {
-        headers: { 'Content-Type': 'text/html' },
-      });
-    }
-
-    // GraphQL API — POST /graphql
-    if (path === '/graphql' && req.method === 'POST') {
-      let body: Record<string, unknown> = {};
-      try {
-        body = (await req.json()) as Record<string, unknown>;
-      } catch {
-        return new Response(JSON.stringify({ errors: [{ message: 'Invalid JSON' }] }), {
-          status: 400,
-          headers: { 'Content-Type': 'application/json' },
-        });
-      }
-
-      const query = typeof body.query === 'string' ? body.query : '';
-      const variables = (body.variables ?? {}) as Record<string, unknown>;
-
-      // Minimal GraphQL resolver
-      if (query.includes('GetUsers') || query.includes('users')) {
-        return new Response(
-          JSON.stringify({
-            data: {
-              users: [
-                { id: 'user-1', name: 'Alice', email: 'alice@example.com' },
-                { id: 'user-2', name: 'Bob', email: 'bob@example.com' },
-              ],
-            },
-          }),
-          { headers: { 'Content-Type': 'application/json' } },
-        );
-      }
-
-      if (query.includes('GetItems') || (query.includes('items') && !query.includes('createItem'))) {
-        return new Response(
-          JSON.stringify({
-            data: {
-              items: [
-                { id: 'item-1', title: 'Widget A', price: 9.99 },
-                { id: 'item-2', title: 'Widget B', price: 19.99 },
-                { id: 'item-3', title: 'Widget C', price: 29.99 },
-              ],
-            },
-          }),
-          { headers: { 'Content-Type': 'application/json' } },
-        );
-      }
-
-      if (query.includes('createItem') || query.includes('CreateItem')) {
-        return new Response(
-          JSON.stringify({
-            data: {
-              createItem: {
-                id: 'item-new',
-                title: variables.title ?? 'Unnamed',
-                price: variables.price ?? 0,
-              },
-            },
-          }),
-          { headers: { 'Content-Type': 'application/json' } },
-        );
-      }
-
-      // Fallback for unknown queries
-      return new Response(
-        JSON.stringify({
-          data: null,
-          errors: [{ message: `Unknown query: ${query.slice(0, 100)}` }],
-        }),
-        { headers: { 'Content-Type': 'application/json' } },
-      );
-    }
-
-    // ===================================================================
-    // JSON-RPC scenario
-    // ===================================================================
-
-    // Page — serves HTML
-    if (path === '/jsonrpc-app/' || path === '/jsonrpc-app') {
-      return new Response(JSONRPC_HTML, {
-        headers: { 'Content-Type': 'text/html' },
-      });
-    }
-
-    // JSON-RPC API — POST /rpc
-    if (path === '/rpc' && req.method === 'POST') {
-      let body: Record<string, unknown> = {};
-      try {
-        body = (await req.json()) as Record<string, unknown>;
-      } catch {
-        return new Response(
-          JSON.stringify({ jsonrpc: '2.0', error: { code: -32700, message: 'Parse error' }, id: null }),
-          { status: 400, headers: { 'Content-Type': 'application/json' } },
-        );
-      }
-
-      const method = typeof body.method === 'string' ? body.method : '';
-      const id = body.id ?? null;
-      const params = (body.params ?? {}) as Record<string, unknown>;
-
-      if (method === 'getItems') {
-        return new Response(
-          JSON.stringify({
-            jsonrpc: '2.0',
-            result: {
-              items: [
-                { id: 'item-1', title: 'Widget A', description: 'First widget' },
-                { id: 'item-2', title: 'Widget B', description: 'Second widget' },
-                { id: 'item-3', title: 'Widget C', description: 'Third widget' },
-              ],
-              total: 3,
-            },
-            id,
-          }),
-          { headers: { 'Content-Type': 'application/json' } },
-        );
-      }
-
-      if (method === 'createItem') {
-        return new Response(
-          JSON.stringify({
-            jsonrpc: '2.0',
-            result: {
-              item: {
-                id: 'item-new',
-                title: params.title ?? 'Unnamed',
-                description: params.description ?? '',
-              },
-            },
-            id,
-          }),
-          { headers: { 'Content-Type': 'application/json' } },
-        );
-      }
-
-      // Unknown method
-      return new Response(
-        JSON.stringify({
-          jsonrpc: '2.0',
-          error: { code: -32601, message: `Method not found: ${method}` },
-          id,
-        }),
-        { status: 404, headers: { 'Content-Type': 'application/json' } },
-      );
-    }
-
-    // ===================================================================
-    // Next.js SSR scenario
-    // ===================================================================
-
-    // Page — serves HTML with __NEXT_DATA__ global
-    if (path === '/nextjs-app/' || path === '/nextjs-app') {
-      return new Response(NEXTJS_SSR_HTML, {
-        headers: { 'Content-Type': 'text/html' },
-      });
-    }
-
-    // ===================================================================
-    // API key header scenario
-    // ===================================================================
-
-    // Page — serves HTML
-    if (path === '/apikey-app/' || path === '/apikey-app') {
-      return new Response(APIKEY_HTML, {
-        headers: { 'Content-Type': 'text/html' },
-      });
-    }
-
-    // API — GET /apikey-app/api/projects (requires X-API-Key)
-    if (path === '/apikey-app/api/projects' && req.method === 'GET') {
-      if (!req.headers.get('x-api-key')) {
-        return new Response(JSON.stringify({ error: 'API key required' }), {
-          status: 401,
-          headers: { 'Content-Type': 'application/json' },
-        });
-      }
-      return new Response(
-        JSON.stringify({
-          ok: true,
-          projects: [
-            { id: 'proj-1', name: 'Alpha', status: 'active' },
-            { id: 'proj-2', name: 'Bravo', status: 'active' },
-          ],
-          total: 2,
-        }),
-        { headers: { 'Content-Type': 'application/json' } },
-      );
-    }
-
-    // API — GET /apikey-app/api/events (requires X-API-Key)
-    if (path === '/apikey-app/api/events' && req.method === 'GET') {
-      if (!req.headers.get('x-api-key')) {
-        return new Response(JSON.stringify({ error: 'API key required' }), {
-          status: 401,
-          headers: { 'Content-Type': 'application/json' },
-        });
-      }
-      return new Response(
-        JSON.stringify({
-          ok: true,
-          events: [
-            { id: 'evt-1', name: 'login', timestamp: '2026-01-01T00:00:00Z' },
-            { id: 'evt-2', name: 'page_view', timestamp: '2026-01-01T00:01:00Z' },
-            { id: 'evt-3', name: 'click', timestamp: '2026-01-01T00:02:00Z' },
-          ],
-          total: 3,
-        }),
-        { headers: { 'Content-Type': 'application/json' } },
-      );
-    }
-
-    // API — POST /apikey-app/api/events (requires X-API-Key)
-    if (path === '/apikey-app/api/events' && req.method === 'POST') {
-      if (!req.headers.get('x-api-key')) {
-        return new Response(JSON.stringify({ error: 'API key required' }), {
-          status: 401,
-          headers: { 'Content-Type': 'application/json' },
-        });
-      }
-      let body: Record<string, unknown> = {};
-      try {
-        body = (await req.json()) as Record<string, unknown>;
-      } catch {
-        // ignore parse errors
-      }
-      return new Response(
-        JSON.stringify({
-          ok: true,
-          event: {
-            id: 'evt-new',
-            name: body.name ?? 'unknown',
-            timestamp: new Date().toISOString(),
-          },
-        }),
-        { headers: { 'Content-Type': 'application/json' } },
-      );
-    }
-
-    // ===================================================================
-    // tRPC scenario
-    // ===================================================================
-
-    // Page — serves HTML
-    if (path === '/trpc-app/' || path === '/trpc-app') {
-      return new Response(TRPC_HTML, {
-        headers: { 'Content-Type': 'text/html' },
-      });
-    }
-
-    // tRPC query — GET /api/trpc/user.list
-    if (path === '/api/trpc/user.list' && req.method === 'GET') {
-      return new Response(
-        JSON.stringify({
-          result: {
-            data: [
+          data: {
+            users: [
               { id: 'user-1', name: 'Alice', email: 'alice@example.com' },
               { id: 'user-2', name: 'Bob', email: 'bob@example.com' },
-              { id: 'user-3', name: 'Charlie', email: 'charlie@example.com' },
             ],
           },
         }),
-        { headers: { 'Content-Type': 'application/json' } },
       );
+      return;
     }
 
-    // tRPC query — GET /api/trpc/item.list
-    if (path === '/api/trpc/item.list' && req.method === 'GET') {
-      return new Response(
+    if (query.includes('GetItems') || (query.includes('items') && !query.includes('createItem'))) {
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(
         JSON.stringify({
-          result: {
-            data: [
+          data: {
+            items: [
               { id: 'item-1', title: 'Widget A', price: 9.99 },
               { id: 'item-2', title: 'Widget B', price: 19.99 },
+              { id: 'item-3', title: 'Widget C', price: 29.99 },
             ],
           },
         }),
-        { headers: { 'Content-Type': 'application/json' } },
       );
+      return;
     }
 
-    // tRPC mutation — POST /api/trpc/item.create
-    if (path === '/api/trpc/item.create' && req.method === 'POST') {
-      let body: Record<string, unknown> = {};
-      try {
-        body = (await req.json()) as Record<string, unknown>;
-      } catch {
-        // ignore parse errors
-      }
-      return new Response(
+    if (query.includes('createItem') || query.includes('CreateItem')) {
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(
         JSON.stringify({
-          result: {
-            data: {
+          data: {
+            createItem: {
               id: 'item-new',
-              title: body.title ?? 'Unnamed',
-              price: body.price ?? 0,
+              title: variables.title ?? 'Unnamed',
+              price: variables.price ?? 0,
             },
           },
         }),
-        { headers: { 'Content-Type': 'application/json' } },
       );
+      return;
     }
 
-    // ===================================================================
-    // Mixed auth scenario (cookie + CSRF + Bearer from global)
-    // ===================================================================
+    // Fallback for unknown queries
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    res.end(
+      JSON.stringify({
+        data: null,
+        errors: [{ message: `Unknown query: ${query.slice(0, 100)}` }],
+      }),
+    );
+    return;
+  }
 
-    // Page — serves HTML with Set-Cookie header for session
-    if (path === '/mixed-auth/' || path === '/mixed-auth') {
-      return new Response(MIXED_AUTH_HTML, {
-        headers: {
-          'Content-Type': 'text/html',
-          'Set-Cookie': 'session=mixed-session-abcdef12345; Path=/; HttpOnly',
-        },
-      });
+  // ===================================================================
+  // JSON-RPC scenario
+  // ===================================================================
+
+  // Page — serves HTML
+  if (path === '/jsonrpc-app/' || path === '/jsonrpc-app') {
+    res.writeHead(200, { 'Content-Type': 'text/html' });
+    res.end(JSONRPC_HTML);
+    return;
+  }
+
+  // JSON-RPC API — POST /rpc
+  if (path === '/rpc' && req.method === 'POST') {
+    let body: Record<string, unknown> = {};
+    try {
+      body = await readBody(req);
+    } catch {
+      res.writeHead(400, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ jsonrpc: '2.0', error: { code: -32700, message: 'Parse error' }, id: null }));
+      return;
     }
 
-    // API — GET /mixed-auth/api/dashboard (requires Bearer token)
-    if (path === '/mixed-auth/api/dashboard' && req.method === 'GET') {
-      const authHeader = req.headers.get('authorization');
-      if (!authHeader?.startsWith('Bearer ')) {
-        return new Response(JSON.stringify({ error: 'Unauthorized' }), {
-          status: 401,
-          headers: { 'Content-Type': 'application/json' },
-        });
-      }
-      return new Response(
+    const method = typeof body.method === 'string' ? body.method : '';
+    const id = body.id ?? null;
+    const params = (body.params ?? {}) as Record<string, unknown>;
+
+    if (method === 'getItems') {
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(
         JSON.stringify({
-          ok: true,
-          data: { widgets: 5, activeUsers: 42, lastUpdated: '2026-02-21T12:00:00Z' },
-        }),
-        { headers: { 'Content-Type': 'application/json' } },
-      );
-    }
-
-    // API — GET /mixed-auth/api/notifications (requires Bearer token)
-    if (path === '/mixed-auth/api/notifications' && req.method === 'GET') {
-      const authHeader = req.headers.get('authorization');
-      if (!authHeader?.startsWith('Bearer ')) {
-        return new Response(JSON.stringify({ error: 'Unauthorized' }), {
-          status: 401,
-          headers: { 'Content-Type': 'application/json' },
-        });
-      }
-      return new Response(
-        JSON.stringify({
-          ok: true,
-          notifications: [
-            { id: 'n-1', text: 'New comment on your post', read: false },
-            { id: 'n-2', text: 'System maintenance scheduled', read: true },
-          ],
-          total: 2,
-        }),
-        { headers: { 'Content-Type': 'application/json' } },
-      );
-    }
-
-    // API — POST /mixed-auth/api/actions (requires Bearer token + CSRF header)
-    if (path === '/mixed-auth/api/actions' && req.method === 'POST') {
-      const authHeader = req.headers.get('authorization');
-      if (!authHeader?.startsWith('Bearer ')) {
-        return new Response(JSON.stringify({ error: 'Unauthorized' }), {
-          status: 401,
-          headers: { 'Content-Type': 'application/json' },
-        });
-      }
-      let body: Record<string, unknown> = {};
-      try {
-        body = (await req.json()) as Record<string, unknown>;
-      } catch {
-        // ignore parse errors
-      }
-      return new Response(
-        JSON.stringify({
-          ok: true,
-          action: body.action ?? 'unknown',
-          processed: true,
-        }),
-        { headers: { 'Content-Type': 'application/json' } },
-      );
-    }
-
-    // API — POST /mixed-auth/api/update-settings (form target)
-    if (path === '/mixed-auth/api/update-settings' && req.method === 'POST') {
-      return new Response(JSON.stringify({ ok: true }), {
-        headers: { 'Content-Type': 'application/json' },
-      });
-    }
-
-    // ===================================================================
-    // WebSocket scenario
-    // ===================================================================
-
-    // Page — serves HTML
-    if (path === '/websocket-app/' || path === '/websocket-app') {
-      return new Response(WEBSOCKET_HTML, {
-        headers: { 'Content-Type': 'text/html' },
-      });
-    }
-
-    // REST API — GET /websocket-app/api/config (supplementary REST endpoint)
-    if (path === '/websocket-app/api/config' && req.method === 'GET') {
-      return new Response(
-        JSON.stringify({
-          ok: true,
-          config: {
-            refreshInterval: 5000,
-            channels: ['updates', 'alerts'],
+          jsonrpc: '2.0',
+          result: {
+            items: [
+              { id: 'item-1', title: 'Widget A', description: 'First widget' },
+              { id: 'item-2', title: 'Widget B', description: 'Second widget' },
+              { id: 'item-3', title: 'Widget C', description: 'Third widget' },
+            ],
+            total: 3,
           },
+          id,
         }),
-        { headers: { 'Content-Type': 'application/json' } },
       );
+      return;
     }
 
-    // ===================================================================
-    // Suggestions quality scenario
-    // ===================================================================
-
-    // Page — serves HTML
-    if (path === '/suggestions-app/' || path === '/suggestions-app') {
-      return new Response(SUGGESTIONS_HTML, {
-        headers: { 'Content-Type': 'text/html' },
-      });
-    }
-
-    // REST API — GET /suggestions-app/api/items
-    if (path === '/suggestions-app/api/items' && req.method === 'GET') {
-      return new Response(
+    if (method === 'createItem') {
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(
         JSON.stringify({
-          ok: true,
-          items: [
-            { id: 'item-1', name: 'Widget A', description: 'First widget', price: 9.99 },
-            { id: 'item-2', name: 'Widget B', description: 'Second widget', price: 19.99 },
-            { id: 'item-3', name: 'Widget C', description: 'Third widget', price: 29.99 },
+          jsonrpc: '2.0',
+          result: {
+            item: {
+              id: 'item-new',
+              title: params.title ?? 'Unnamed',
+              description: params.description ?? '',
+            },
+          },
+          id,
+        }),
+      );
+      return;
+    }
+
+    // Unknown method
+    res.writeHead(404, { 'Content-Type': 'application/json' });
+    res.end(
+      JSON.stringify({
+        jsonrpc: '2.0',
+        error: { code: -32601, message: `Method not found: ${method}` },
+        id,
+      }),
+    );
+    return;
+  }
+
+  // ===================================================================
+  // Next.js SSR scenario
+  // ===================================================================
+
+  // Page — serves HTML with __NEXT_DATA__ global
+  if (path === '/nextjs-app/' || path === '/nextjs-app') {
+    res.writeHead(200, { 'Content-Type': 'text/html' });
+    res.end(NEXTJS_SSR_HTML);
+    return;
+  }
+
+  // ===================================================================
+  // API key header scenario
+  // ===================================================================
+
+  // Page — serves HTML
+  if (path === '/apikey-app/' || path === '/apikey-app') {
+    res.writeHead(200, { 'Content-Type': 'text/html' });
+    res.end(APIKEY_HTML);
+    return;
+  }
+
+  // API — GET /apikey-app/api/projects (requires X-API-Key)
+  if (path === '/apikey-app/api/projects' && req.method === 'GET') {
+    if (!req.headers['x-api-key']) {
+      res.writeHead(401, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: 'API key required' }));
+      return;
+    }
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    res.end(
+      JSON.stringify({
+        ok: true,
+        projects: [
+          { id: 'proj-1', name: 'Alpha', status: 'active' },
+          { id: 'proj-2', name: 'Bravo', status: 'active' },
+        ],
+        total: 2,
+      }),
+    );
+    return;
+  }
+
+  // API — GET /apikey-app/api/events (requires X-API-Key)
+  if (path === '/apikey-app/api/events' && req.method === 'GET') {
+    if (!req.headers['x-api-key']) {
+      res.writeHead(401, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: 'API key required' }));
+      return;
+    }
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    res.end(
+      JSON.stringify({
+        ok: true,
+        events: [
+          { id: 'evt-1', name: 'login', timestamp: '2026-01-01T00:00:00Z' },
+          { id: 'evt-2', name: 'page_view', timestamp: '2026-01-01T00:01:00Z' },
+          { id: 'evt-3', name: 'click', timestamp: '2026-01-01T00:02:00Z' },
+        ],
+        total: 3,
+      }),
+    );
+    return;
+  }
+
+  // API — POST /apikey-app/api/events (requires X-API-Key)
+  if (path === '/apikey-app/api/events' && req.method === 'POST') {
+    if (!req.headers['x-api-key']) {
+      res.writeHead(401, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: 'API key required' }));
+      return;
+    }
+    let body: Record<string, unknown> = {};
+    try {
+      body = await readBody(req);
+    } catch {
+      // ignore parse errors
+    }
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    res.end(
+      JSON.stringify({
+        ok: true,
+        event: {
+          id: 'evt-new',
+          name: body.name ?? 'unknown',
+          timestamp: new Date().toISOString(),
+        },
+      }),
+    );
+    return;
+  }
+
+  // ===================================================================
+  // tRPC scenario
+  // ===================================================================
+
+  // Page — serves HTML
+  if (path === '/trpc-app/' || path === '/trpc-app') {
+    res.writeHead(200, { 'Content-Type': 'text/html' });
+    res.end(TRPC_HTML);
+    return;
+  }
+
+  // tRPC query — GET /api/trpc/user.list
+  if (path === '/api/trpc/user.list' && req.method === 'GET') {
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    res.end(
+      JSON.stringify({
+        result: {
+          data: [
+            { id: 'user-1', name: 'Alice', email: 'alice@example.com' },
+            { id: 'user-2', name: 'Bob', email: 'bob@example.com' },
+            { id: 'user-3', name: 'Charlie', email: 'charlie@example.com' },
           ],
-          total: 3,
-        }),
-        { headers: { 'Content-Type': 'application/json' } },
-      );
-    }
+        },
+      }),
+    );
+    return;
+  }
 
-    // REST API — POST /suggestions-app/api/items
-    if (path === '/suggestions-app/api/items' && req.method === 'POST') {
-      let body: Record<string, unknown> = {};
-      try {
-        body = (await req.json()) as Record<string, unknown>;
-      } catch {
-        // ignore parse errors
-      }
-      return new Response(
-        JSON.stringify({
-          ok: true,
-          item: {
+  // tRPC query — GET /api/trpc/item.list
+  if (path === '/api/trpc/item.list' && req.method === 'GET') {
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    res.end(
+      JSON.stringify({
+        result: {
+          data: [
+            { id: 'item-1', title: 'Widget A', price: 9.99 },
+            { id: 'item-2', title: 'Widget B', price: 19.99 },
+          ],
+        },
+      }),
+    );
+    return;
+  }
+
+  // tRPC mutation — POST /api/trpc/item.create
+  if (path === '/api/trpc/item.create' && req.method === 'POST') {
+    let body: Record<string, unknown> = {};
+    try {
+      body = await readBody(req);
+    } catch {
+      // ignore parse errors
+    }
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    res.end(
+      JSON.stringify({
+        result: {
+          data: {
             id: 'item-new',
-            name: body.name ?? 'Unnamed',
-            description: body.description ?? '',
+            title: body.title ?? 'Unnamed',
             price: body.price ?? 0,
           },
-        }),
-        { headers: { 'Content-Type': 'application/json' } },
-      );
+        },
+      }),
+    );
+    return;
+  }
+
+  // ===================================================================
+  // Mixed auth scenario (cookie + CSRF + Bearer from global)
+  // ===================================================================
+
+  // Page — serves HTML with Set-Cookie header for session
+  if (path === '/mixed-auth/' || path === '/mixed-auth') {
+    res.writeHead(200, {
+      'Content-Type': 'text/html',
+      'Set-Cookie': 'session=mixed-session-abcdef12345; Path=/; HttpOnly',
+    });
+    res.end(MIXED_AUTH_HTML);
+    return;
+  }
+
+  // API — GET /mixed-auth/api/dashboard (requires Bearer token)
+  if (path === '/mixed-auth/api/dashboard' && req.method === 'GET') {
+    const authHeader = req.headers['authorization'];
+    if (!authHeader?.startsWith('Bearer ')) {
+      res.writeHead(401, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: 'Unauthorized' }));
+      return;
     }
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    res.end(
+      JSON.stringify({
+        ok: true,
+        data: { widgets: 5, activeUsers: 42, lastUpdated: '2026-02-21T12:00:00Z' },
+      }),
+    );
+    return;
+  }
 
-    // REST API — GET /suggestions-app/api/users
-    if (path === '/suggestions-app/api/users' && req.method === 'GET') {
-      return new Response(
-        JSON.stringify({
-          ok: true,
-          users: [
-            { id: 'user-1', name: 'Alice', email: 'alice@example.com', role: 'admin' },
-            { id: 'user-2', name: 'Bob', email: 'bob@example.com', role: 'member' },
-          ],
-          total: 2,
-        }),
-        { headers: { 'Content-Type': 'application/json' } },
-      );
+  // API — GET /mixed-auth/api/notifications (requires Bearer token)
+  if (path === '/mixed-auth/api/notifications' && req.method === 'GET') {
+    const authHeader = req.headers['authorization'];
+    if (!authHeader?.startsWith('Bearer ')) {
+      res.writeHead(401, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: 'Unauthorized' }));
+      return;
     }
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    res.end(
+      JSON.stringify({
+        ok: true,
+        notifications: [
+          { id: 'n-1', text: 'New comment on your post', read: false },
+          { id: 'n-2', text: 'System maintenance scheduled', read: true },
+        ],
+        total: 2,
+      }),
+    );
+    return;
+  }
 
-    // REST API — GET /suggestions-app/api/search
-    if (path === '/suggestions-app/api/search' && req.method === 'GET') {
-      const q = url.searchParams.get('query') ?? '';
-      return new Response(
-        JSON.stringify({
-          ok: true,
-          query: q,
-          results: [{ id: 'item-1', name: 'Widget A', match: 0.9 }],
-          total: 1,
-        }),
-        { headers: { 'Content-Type': 'application/json' } },
-      );
+  // API — POST /mixed-auth/api/actions (requires Bearer token + CSRF header)
+  if (path === '/mixed-auth/api/actions' && req.method === 'POST') {
+    const authHeader = req.headers['authorization'];
+    if (!authHeader?.startsWith('Bearer ')) {
+      res.writeHead(401, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: 'Unauthorized' }));
+      return;
     }
-
-    // REST API — POST /suggestions-app/api/settings
-    if (path === '/suggestions-app/api/settings' && req.method === 'POST') {
-      return new Response(JSON.stringify({ ok: true }), {
-        headers: { 'Content-Type': 'application/json' },
-      });
+    let body: Record<string, unknown> = {};
+    try {
+      body = await readBody(req);
+    } catch {
+      // ignore parse errors
     }
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    res.end(
+      JSON.stringify({
+        ok: true,
+        action: body.action ?? 'unknown',
+        processed: true,
+      }),
+    );
+    return;
+  }
 
-    // ===================================================================
-    // JWT sessionStorage scenario
-    // ===================================================================
+  // API — POST /mixed-auth/api/update-settings (form target)
+  if (path === '/mixed-auth/api/update-settings' && req.method === 'POST') {
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({ ok: true }));
+    return;
+  }
 
-    // Page — serves HTML (JWT is stored client-side via sessionStorage)
-    if (path === '/jwt-sessionstorage/' || path === '/jwt-sessionstorage') {
-      return new Response(JWT_SESSIONSTORAGE_HTML, {
-        headers: { 'Content-Type': 'text/html' },
-      });
+  // ===================================================================
+  // WebSocket scenario
+  // ===================================================================
+
+  // Page — serves HTML
+  if (path === '/websocket-app/' || path === '/websocket-app') {
+    res.writeHead(200, { 'Content-Type': 'text/html' });
+    res.end(WEBSOCKET_HTML);
+    return;
+  }
+
+  // REST API — GET /websocket-app/api/config (supplementary REST endpoint)
+  if (path === '/websocket-app/api/config' && req.method === 'GET') {
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    res.end(
+      JSON.stringify({
+        ok: true,
+        config: {
+          refreshInterval: 5000,
+          channels: ['updates', 'alerts'],
+        },
+      }),
+    );
+    return;
+  }
+
+  // ===================================================================
+  // Suggestions quality scenario
+  // ===================================================================
+
+  // Page — serves HTML
+  if (path === '/suggestions-app/' || path === '/suggestions-app') {
+    res.writeHead(200, { 'Content-Type': 'text/html' });
+    res.end(SUGGESTIONS_HTML);
+    return;
+  }
+
+  // REST API — GET /suggestions-app/api/items
+  if (path === '/suggestions-app/api/items' && req.method === 'GET') {
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    res.end(
+      JSON.stringify({
+        ok: true,
+        items: [
+          { id: 'item-1', name: 'Widget A', description: 'First widget', price: 9.99 },
+          { id: 'item-2', name: 'Widget B', description: 'Second widget', price: 19.99 },
+          { id: 'item-3', name: 'Widget C', description: 'Third widget', price: 29.99 },
+        ],
+        total: 3,
+      }),
+    );
+    return;
+  }
+
+  // REST API — POST /suggestions-app/api/items
+  if (path === '/suggestions-app/api/items' && req.method === 'POST') {
+    let body: Record<string, unknown> = {};
+    try {
+      body = await readBody(req);
+    } catch {
+      // ignore parse errors
     }
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    res.end(
+      JSON.stringify({
+        ok: true,
+        item: {
+          id: 'item-new',
+          name: body.name ?? 'Unnamed',
+          description: body.description ?? '',
+          price: body.price ?? 0,
+        },
+      }),
+    );
+    return;
+  }
 
-    // REST API — GET /jwt-sessionstorage/api/notes (requires Bearer token)
-    if (path === '/jwt-sessionstorage/api/notes' && req.method === 'GET') {
-      const authHeader = req.headers.get('authorization');
-      if (!authHeader?.startsWith('Bearer ')) {
-        return new Response(JSON.stringify({ error: 'Unauthorized' }), {
-          status: 401,
-          headers: { 'Content-Type': 'application/json' },
-        });
-      }
-      return new Response(
-        JSON.stringify({
-          ok: true,
-          notes: [
-            { id: 'note-1', title: 'Meeting notes', content: 'Discuss roadmap' },
-            { id: 'note-2', title: 'Ideas', content: 'New feature ideas' },
-          ],
-          total: 2,
-        }),
-        { headers: { 'Content-Type': 'application/json' } },
-      );
+  // REST API — GET /suggestions-app/api/users
+  if (path === '/suggestions-app/api/users' && req.method === 'GET') {
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    res.end(
+      JSON.stringify({
+        ok: true,
+        users: [
+          { id: 'user-1', name: 'Alice', email: 'alice@example.com', role: 'admin' },
+          { id: 'user-2', name: 'Bob', email: 'bob@example.com', role: 'member' },
+        ],
+        total: 2,
+      }),
+    );
+    return;
+  }
+
+  // REST API — GET /suggestions-app/api/search
+  if (path === '/suggestions-app/api/search' && req.method === 'GET') {
+    const q = url.searchParams.get('query') ?? '';
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    res.end(
+      JSON.stringify({
+        ok: true,
+        query: q,
+        results: [{ id: 'item-1', name: 'Widget A', match: 0.9 }],
+        total: 1,
+      }),
+    );
+    return;
+  }
+
+  // REST API — POST /suggestions-app/api/settings
+  if (path === '/suggestions-app/api/settings' && req.method === 'POST') {
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({ ok: true }));
+    return;
+  }
+
+  // ===================================================================
+  // JWT sessionStorage scenario
+  // ===================================================================
+
+  // Page — serves HTML (JWT is stored client-side via sessionStorage)
+  if (path === '/jwt-sessionstorage/' || path === '/jwt-sessionstorage') {
+    res.writeHead(200, { 'Content-Type': 'text/html' });
+    res.end(JWT_SESSIONSTORAGE_HTML);
+    return;
+  }
+
+  // REST API — GET /jwt-sessionstorage/api/notes (requires Bearer token)
+  if (path === '/jwt-sessionstorage/api/notes' && req.method === 'GET') {
+    const authHeader = req.headers['authorization'];
+    if (!authHeader?.startsWith('Bearer ')) {
+      res.writeHead(401, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: 'Unauthorized' }));
+      return;
     }
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    res.end(
+      JSON.stringify({
+        ok: true,
+        notes: [
+          { id: 'note-1', title: 'Meeting notes', content: 'Discuss roadmap' },
+          { id: 'note-2', title: 'Ideas', content: 'New feature ideas' },
+        ],
+        total: 2,
+      }),
+    );
+    return;
+  }
 
-    // REST API — POST /jwt-sessionstorage/api/notes
-    if (path === '/jwt-sessionstorage/api/notes' && req.method === 'POST') {
-      const authHeader = req.headers.get('authorization');
-      if (!authHeader?.startsWith('Bearer ')) {
-        return new Response(JSON.stringify({ error: 'Unauthorized' }), {
-          status: 401,
-          headers: { 'Content-Type': 'application/json' },
-        });
-      }
-      let body: Record<string, unknown> = {};
-      try {
-        body = (await req.json()) as Record<string, unknown>;
-      } catch {
-        // ignore parse errors
-      }
-      return new Response(
-        JSON.stringify({
-          ok: true,
-          note: {
-            id: 'note-new',
-            title: body.title ?? 'Untitled',
-            content: body.content ?? '',
-          },
-        }),
-        { headers: { 'Content-Type': 'application/json' } },
-      );
+  // REST API — POST /jwt-sessionstorage/api/notes
+  if (path === '/jwt-sessionstorage/api/notes' && req.method === 'POST') {
+    const authHeader = req.headers['authorization'];
+    if (!authHeader?.startsWith('Bearer ')) {
+      res.writeHead(401, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: 'Unauthorized' }));
+      return;
     }
-
-    // ===================================================================
-    // Basic Auth scenario
-    // ===================================================================
-
-    // Page — serves HTML
-    if (path === '/basicauth-app/' || path === '/basicauth-app') {
-      return new Response(BASICAUTH_HTML, {
-        headers: { 'Content-Type': 'text/html' },
-      });
+    let body: Record<string, unknown> = {};
+    try {
+      body = await readBody(req);
+    } catch {
+      // ignore parse errors
     }
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    res.end(
+      JSON.stringify({
+        ok: true,
+        note: {
+          id: 'note-new',
+          title: body.title ?? 'Untitled',
+          content: body.content ?? '',
+        },
+      }),
+    );
+    return;
+  }
 
-    // REST API — GET /basicauth-app/api/files (requires Basic Auth)
-    if (path === '/basicauth-app/api/files' && req.method === 'GET') {
-      const authHeader = req.headers.get('authorization');
-      if (!authHeader?.startsWith('Basic ')) {
-        return new Response(JSON.stringify({ error: 'Unauthorized' }), {
-          status: 401,
-          headers: { 'Content-Type': 'application/json', 'WWW-Authenticate': 'Basic realm="files"' },
-        });
-      }
-      return new Response(
-        JSON.stringify({
-          ok: true,
-          files: [
-            { id: 'file-1', name: 'readme.md', size: 1024 },
-            { id: 'file-2', name: 'config.json', size: 256 },
-          ],
-          total: 2,
-        }),
-        { headers: { 'Content-Type': 'application/json' } },
-      );
+  // ===================================================================
+  // Basic Auth scenario
+  // ===================================================================
+
+  // Page — serves HTML
+  if (path === '/basicauth-app/' || path === '/basicauth-app') {
+    res.writeHead(200, { 'Content-Type': 'text/html' });
+    res.end(BASICAUTH_HTML);
+    return;
+  }
+
+  // REST API — GET /basicauth-app/api/files (requires Basic Auth)
+  if (path === '/basicauth-app/api/files' && req.method === 'GET') {
+    const authHeader = req.headers['authorization'];
+    if (!authHeader?.startsWith('Basic ')) {
+      res.writeHead(401, { 'Content-Type': 'application/json', 'WWW-Authenticate': 'Basic realm="files"' });
+      res.end(JSON.stringify({ error: 'Unauthorized' }));
+      return;
     }
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    res.end(
+      JSON.stringify({
+        ok: true,
+        files: [
+          { id: 'file-1', name: 'readme.md', size: 1024 },
+          { id: 'file-2', name: 'config.json', size: 256 },
+        ],
+        total: 2,
+      }),
+    );
+    return;
+  }
 
-    // REST API — POST /basicauth-app/api/files (requires Basic Auth)
-    if (path === '/basicauth-app/api/files' && req.method === 'POST') {
-      const authHeader = req.headers.get('authorization');
-      if (!authHeader?.startsWith('Basic ')) {
-        return new Response(JSON.stringify({ error: 'Unauthorized' }), {
-          status: 401,
-          headers: { 'Content-Type': 'application/json', 'WWW-Authenticate': 'Basic realm="files"' },
-        });
-      }
-      let body: Record<string, unknown> = {};
-      try {
-        body = (await req.json()) as Record<string, unknown>;
-      } catch {
-        // ignore parse errors
-      }
-      return new Response(
-        JSON.stringify({
-          ok: true,
-          file: {
-            id: 'file-new',
-            name: body.name ?? 'unnamed.txt',
-            size: typeof body.content === 'string' ? body.content.length : 0,
-          },
-        }),
-        { headers: { 'Content-Type': 'application/json' } },
-      );
+  // REST API — POST /basicauth-app/api/files (requires Basic Auth)
+  if (path === '/basicauth-app/api/files' && req.method === 'POST') {
+    const authHeader = req.headers['authorization'];
+    if (!authHeader?.startsWith('Basic ')) {
+      res.writeHead(401, { 'Content-Type': 'application/json', 'WWW-Authenticate': 'Basic realm="files"' });
+      res.end(JSON.stringify({ error: 'Unauthorized' }));
+      return;
     }
-
-    // ===================================================================
-    // SPA with client-side routing scenario
-    // ===================================================================
-
-    // Page — serves SPA HTML for any /spa-app/ path (simulates catch-all route)
-    if (path.startsWith('/spa-app')) {
-      return new Response(SPA_HTML, {
-        headers: { 'Content-Type': 'text/html' },
-      });
+    let body: Record<string, unknown> = {};
+    try {
+      body = await readBody(req);
+    } catch {
+      // ignore parse errors
     }
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    res.end(
+      JSON.stringify({
+        ok: true,
+        file: {
+          id: 'file-new',
+          name: body.name ?? 'unnamed.txt',
+          size: typeof body.content === 'string' ? body.content.length : 0,
+        },
+      }),
+    );
+    return;
+  }
 
-    // --- 404 ---
-    return new Response('Not found', { status: 404 });
-  },
+  // ===================================================================
+  // SPA with client-side routing scenario
+  // ===================================================================
 
-  // WebSocket handler for the /ws endpoint
-  websocket: {
-    open(ws) {
-      // Send a welcome message
-      ws.send(JSON.stringify({ type: 'connected', message: 'Welcome to real-time updates' }));
+  // Page — serves SPA HTML for any /spa-app/ path (simulates catch-all route)
+  if (path.startsWith('/spa-app')) {
+    res.writeHead(200, { 'Content-Type': 'text/html' });
+    res.end(SPA_HTML);
+    return;
+  }
 
-      // Send periodic updates (2 messages, then stop)
-      let count = 0;
-      const interval = setInterval(() => {
-        count++;
-        ws.send(JSON.stringify({ type: 'update', message: `Update #${count}`, timestamp: Date.now() }));
-        if (count >= 2) clearInterval(interval);
-      }, 500);
-    },
-    message(_ws, _message) {
-      // Acknowledge subscriptions but don't need to do anything special
-    },
-    close() {
-      // No cleanup needed
-    },
-  },
+  // --- 404 ---
+  res.writeHead(404);
+  res.end('Not found');
+  return;
+};
+
+const server = http.createServer((req, res) => {
+  handler(req, res).catch((err: unknown) => {
+    console.error('[analyze-site-test-server] Handler error:', err);
+    if (!res.headersSent) {
+      res.writeHead(500);
+      res.end('Internal Server Error');
+    }
+  });
 });
 
-console.log(`[analyze-site-test-server] Listening on http://localhost:${String(server.port)}`);
+// WebSocket server for the /ws endpoint
+const wss = new WebSocketServer({ noServer: true });
+
+wss.on('connection', ws => {
+  // Send a welcome message
+  ws.send(JSON.stringify({ type: 'connected', message: 'Welcome to real-time updates' }));
+
+  // Send periodic updates (2 messages, then stop)
+  let count = 0;
+  const interval = setInterval(() => {
+    count++;
+    ws.send(JSON.stringify({ type: 'update', message: `Update #${String(count)}`, timestamp: Date.now() }));
+    if (count >= 2) clearInterval(interval);
+  }, 500);
+
+  ws.on('message', () => {
+    // Acknowledge subscriptions but don't need to do anything special
+  });
+});
+
+server.on('upgrade', (req, socket, head) => {
+  const url = new URL(req.url ?? '/', 'http://localhost');
+  if (url.pathname === '/ws') {
+    wss.handleUpgrade(req, socket, head, ws => {
+      wss.emit('connection', ws, req);
+    });
+  } else {
+    socket.destroy();
+  }
+});
+
+let actualPort = PORT;
+server.listen(PORT, () => {
+  const addr = server.address();
+  actualPort = typeof addr === 'object' && addr !== null ? addr.port : PORT;
+  console.log(`[analyze-site-test-server] Listening on http://localhost:${String(actualPort)}`);
+});
 
 // Ensure the process exits on SIGTERM/SIGINT
 const shutdown = () => {
-  server.stop();
+  server.close();
+  wss.close();
   process.exit(0);
 };
 process.on('SIGTERM', shutdown);
