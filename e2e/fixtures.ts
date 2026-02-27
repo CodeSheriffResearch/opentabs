@@ -497,6 +497,12 @@ const startMcpServer = (configDir: string, hot: boolean = true, explicitPort?: n
         OPENTABS_SKIP_NPM_DISCOVERY: '1',
         OPENTABS_SKIP_CONFIRMATION: '1',
         OPENTABS_SKIP_SANITIZATION: '1',
+        // Use a short mtime polling interval so the fallback catches missed
+        // fs.watch events quickly. Under high parallelism (16+ Playwright
+        // workers), Linux's inotify instance limit (max_user_instances=128)
+        // can be exhausted, causing fs.watch() to fail with EMFILE. The
+        // mtime poll is the only detection mechanism in that scenario.
+        OPENTABS_MTIME_POLL_MS: '500',
       },
       stdio: ['ignore', 'pipe', 'pipe'],
     });
