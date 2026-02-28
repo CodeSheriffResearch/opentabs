@@ -455,7 +455,12 @@ interface McpServer {
  *
  * In non-hot mode, spawns dist/index.js --dev directly.
  */
-const startMcpServer = (configDir: string, hot: boolean = true, explicitPort?: number): Promise<McpServer> =>
+const startMcpServer = (
+  configDir: string,
+  hot: boolean = true,
+  explicitPort?: number,
+  envOverrides?: Record<string, string | undefined>,
+): Promise<McpServer> =>
   new Promise<McpServer>((resolve, reject) => {
     // Fail fast if configDir resolves to the real ~/.opentabs directory.
     if (path.resolve(configDir) === path.resolve(path.join(os.homedir(), '.opentabs'))) {
@@ -503,6 +508,7 @@ const startMcpServer = (configDir: string, hot: boolean = true, explicitPort?: n
         // can be exhausted, causing fs.watch() to fail with EMFILE. The
         // mtime poll is the only detection mechanism in that scenario.
         OPENTABS_MTIME_POLL_MS: '500',
+        ...envOverrides,
       },
       stdio: ['ignore', 'pipe', 'pipe'],
     });
