@@ -338,11 +338,11 @@ const detectPrimaryApiBaseUrl = (endpoints: ApiEndpoint[]): string | undefined =
     try {
       const parsed = new URL(endpoint.url);
       const pathSegments = parsed.pathname.split('/').filter(Boolean);
-      // Register origin alone and each incremental path prefix
-      prefixCounts.set(parsed.origin, (prefixCounts.get(parsed.origin) ?? 0) + endpoint.callCount);
+      // Register origin alone and each incremental path prefix (count each endpoint once)
+      prefixCounts.set(parsed.origin, (prefixCounts.get(parsed.origin) ?? 0) + 1);
       for (let depth = 1; depth <= Math.min(pathSegments.length, 3); depth++) {
         const prefix = `${parsed.origin}/${pathSegments.slice(0, depth).join('/')}`;
-        prefixCounts.set(prefix, (prefixCounts.get(prefix) ?? 0) + endpoint.callCount);
+        prefixCounts.set(prefix, (prefixCounts.get(prefix) ?? 0) + 1);
       }
     } catch {
       // Ignore parse errors
@@ -352,8 +352,7 @@ const detectPrimaryApiBaseUrl = (endpoints: ApiEndpoint[]): string | undefined =
   if (prefixCounts.size === 0) return undefined;
 
   // Find the deepest prefix that is shared by at least 2 endpoints (or all if only 1)
-  const totalEndpoints = endpoints.reduce((sum, e) => sum + e.callCount, 0);
-  const minCount = totalEndpoints > 1 ? 2 : 1;
+  const minCount = endpoints.length > 1 ? 2 : 1;
 
   let bestPrefix: string | undefined;
   let bestDepth = -1;
@@ -447,7 +446,14 @@ const detectApis = (requests: NetworkRequest[], wsFrames?: WsFrame[]): ApiAnalys
       for (const frame of wsFrames) {
         if (samples.length >= MAX_WS_FRAME_SAMPLES) break;
         if (frame.direction !== 'received' || frame.opcode !== 1) continue;
-        if (frame.url !== ep.url) continue;
+        let normalizedFrameUrl: string;
+        try {
+          const parsedFrame = new URL(frame.url);
+          normalizedFrameUrl = `${parsedFrame.origin}${parsedFrame.pathname}`;
+        } catch {
+          normalizedFrameUrl = frame.url;
+        }
+        if (normalizedFrameUrl !== ep.url) continue;
         const payload =
           frame.data.length > MAX_WS_FRAME_SAMPLE_LENGTH
             ? frame.data.slice(0, MAX_WS_FRAME_SAMPLE_LENGTH) + '...'

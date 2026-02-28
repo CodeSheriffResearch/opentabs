@@ -619,6 +619,30 @@ describe('detectApis', () => {
       const result = detectApis([]);
       expect(result.primaryApiBaseUrl).toBeUndefined();
     });
+
+    test('does not let a single heavily-called endpoint satisfy the multi-endpoint threshold', () => {
+      // One endpoint called 10 times + one unrelated endpoint on the same origin.
+      // Before the fix, callCount=10 inflated prefix counts so '/api/v1/users' (only
+      // contributed to by the first endpoint) appeared to satisfy minCount=2.
+      // After the fix, prefix counts are based on distinct endpoint count, so the
+      // only prefix with count >= 2 is the shared origin.
+      const heavilyCalledReqs = Array.from({ length: 10 }, () =>
+        req({ url: 'https://api.example.com/api/v1/users', method: 'GET', mimeType: 'application/json', status: 200 }),
+      );
+      const result = detectApis([
+        ...heavilyCalledReqs,
+        req({ url: 'https://api.example.com/health', method: 'GET', mimeType: 'application/json', status: 200 }),
+      ]);
+      expect(result.primaryApiBaseUrl).toBe('https://api.example.com');
+    });
+
+    test('correctly identifies shared prefix from two distinct endpoints', () => {
+      const result = detectApis([
+        req({ url: 'https://api.example.com/api/v1/users', method: 'GET', mimeType: 'application/json', status: 200 }),
+        req({ url: 'https://api.example.com/api/v1/items', method: 'GET', mimeType: 'application/json', status: 200 }),
+      ]);
+      expect(result.primaryApiBaseUrl).toBe('https://api.example.com/api/v1');
+    });
   });
 
   // -----------------------------------------------------------------------
@@ -906,6 +930,20 @@ describe('detectApis', () => {
       const otherEp = findByUrl(result.endpoints, 'other.example.com');
       expect(realtimeEp.wsFrameSamples).toEqual(['realtime-msg']);
       expect(otherEp.wsFrameSamples).toEqual(['other-msg']);
+    });
+
+    test('matches frames to endpoints when frame URL has query params', () => {
+      const wsRequestWithQuery = req({
+        url: 'wss://example.com/ws?token=abc',
+        method: 'GET',
+        status: 101,
+      });
+      const frames: WsFrame[] = [frame({ url: 'wss://example.com/ws?token=abc', data: 'ws-msg' })];
+      const result = detectApis([wsRequestWithQuery], frames);
+      const wsEp = findByProtocol(result.endpoints, 'websocket');
+      // Endpoint URL is normalized (no query params), frame URL has query params — must still match
+      expect(wsEp.url).toBe('wss://example.com/ws');
+      expect(wsEp.wsFrameSamples).toEqual(['ws-msg']);
     });
 
     test('non-WebSocket endpoints have undefined wsFrameSamples', () => {

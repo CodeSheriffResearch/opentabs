@@ -49,16 +49,20 @@ describe('sanitizeErrorMessage', () => {
   });
 
   describe('URL sanitization', () => {
-    test('strips URL content — path regex matches the path portion first', () => {
-      const result = sanitizeErrorMessage('Request to https://api.example.com/v1/users failed');
-      expect(result).not.toContain('api.example.com');
-      expect(result).not.toContain('/v1/users');
+    test('replaces full https URL with [URL]', () => {
+      expect(sanitizeErrorMessage('Request to https://api.example.com/v1/users failed')).toBe(
+        'Request to [URL] failed',
+      );
     });
 
-    test('strips http URLs — path regex matches the path portion first', () => {
-      const result = sanitizeErrorMessage('Fetched http://internal-service.corp/data');
-      expect(result).not.toContain('internal-service');
-      expect(result).not.toContain('/data');
+    test('replaces full http URL with [URL]', () => {
+      expect(sanitizeErrorMessage('Fetched http://internal-service.corp/data')).toBe('Fetched [URL]');
+    });
+
+    test('replaces URL so protocol prefix does not leak as https:[PATH]', () => {
+      expect(sanitizeErrorMessage('Failed to connect to https://internal.corp/api/v2')).toBe(
+        'Failed to connect to [URL]',
+      );
     });
   });
 

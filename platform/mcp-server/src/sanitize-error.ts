@@ -8,13 +8,16 @@ const MAX_LENGTH = 500;
 
 const sanitizeErrorMessage = (message: string): string => {
   let sanitized = message
+    // Full URLs with protocol — must run before path regexes: the Windows path
+    // regex matches "[a-z]:/" which would match the "s:/" in "https://" or the
+    // "p:/" in "http://", and the Unix path regex would match the path portion,
+    // both leaving a partial URL like "htt[PATH]" instead of "[URL]"
+    .replace(/https?:\/\/[^\s,;)}\]]+/gi, '[URL]')
     // Windows absolute paths: C:\path\to\file or C:/path/to/file
     .replace(/[a-z]:[/\\][^\s,;)}\]]+/gi, '[PATH]')
     // Unix absolute paths: /path/to/file — first segment must start with a letter to avoid
     // false positives on numeric segments like "1/2" (fractions/ratios)
     .replace(/\/[a-z][a-z0-9._-]*(?:\/[a-z0-9._-]+)*/gi, '[PATH]')
-    // Full URLs with protocol
-    .replace(/https?:\/\/[^\s,;)}\]]+/gi, '[URL]')
     // localhost with optional port
     .replace(/localhost(?::\d+)?/gi, '[LOCALHOST]')
     // IPv4 addresses
