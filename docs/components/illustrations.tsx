@@ -2687,7 +2687,7 @@ export const InstallPaths = () => (
         fontFamily="var(--font-mono), monospace"
         fill="var(--color-primary)"
         textAnchor="middle">
-        + Node.js 20+
+        + Node.js 22+
       </text>
       <rect x="266" y="94" width="176" height="22" fill="var(--color-foreground)" />
       <text
