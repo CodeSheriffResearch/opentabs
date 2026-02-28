@@ -214,6 +214,61 @@ describe('clearConfirmationBadge', () => {
 
     expect(mockNotificationsClear).not.toHaveBeenCalled();
   });
+
+  test('calling twice with the same id decrements count only once', () => {
+    notifyConfirmationRequest({ id: 'req-1', timeoutMs: 0 });
+    notifyConfirmationRequest({ id: 'req-2', timeoutMs: 0 });
+
+    clearConfirmationBadge('req-1');
+    mockSetBadgeText.mockClear();
+
+    // Second call with the same id — must be a no-op
+    clearConfirmationBadge('req-1');
+
+    expect(mockSetBadgeText).not.toHaveBeenCalled();
+  });
+
+  test('when background timeout and side panel both clear same id, count decrements by exactly 1', () => {
+    notifyConfirmationRequest({ id: 'req-1', timeoutMs: 5000 });
+    notifyConfirmationRequest({ id: 'req-2', timeoutMs: 5000 });
+
+    // Background timeout fires for req-1
+    vi.advanceTimersByTime(5000 + 2000);
+    mockSetBadgeText.mockClear();
+
+    // Side panel also sends clearConfirmationBadge for the same id
+    clearConfirmationBadge('req-1');
+
+    // Must be a no-op — count stays at 1 (req-2 still pending)
+    expect(mockSetBadgeText).not.toHaveBeenCalled();
+  });
+
+  test('when 3 confirmations pending and 1 cleared via both paths, badge shows 2 not 1', () => {
+    notifyConfirmationRequest({ id: 'req-1', timeoutMs: 0 });
+    notifyConfirmationRequest({ id: 'req-2', timeoutMs: 0 });
+    notifyConfirmationRequest({ id: 'req-3', timeoutMs: 0 });
+    mockSetBadgeText.mockClear();
+
+    clearConfirmationBadge('req-1'); // first clear (e.g. background timeout)
+    clearConfirmationBadge('req-1'); // second clear (e.g. sp:confirmationTimeout) — no-op
+
+    // Badge must show 2, not 1
+    expect(mockSetBadgeText).toHaveBeenLastCalledWith({ text: '2' });
+  });
+
+  test('re-used id after clearAllConfirmationBadges can be cleared again', () => {
+    notifyConfirmationRequest({ id: 'req-1', timeoutMs: 0 });
+    clearAllConfirmationBadges();
+
+    // New confirmation with the same id
+    notifyConfirmationRequest({ id: 'req-1', timeoutMs: 0 });
+    mockSetBadgeText.mockClear();
+
+    clearConfirmationBadge('req-1');
+
+    // Must decrement — cleared set was reset by clearAllConfirmationBadges
+    expect(mockSetBadgeText).toHaveBeenCalledWith({ text: '' });
+  });
 });
 
 // ---------------------------------------------------------------------------

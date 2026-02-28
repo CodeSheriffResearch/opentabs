@@ -10,6 +10,14 @@ let pendingConfirmationCount = 0;
 const confirmationTimeouts = new Map<string, ReturnType<typeof setTimeout>>();
 
 /**
+ * Set of confirmation ids that have already been cleared. Used to make
+ * clearConfirmationBadge idempotent per id — when both the background timeout
+ * and the side panel's sp:confirmationTimeout fire for the same id, the count
+ * decrements only once.
+ */
+const clearedConfirmationIds = new Set<string>();
+
+/**
  * Extra buffer (ms) added on top of the server-provided timeoutMs so the
  * background timeout fires after the server has already expired the
  * confirmation. The side panel adds +1000 ms; we add +2000 ms to ensure
@@ -51,6 +59,9 @@ const notifyConfirmationRequest = (params: Record<string, unknown>): void => {
   if (existingTimeoutId !== undefined) {
     clearTimeout(existingTimeoutId);
   } else {
+    // New confirmation id (or a re-used id after a previous one timed out).
+    // Remove from the cleared set so clearConfirmationBadge can decrement again.
+    clearedConfirmationIds.delete(id);
     pendingConfirmationCount++;
     updateConfirmationBadge();
   }
@@ -81,9 +92,18 @@ const notifyConfirmationRequest = (params: Record<string, unknown>): void => {
 /**
  * Decrement pending confirmation count, update badge, and clear the Chrome
  * notification for the resolved confirmation.
+ *
+ * When an id is provided, this function is idempotent — calling it twice with
+ * the same id decrements the count only once. This prevents double-decrements
+ * when both the background timeout and the side panel's sp:confirmationTimeout
+ * fire for the same confirmation id.
  */
 const clearConfirmationBadge = (id?: string): void => {
   if (id !== undefined) {
+    if (clearedConfirmationIds.has(id)) {
+      return;
+    }
+    clearedConfirmationIds.add(id);
     chrome.notifications.clear(`opentabs-confirm-${id}`).catch(() => {});
   }
   pendingConfirmationCount = Math.max(0, pendingConfirmationCount - 1);
@@ -111,6 +131,7 @@ const clearAllConfirmationBadges = (): void => {
     chrome.notifications.clear(`opentabs-confirm-${id}`).catch(() => {});
   }
   confirmationTimeouts.clear();
+  clearedConfirmationIds.clear();
   pendingConfirmationCount = 0;
   updateConfirmationBadge();
 };
