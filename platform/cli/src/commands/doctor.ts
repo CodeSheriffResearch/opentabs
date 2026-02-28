@@ -6,6 +6,7 @@ import {
   getConfigPath,
   getExtensionDir,
   getLocalPluginsFromConfig,
+  getPidFilePath,
   readAuthSecret,
   readConfig,
   resolvePluginPath,
@@ -15,7 +16,7 @@ import { ADAPTER_FILENAME, TOOLS_FILENAME } from '@opentabs-dev/shared';
 import pc from 'picocolors';
 import { spawnSync } from 'node:child_process';
 import { existsSync } from 'node:fs';
-import { access, readFile } from 'node:fs/promises';
+import { access, readFile, unlink } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -458,7 +459,25 @@ const handleDoctor = async (options: DoctorOptions): Promise<void> => {
 
   // 5. MCP server health
   const { result: serverResult, data: healthData } = await checkServerHealth(port, secret);
-  results.push(serverResult);
+  let augmentedServerResult = serverResult;
+  if (serverResult.ok) {
+    const pidPath = getPidFilePath();
+    try {
+      const pid = parseInt(await readFile(pidPath, 'utf-8'), 10);
+      if (!isNaN(pid)) {
+        try {
+          process.kill(pid, 0);
+          augmentedServerResult = { ...serverResult, detail: `${serverResult.detail} (background, PID ${pid})` };
+        } catch {
+          // Stale PID file — clean up silently
+          await unlink(pidPath).catch(() => {});
+        }
+      }
+    } catch {
+      // No PID file — foreground mode, skip
+    }
+  }
+  results.push(augmentedServerResult);
 
   // 6. Extension connected
   results.push(checkExtensionConnected(healthData));

@@ -2,10 +2,11 @@
  * `opentabs status` command — shows server status and connected plugins.
  */
 
-import { isConnectionRefused, readAuthSecret } from '../config.js';
+import { getPidFilePath, isConnectionRefused, readAuthSecret } from '../config.js';
 import { parsePort, resolvePort } from '../parse-port.js';
 import { toErrorMessage } from '@opentabs-dev/shared';
 import pc from 'picocolors';
+import { readFile, unlink } from 'node:fs/promises';
 import type { Command } from 'commander';
 
 interface StatusOptions {
@@ -126,6 +127,21 @@ const handleStatus = async (options: StatusOptions): Promise<void> => {
         console.log(`${pad('SDK')}${serverSdkVersion}`);
       }
       console.log(`${pad('Port')}${String(port)}`);
+      const pidPath = getPidFilePath();
+      try {
+        const pid = parseInt(await readFile(pidPath, 'utf-8'), 10);
+        if (!isNaN(pid)) {
+          try {
+            process.kill(pid, 0);
+            console.log(`${pad('PID')}${pid} ${pc.dim('(background)')}`);
+          } catch {
+            // Stale PID file — clean up silently
+            await unlink(pidPath).catch(() => {});
+          }
+        }
+      } catch {
+        // No PID file — foreground mode, skip
+      }
       console.log(`${pad('Uptime')}${formatUptime(uptime)}`);
       console.log(`${pad('Extension')}${data.extensionConnected ? pc.green('connected') : pc.yellow('not connected')}`);
       console.log(`${pad('MCP clients')}${mcpClients > 0 ? pc.green(String(mcpClients)) : pc.dim('0')}`);

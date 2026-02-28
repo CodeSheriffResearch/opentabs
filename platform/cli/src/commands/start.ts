@@ -11,13 +11,13 @@
  */
 
 import { installExtension } from './setup.js';
-import { ensureAuthSecret, getConfigDir, getLogFilePath } from '../config.js';
+import { ensureAuthSecret, getConfigDir, getLogFilePath, getPidFilePath } from '../config.js';
 import { parsePort, resolvePort } from '../parse-port.js';
 import { isWindows, platformExec, toErrorMessage } from '@opentabs-dev/shared';
 import pc from 'picocolors';
 import { spawn } from 'node:child_process';
 import { mkdirSync, createWriteStream } from 'node:fs';
-import { access } from 'node:fs/promises';
+import { access, writeFile } from 'node:fs/promises';
 import net from 'node:net';
 import { resolve, dirname } from 'node:path';
 import { Readable } from 'node:stream';
@@ -66,6 +66,7 @@ const spawnStreaming = (
 interface StartOptions {
   port?: number;
   showConfig?: boolean;
+  background?: boolean;
 }
 
 const resolveServerEntry = (): string => {
@@ -256,10 +257,6 @@ const handleStart = async (options: StartOptions): Promise<void> => {
   env.PORT = String(port);
 
   const logFilePath = getLogFilePath();
-  const logStream = createWriteStream(logFilePath, { flags: 'a' });
-  logStream.on('error', (err: Error) => {
-    console.warn(pc.yellow(`Warning: Failed to write to log file: ${toErrorMessage(err)}`));
-  });
 
   console.log(`Starting OpenTabs MCP server on port ${pc.bold(String(port))}...`);
   console.log('');
@@ -283,8 +280,36 @@ const handleStart = async (options: StartOptions): Promise<void> => {
     console.log('');
   }
 
+  if (options.background) {
+    const logStream = createWriteStream(logFilePath, { flags: 'a' });
+    const child = spawn(platformExec('node'), [serverEntry], {
+      env: env as NodeJS.ProcessEnv,
+      stdio: ['ignore', logStream, logStream],
+      detached: true,
+    });
+    child.unref();
+
+    const pid = child.pid;
+    if (pid === undefined) {
+      console.error(pc.red('Error: Failed to start background server process.'));
+      process.exit(1);
+    }
+
+    await writeFile(getPidFilePath(), String(pid));
+
+    console.log(`Server started in background (PID: ${String(pid)})`);
+    console.log(pc.dim(`Logs: ${logFilePath}`));
+    console.log(pc.dim(`Stop: opentabs stop`));
+    return;
+  }
+
   console.log(pc.dim('  Press Ctrl+C to stop'));
   console.log('');
+
+  const logStream = createWriteStream(logFilePath, { flags: 'a' });
+  logStream.on('error', (err: Error) => {
+    console.warn(pc.yellow(`Warning: Failed to write to log file: ${toErrorMessage(err)}`));
+  });
 
   const proc = spawnStreaming(platformExec('node'), [serverEntry], {
     env: env,
@@ -315,12 +340,14 @@ const registerStartCommand = (program: Command): void => {
     .command('start')
     .description('Start the MCP server')
     .option('--port <number>', 'Server port (default: 9515)', parsePort)
+    .option('--background', 'Start the server in the background')
     .option('--show-config', 'Print full MCP client configuration even on subsequent runs')
     .addHelpText(
       'after',
       `
 Examples:
   $ opentabs start
+  $ opentabs start --background
   $ opentabs start --port 3000
   $ opentabs start --show-config`,
     )
