@@ -89,7 +89,7 @@ const requestToHarEntry = (req: CapturedRequest) => {
       httpVersion: 'HTTP/1.1',
       headers: headersToHar(req.requestHeaders),
       queryString: parseQueryString(req.url),
-      bodySize: req.requestBody ? req.requestBody.length : 0,
+      bodySize: req.requestBody ? Buffer.byteLength(req.requestBody, 'utf-8') : 0,
       headersSize: -1,
       cookies: [],
       ...(req.requestBody
@@ -107,11 +107,11 @@ const requestToHarEntry = (req: CapturedRequest) => {
       httpVersion: 'HTTP/1.1',
       headers: headersToHar(req.responseHeaders),
       content: {
-        size: req.responseBody ? req.responseBody.length : 0,
+        size: req.responseBody ? Buffer.byteLength(req.responseBody, 'utf-8') : 0,
         mimeType: responseContentType || 'application/octet-stream',
         ...(req.responseBody ? { text: req.responseBody } : {}),
       },
-      bodySize: req.responseBody ? req.responseBody.length : -1,
+      bodySize: req.responseBody ? Buffer.byteLength(req.responseBody, 'utf-8') : -1,
       headersSize: -1,
       cookies: [],
       redirectURL: '',
@@ -141,7 +141,7 @@ const wsFrameToHarEntry = (frame: CapturedWsFrame) => ({
       { name: 'X-WebSocket-Opcode', value: String(frame.opcode) },
     ],
     queryString: parseQueryString(frame.url),
-    bodySize: frame.data.length,
+    bodySize: Buffer.byteLength(frame.data, 'utf-8'),
     headersSize: -1,
     cookies: [],
     postData: {
