@@ -95,7 +95,7 @@ const checkServerHealth = async (
     const portSuffix = port !== 9515 ? ` --port ${port}` : '';
     const hint = `Start it with: opentabs start${portSuffix}`;
     return {
-      result: fail('MCP server', 'not reachable', hint),
+      result: warn('MCP server', 'not reachable', hint),
       data: null,
     };
   }
