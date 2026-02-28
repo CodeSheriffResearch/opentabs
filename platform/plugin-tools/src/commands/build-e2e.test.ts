@@ -1,6 +1,6 @@
-import { afterEach, beforeEach, describe, expect, test } from 'vitest';
+import { afterEach, beforeAll, beforeEach, describe, expect, test } from 'vitest';
 import { spawnSync } from 'node:child_process';
-import { cpSync, mkdirSync, mkdtempSync, rmSync, symlinkSync } from 'node:fs';
+import { cpSync, existsSync, mkdirSync, mkdtempSync, rmSync, symlinkSync } from 'node:fs';
 import { access, readFile, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
@@ -50,6 +50,19 @@ const fileExists = (path: string): Promise<boolean> =>
   );
 
 describe('opentabs-plugin build E2E', () => {
+  // Ensure the e2e-test plugin has its dependencies installed.
+  // The test symlinks node_modules from the source dir into temp copies,
+  // so the source must have node_modules populated. In CI or fresh clones
+  // (e.g. the consolidator) the plugin deps may not yet be installed.
+  beforeAll(() => {
+    if (!existsSync(join(E2E_PLUGIN_DIR, 'node_modules', '@opentabs-dev', 'plugin-sdk'))) {
+      const result = spawnSync('npm', ['install'], { cwd: E2E_PLUGIN_DIR, stdio: 'pipe' });
+      if (result.status !== 0) {
+        throw new Error(`npm install in e2e-test plugin failed: ${result.stderr.toString()}`);
+      }
+    }
+  }, 60_000);
+
   let tmpDir: string;
   let configDir: string;
 
