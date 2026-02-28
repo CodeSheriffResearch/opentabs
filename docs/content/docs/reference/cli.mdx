@@ -390,10 +390,10 @@ opentabs plugin create [name] [options]
 
 When run without arguments, enters interactive mode and prompts for the plugin name, domain, display name, and description. Generates a standalone npm package with TypeScript config, a scaffolded plugin class, and an example tool. The plugin is auto-registered in `~/.opentabs/config.json` on first build.
 
-The standalone `create-opentabs-plugin` package provides the same functionality:
+The standalone `@opentabs-dev/create-plugin` package provides the same functionality:
 
 ```bash
-npx create-opentabs-plugin my-plugin --domain .example.com --display "My App"
+npx @opentabs-dev/create-plugin my-plugin --domain .example.com --display "My App"
 ```
 
 ### opentabs plugin list

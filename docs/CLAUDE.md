@@ -115,7 +115,7 @@ The docs site is a **platform contributor** tool — built and developed using N
 The docs _content_, however, covers three audience tiers with different runtime and tooling expectations:
 
 - **Normal users** use **Node.js** and **npm**. Commands in user-facing docs (Quick Start, Installation) should use `npx` / `npm`.
-- **Plugin developers** use **Node.js** and **npm**. Plugin docs should show `npm run build`, `npx create-opentabs-plugin`, etc.
+- **Plugin developers** use **Node.js** and **npm**. Plugin docs should show `npm run build`, `npx @opentabs-dev/create-plugin`, etc.
 - **Platform contributors** use **Node.js** and **npm**. Contributing docs reference `npm run` commands.
 
 ## Documentation Tone
