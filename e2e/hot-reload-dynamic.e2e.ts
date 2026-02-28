@@ -822,6 +822,14 @@ test.describe.serial('Hot reload — in-flight tool dispatch', () => {
       // Hot reload should have completed
       await waitForLog(mcpServer, 'Hot reload complete', 20_000);
 
+      // Wait for the extension to reconnect to the new worker. The proxy
+      // kills the old worker's WebSocket connections during restart, so the
+      // extension must detect the close and reconnect. Under high parallelism
+      // (20+ Playwright workers), CPU contention can delay the reconnection
+      // beyond the default 1s backoff, causing the post-reload tool call to
+      // fail with "Extension not connected" if we don't wait.
+      await waitForExtensionConnected(mcpServer, 30_000);
+
       // Reset slow mode and verify the session still works after reload
       await testServer.setSlow(0);
       const afterResult = await mcpClient.callTool('e2e-test_echo', { message: 'after-reload' });

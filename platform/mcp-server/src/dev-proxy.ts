@@ -158,15 +158,8 @@ const httpServer = createServer((req: IncomingMessage, res: ServerResponse) => {
   );
 });
 
-/** Forward a WebSocket upgrade to the worker. */
-httpServer.on('upgrade', (req: IncomingMessage, socket: Duplex, head: Buffer) => {
-  if (workerPort === null) {
-    socket.destroy();
-    return;
-  }
-
-  const port = workerPort;
-
+/** Forward a WebSocket upgrade to the worker, buffering during restart. */
+const forwardUpgrade = (req: IncomingMessage, socket: Duplex, head: Buffer, port: number): void => {
   // Extract Sec-WebSocket-Protocol from the client's request and pass it as
   // the protocols argument to the upstream WebSocket constructor. The ws
   // library validates that the server only echoes back protocols that were
@@ -216,6 +209,21 @@ httpServer.on('upgrade', (req: IncomingMessage, socket: Duplex, head: Buffer) =>
     console.error(`[proxy] WebSocket upstream error: ${err.message}`);
     socket.destroy();
   });
+};
+
+httpServer.on('upgrade', (req: IncomingMessage, socket: Duplex, head: Buffer) => {
+  whenReady(
+    () => {
+      if (workerPort !== null) {
+        forwardUpgrade(req, socket, head, workerPort);
+      } else {
+        socket.destroy();
+      }
+    },
+    () => {
+      socket.destroy();
+    },
+  );
 });
 
 httpServer.listen(PROXY_PORT, '127.0.0.1', () => {
