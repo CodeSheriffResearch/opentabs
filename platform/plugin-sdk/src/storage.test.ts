@@ -259,4 +259,20 @@ describe('getCookie', () => {
     expect(getCookie('token')).toBe('current');
     expect(getCookie('token_v2')).toBe('old');
   });
+
+  test('handles cookies with = in the value', () => {
+    Object.defineProperty(win.document, 'cookie', {
+      get: () => 'token=abc=def=ghi; other=val',
+      configurable: true,
+    });
+    expect(getCookie('token')).toBe('abc=def=ghi');
+  });
+
+  test('handles cookies with empty values', () => {
+    Object.defineProperty(win.document, 'cookie', {
+      get: () => 'empty=; other=val',
+      configurable: true,
+    });
+    expect(getCookie('empty')).toBe('');
+  });
 });

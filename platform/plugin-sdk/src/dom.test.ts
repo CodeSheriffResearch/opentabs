@@ -37,6 +37,17 @@ describe('waitForSelector', () => {
     expect(el.id).toBe('delayed');
   });
 
+  test('resolves when class is added to an existing element via attribute change', async () => {
+    const div = document.createElement('div');
+    document.body.appendChild(div);
+    const promise = waitForSelector('.my-class');
+    queueMicrotask(() => {
+      div.classList.add('my-class');
+    });
+    const el = await promise;
+    expect(el.classList.contains('my-class')).toBe(true);
+  });
+
   test('rejects on timeout', async () => {
     await expect(waitForSelector('#nonexistent', { timeout: 100 })).rejects.toThrow(
       'waitForSelector: timed out after 100ms waiting for "#nonexistent"',
