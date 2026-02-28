@@ -1007,7 +1007,7 @@ const runBuild = async (projectDir: string): Promise<void> => {
     const pathSep = process.platform === 'win32' ? ';' : ':';
     const pathKey = process.platform === 'win32' ? 'Path' : 'PATH';
     const envWithBin = { ...process.env, [pathKey]: `${binDir}${pathSep}${process.env[pathKey] ?? ''}` };
-    const tscResult = spawnSync('tsc', [], { cwd: projectDir, env: envWithBin });
+    const tscResult = spawnSync('tsc', [], { cwd: projectDir, env: envWithBin, shell: true });
     if (tscResult.error) {
       if ((tscResult.error as NodeJS.ErrnoException).code === 'ENOENT') {
         throw new Error('tsc not found — run npm install to install TypeScript');
@@ -1030,8 +1030,9 @@ const runBuild = async (projectDir: string): Promise<void> => {
   }
 
   // Step 2: Dynamically import the plugin module (cache-bust for watch mode rebuilds)
-  // Rotate between two keys so the module cache stays bounded to 2 entries.
-  pluginCacheKey = (pluginCacheKey + 1) % 2;
+  // Monotonically increasing key ensures each rebuild gets a unique URL, preventing Node.js
+  // from returning stale cached modules on the 3rd+ rebuild.
+  pluginCacheKey++;
   console.log(pc.dim('Loading plugin module...'));
   const mod = (await import(`${entryPoint}?t=${String(pluginCacheKey)}`)) as { default?: OpenTabsPlugin };
   const defaultExport = mod.default;
