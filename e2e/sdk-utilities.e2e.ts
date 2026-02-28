@@ -270,4 +270,83 @@ test.describe('SDK utilities — full stack', () => {
 
     await page.close();
   });
+
+  test('setSessionStorage: writes a value and reads it back', async ({
+    mcpServer,
+    testServer,
+    extensionContext,
+    mcpClient,
+  }) => {
+    const page = await setupSdkTest(mcpServer, testServer, extensionContext, mcpClient);
+
+    const output = await callToolExpectSuccess(mcpClient, mcpServer, 'e2e-test_sdk_set_session_storage', {
+      key: 'test-key',
+      value: 'test-value',
+    });
+
+    expect(output.ok).toBe(true);
+    expect(output.readBack).toBe('test-value');
+
+    // Verify the value is in sessionStorage from the page context
+    const stored = await page.evaluate(() => sessionStorage.getItem('test-key'));
+    expect(stored).toBe('test-value');
+
+    await page.close();
+  });
+
+  test('putJSON: sends a PUT request and returns ok and method', async ({
+    mcpServer,
+    testServer,
+    extensionContext,
+    mcpClient,
+  }) => {
+    const page = await setupSdkTest(mcpServer, testServer, extensionContext, mcpClient);
+
+    const output = await callToolExpectSuccess(mcpClient, mcpServer, 'e2e-test_sdk_http_methods', {
+      method: 'put',
+      data: { foo: 'bar' },
+    });
+
+    expect(output.ok).toBe(true);
+    expect(output.method).toBe('put');
+
+    await page.close();
+  });
+
+  test('patchJSON: sends a PATCH request and returns ok and method', async ({
+    mcpServer,
+    testServer,
+    extensionContext,
+    mcpClient,
+  }) => {
+    const page = await setupSdkTest(mcpServer, testServer, extensionContext, mcpClient);
+
+    const output = await callToolExpectSuccess(mcpClient, mcpServer, 'e2e-test_sdk_http_methods', {
+      method: 'patch',
+      data: { foo: 'bar' },
+    });
+
+    expect(output.ok).toBe(true);
+    expect(output.method).toBe('patch');
+
+    await page.close();
+  });
+
+  test('deleteJSON: sends a DELETE request and returns ok and method', async ({
+    mcpServer,
+    testServer,
+    extensionContext,
+    mcpClient,
+  }) => {
+    const page = await setupSdkTest(mcpServer, testServer, extensionContext, mcpClient);
+
+    const output = await callToolExpectSuccess(mcpClient, mcpServer, 'e2e-test_sdk_http_methods', {
+      method: 'delete',
+    });
+
+    expect(output.ok).toBe(true);
+    expect(output.method).toBe('delete');
+
+    await page.close();
+  });
 });
