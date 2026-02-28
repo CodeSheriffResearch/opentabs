@@ -28,7 +28,6 @@ import {
   readPluginToolNames,
   readTestConfig,
   writeTestConfig,
-  symlinkCrossPlatform,
 } from './fixtures.js';
 import {
   waitFor,
@@ -40,6 +39,7 @@ import {
   waitForToolResult,
   callToolExpectSuccess,
   replaceIifeClosing,
+  setupAdapterSymlink,
 } from './helpers.js';
 import { test } from '@playwright/test';
 import fs from 'node:fs';
@@ -484,20 +484,24 @@ test.describe('Strict CSP — file watcher IIFE re-injection', () => {
     }
     writeTestConfig(configDir, { localPlugins: [pluginDir], tools });
 
-    const server = await startMcpServer(configDir, true);
-    const strictCspSrv = await startStrictCspServer();
-
-    const { context, cleanupDir, extensionDir } = await launchExtensionContext(server.port, server.secret);
-    const serverAdaptersParent = path.join(configDir, 'extension');
-    fs.mkdirSync(serverAdaptersParent, { recursive: true });
-    const serverAdaptersDir = path.join(serverAdaptersParent, 'adapters');
-    const extensionAdaptersDir = path.join(extensionDir, 'adapters');
-    fs.rmSync(serverAdaptersDir, { recursive: true, force: true });
-    symlinkCrossPlatform(extensionAdaptersDir, serverAdaptersDir, 'dir');
-
-    const client = createMcpClient(server.port, server.secret);
+    // Track resources as they're created so partial failures clean up
+    // everything that was started before the throw.
+    let server: McpServer | undefined;
+    let strictCspSrv: TestServer | undefined;
+    let context: BrowserContext | undefined;
+    let cleanupDir: string | undefined;
 
     try {
+      server = await startMcpServer(configDir, true);
+      strictCspSrv = await startStrictCspServer();
+
+      const ext = await launchExtensionContext(server.port, server.secret);
+      context = ext.context;
+      cleanupDir = ext.cleanupDir;
+      setupAdapterSymlink(configDir, ext.extensionDir);
+
+      const client = createMcpClient(server.port, server.secret);
+
       await client.initialize();
       await waitForExtensionConnected(server);
       await waitForLog(server, 'tab.syncAll received');
@@ -555,13 +559,13 @@ test.describe('Strict CSP — file watcher IIFE re-injection', () => {
       expect(afterResult.message).toBe('csp-after-update');
 
       await page.close();
-    } finally {
       await client.close();
-      await context.close();
-      await server.kill();
-      await strictCspSrv.kill();
+    } finally {
+      if (context) await context.close().catch(() => {});
+      if (server) await server.kill().catch(() => {});
+      if (strictCspSrv) await strictCspSrv.kill().catch(() => {});
       fs.rmSync(tmpDir, { recursive: true, force: true });
-      fs.rmSync(cleanupDir, { recursive: true, force: true });
+      if (cleanupDir) fs.rmSync(cleanupDir, { recursive: true, force: true });
       cleanupTestConfigDir(configDir);
     }
   });
