@@ -116,9 +116,13 @@ test.describe('SDK version compatibility', () => {
         await client.close();
       }
     } finally {
-      await server.kill();
+      await server.kill().catch(() => {});
       cleanupTestConfigDir(configDir);
-      fs.rmSync(tmpDir, { recursive: true, force: true });
+      try {
+        fs.rmSync(tmpDir, { recursive: true, force: true });
+      } catch {
+        // best-effort
+      }
     }
   });
 
@@ -183,9 +187,13 @@ test.describe('SDK version compatibility', () => {
         await client.close();
       }
     } finally {
-      await server.kill();
+      await server.kill().catch(() => {});
       cleanupTestConfigDir(configDir);
-      fs.rmSync(tmpDir, { recursive: true, force: true });
+      try {
+        fs.rmSync(tmpDir, { recursive: true, force: true });
+      } catch {
+        // best-effort
+      }
     }
   });
 });

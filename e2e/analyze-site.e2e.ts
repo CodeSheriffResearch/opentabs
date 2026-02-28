@@ -472,7 +472,10 @@ test.describe('plugin_analyze_site — WebSocket real-time connection', () => {
 
     // --- REST API also detected ---
     // The page also makes a REST call to /websocket-app/api/config
-    const restEndpoints = analysis.apis.endpoints.filter(e => e.protocol === 'rest');
+    // Filter to app-specific REST endpoints to exclude /api/auth.check (extension isReady polling)
+    const restEndpoints = analysis.apis.endpoints.filter(
+      e => e.protocol === 'rest' && e.url.includes('/websocket-app/'),
+    );
     expect(restEndpoints).toHaveLength(1);
     expect(restEndpoints[0]?.url).toContain('/websocket-app/api/config');
 
