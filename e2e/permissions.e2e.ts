@@ -25,7 +25,14 @@ import {
   writeTestConfig,
   symlinkCrossPlatform,
 } from './fixtures.js';
-import { waitForExtensionConnected, waitForLog, openSidePanel, setupAdapterSymlink } from './helpers.js';
+import {
+  waitForExtensionConnected,
+  waitForLog,
+  openSidePanel,
+  setupAdapterSymlink,
+  waitFor,
+  parseToolResult,
+} from './helpers.js';
 import { test as base, expect } from '@playwright/test';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -138,8 +145,27 @@ test.describe('Permission evaluation', () => {
     const tabInfo = JSON.parse(openResult.content) as { id: number };
     const tabId = tabInfo.id;
 
-    // Wait for the page to load
-    await new Promise(r => setTimeout(r, 1_000));
+    // Poll until the tab's page has finished loading (localhost is trusted so
+    // browser_execute_script auto-allows even without skipConfirmation).
+    await waitFor(
+      async () => {
+        try {
+          const scriptResult = await mcpClient.callTool('browser_execute_script', {
+            tabId,
+            code: 'return document.readyState',
+          });
+          if (scriptResult.isError) return false;
+          const data = parseToolResult(scriptResult.content);
+          const value = data.value as Record<string, unknown> | undefined;
+          return value?.value === 'complete';
+        } catch {
+          return false;
+        }
+      },
+      10_000,
+      300,
+      `tab ${tabId} readyState === complete`,
+    );
 
     // Call an interact-tier tool (browser_navigate_tab) to a non-trusted
     // domain (127.0.0.2). This should trigger the confirmation flow and
@@ -352,16 +378,36 @@ test.describe('Trusted domain auto-allow', () => {
     const openResult = await mcpClient.callTool('browser_open_tab', { url: testServer.url });
     expect(openResult.isError).toBe(false);
     const tabInfo = JSON.parse(openResult.content) as { id: number };
+    const tabId = tabInfo.id;
 
-    // Wait for the page to fully load.
-    await new Promise(r => setTimeout(r, 1_000));
+    // Poll until the tab's page has finished loading (localhost is trusted so
+    // browser_execute_script auto-allows even without skipConfirmation).
+    await waitFor(
+      async () => {
+        try {
+          const scriptResult = await mcpClient.callTool('browser_execute_script', {
+            tabId,
+            code: 'return document.readyState',
+          });
+          if (scriptResult.isError) return false;
+          const data = parseToolResult(scriptResult.content);
+          const value = data.value as Record<string, unknown> | undefined;
+          return value?.value === 'complete';
+        } catch {
+          return false;
+        }
+      },
+      10_000,
+      300,
+      `tab ${tabId} readyState === complete`,
+    );
 
     // Call an interact-tier tool (browser_navigate_tab) on the trusted
     // domain. Even without skipConfirmation, trusted domains upgrade
     // 'ask' → 'allow', so this should succeed immediately.
     const result = await mcpClient.callTool(
       'browser_navigate_tab',
-      { tabId: tabInfo.id, url: `${testServer.url}/interactive` },
+      { tabId, url: `${testServer.url}/interactive` },
       { timeout: 10_000 },
     );
 
