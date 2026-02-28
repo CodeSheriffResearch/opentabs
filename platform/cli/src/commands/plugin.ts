@@ -760,4 +760,11 @@ Examples:
     });
 };
 
-export { registerPluginCommand, resolvePackageName, buildDirectLookupCandidates, KNOWN_OFFICIAL_PLUGIN_SLUGS };
+export {
+  registerPluginCommand,
+  resolvePackageName,
+  warnIfNotPlugin,
+  removeFromLocalPlugins,
+  buildDirectLookupCandidates,
+  KNOWN_OFFICIAL_PLUGIN_SLUGS,
+};
