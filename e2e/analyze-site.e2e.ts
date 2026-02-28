@@ -146,9 +146,9 @@ test.describe('plugin_analyze_site — cookie session auth', () => {
     // --- Auth detection ---
     expect(analysis.auth.authenticated).toBe(true);
 
-    // Verify cookie-session auth method detected
+    // Verify cookie-session auth method detected (exactly one connect.sid cookie)
     const cookieMethods = analysis.auth.methods.filter(m => m.type === 'cookie-session');
-    expect(cookieMethods.length).toBeGreaterThanOrEqual(1);
+    expect(cookieMethods).toHaveLength(1);
 
     // The connect.sid cookie should be specifically identified
     const connectSidMethod = cookieMethods.find(m => m.details.includes('connect.sid'));
@@ -156,8 +156,9 @@ test.describe('plugin_analyze_site — cookie session auth', () => {
     expect(connectSidMethod?.extractionHint).toContain('connect\\.sid');
 
     // --- CSRF detection ---
+    // Two CSRF sources: meta tag and hidden form input
     const csrfMethods = analysis.auth.methods.filter(m => m.type === 'csrf-token');
-    expect(csrfMethods.length).toBeGreaterThanOrEqual(1);
+    expect(csrfMethods).toHaveLength(2);
 
     // Check for CSRF meta tag detection
     const csrfMetaMethod = csrfMethods.find(m => m.details.includes('meta'));
@@ -168,22 +169,21 @@ test.describe('plugin_analyze_site — cookie session auth', () => {
     expect(csrfInputMethod).toBeDefined();
 
     // --- API detection ---
-    // The page makes GET and POST requests to /cookie-session/api/* endpoints
-    expect(analysis.apis.endpoints.length).toBeGreaterThanOrEqual(1);
-
-    // Should detect REST endpoints
+    // The page makes GET /api/profile, GET /api/items, POST /api/items
     const restEndpoints = analysis.apis.endpoints.filter(e => e.protocol === 'rest');
-    expect(restEndpoints.length).toBeGreaterThanOrEqual(1);
+    expect(restEndpoints).toContainEqual(
+      expect.objectContaining({ url: expect.stringContaining('/cookie-session/api/') }),
+    );
 
     // --- DOM detection ---
-    // The page has a form with fields
-    expect(analysis.dom.forms.length).toBeGreaterThanOrEqual(1);
+    // The page has exactly one form with 3 fields (authenticity_token, display_name, email)
+    expect(analysis.dom.forms).toHaveLength(1);
     const form = analysis.dom.forms[0];
     expect(form).toBeDefined();
     if (form) {
-      expect(form.fields.length).toBeGreaterThanOrEqual(1);
-      // Check that the form has the expected fields
+      expect(form.fields).toHaveLength(3);
       const fieldNames = form.fields.map(f => f.name);
+      expect(fieldNames).toContain('authenticity_token');
       expect(fieldNames).toContain('display_name');
       expect(fieldNames).toContain('email');
     }
@@ -213,9 +213,9 @@ test.describe('plugin_analyze_site — JWT localStorage auth', () => {
     // --- Auth detection ---
     expect(analysis.auth.authenticated).toBe(true);
 
-    // Verify JWT in localStorage detected
+    // Verify JWT in localStorage detected (exactly one auth_token entry)
     const jwtLocalMethods = analysis.auth.methods.filter(m => m.type === 'jwt-localstorage');
-    expect(jwtLocalMethods.length).toBeGreaterThanOrEqual(1);
+    expect(jwtLocalMethods).toHaveLength(1);
 
     // The auth_token key should be mentioned in details
     const authTokenMethod = jwtLocalMethods.find(m => m.details.includes('auth_token'));
@@ -227,14 +227,14 @@ test.describe('plugin_analyze_site — JWT localStorage auth', () => {
 
     // Verify Bearer header detected in network requests
     const bearerMethods = analysis.auth.methods.filter(m => m.type === 'bearer-header');
-    expect(bearerMethods.length).toBeGreaterThanOrEqual(1);
+    expect(bearerMethods).toHaveLength(1);
 
     // --- API detection ---
-    expect(analysis.apis.endpoints.length).toBeGreaterThanOrEqual(1);
-
-    // Should detect REST endpoints
+    // The page makes GET /api/me, GET /api/tasks, POST /api/tasks — all REST
     const restEndpoints = analysis.apis.endpoints.filter(e => e.protocol === 'rest');
-    expect(restEndpoints.length).toBeGreaterThanOrEqual(1);
+    expect(restEndpoints).toContainEqual(
+      expect.objectContaining({ url: expect.stringContaining('/jwt-localstorage/api/') }),
+    );
 
     // --- Storage detection ---
     // The JWT key should be reported in localStorage keys
@@ -261,13 +261,15 @@ test.describe('plugin_analyze_site — GraphQL API', () => {
     const analysis = await analyzeSite(mcpClient, siteUrl);
 
     // --- API detection ---
-    // The page makes POST requests to /graphql — should be classified as graphql
+    // The page makes 3 POST requests to /graphql (GetUsers, GetItems, CreateItem)
+    // They are deduplicated by URL+method, so exactly 1 graphql endpoint entry
     const graphqlEndpoints = analysis.apis.endpoints.filter(e => e.protocol === 'graphql');
-    expect(graphqlEndpoints.length).toBeGreaterThanOrEqual(1);
+    expect(graphqlEndpoints).toHaveLength(1);
 
     // The endpoint URL should contain /graphql
-    const gqlEndpoint = graphqlEndpoints.find(e => e.url.includes('/graphql'));
+    const gqlEndpoint = graphqlEndpoints[0];
     expect(gqlEndpoint).toBeDefined();
+    expect(gqlEndpoint?.url).toContain('/graphql');
     expect(gqlEndpoint?.method).toBe('POST');
 
     // Should have captured the request body with a query field
@@ -275,9 +277,6 @@ test.describe('plugin_analyze_site — GraphQL API', () => {
     expect(gqlEndpoint?.requestBodySample).toContain('query');
 
     // --- Suggestions ---
-    // Should include GraphQL-specific tool suggestions
-    expect(analysis.suggestions.length).toBeGreaterThanOrEqual(1);
-
     // The generic graphql_query suggestion should be present
     expect(analysis.suggestions).toContainEqual(
       expect.objectContaining({ toolName: 'graphql_query', approach: expect.stringContaining('/graphql') }),
@@ -305,13 +304,14 @@ test.describe('plugin_analyze_site — JSON-RPC API', () => {
     const analysis = await analyzeSite(mcpClient, siteUrl);
 
     // --- API detection ---
-    // The page makes POST requests to /rpc with { jsonrpc: '2.0' } bodies
+    // The page makes 2 POST requests to /rpc (getItems, createItem), deduplicated to 1 entry
     const jsonrpcEndpoints = analysis.apis.endpoints.filter(e => e.protocol === 'jsonrpc');
-    expect(jsonrpcEndpoints.length).toBeGreaterThanOrEqual(1);
+    expect(jsonrpcEndpoints).toHaveLength(1);
 
     // The endpoint URL should contain /rpc
-    const rpcEndpoint = jsonrpcEndpoints.find(e => e.url.includes('/rpc'));
+    const rpcEndpoint = jsonrpcEndpoints[0];
     expect(rpcEndpoint).toBeDefined();
+    expect(rpcEndpoint?.url).toContain('/rpc');
     expect(rpcEndpoint?.method).toBe('POST');
 
     // Should have captured the request body with jsonrpc field
@@ -338,23 +338,22 @@ test.describe('plugin_analyze_site — API key header auth', () => {
     // --- Auth detection ---
     expect(analysis.auth.authenticated).toBe(true);
 
-    // Verify api-key-header auth method detected
+    // Verify api-key-header auth method detected (exactly one X-API-Key header)
     const apiKeyMethods = analysis.auth.methods.filter(m => m.type === 'api-key-header');
-    expect(apiKeyMethods.length).toBeGreaterThanOrEqual(1);
+    expect(apiKeyMethods).toHaveLength(1);
 
     // The X-API-Key header should be mentioned in details
-    const xApiKeyMethod = apiKeyMethods.find(m => m.details.toLowerCase().includes('x-api-key'));
+    const xApiKeyMethod = apiKeyMethods[0];
     expect(xApiKeyMethod).toBeDefined();
+    expect(xApiKeyMethod?.details.toLowerCase()).toContain('x-api-key');
 
     // extractionHint should mention the X-API-Key header
     expect(xApiKeyMethod?.extractionHint).toContain('X-API-Key');
 
     // --- API detection ---
-    expect(analysis.apis.endpoints.length).toBeGreaterThanOrEqual(1);
-
-    // Should detect REST endpoints
+    // The page makes GET /api/projects, GET /api/events, POST /api/events — all REST
     const restEndpoints = analysis.apis.endpoints.filter(e => e.protocol === 'rest');
-    expect(restEndpoints.length).toBeGreaterThanOrEqual(1);
+    expect(restEndpoints).toContainEqual(expect.objectContaining({ url: expect.stringContaining('/apikey-app/api/') }));
 
     // --- Title ---
     expect(analysis.title).toBe('API Key Auth Test App');
@@ -389,11 +388,10 @@ test.describe('plugin_analyze_site — Next.js SSR app', () => {
     // --- Auth data in globals ---
     // __NEXT_DATA__ contains session/user/accessToken which should trigger auth-global detection
     const authGlobalMethods = analysis.auth.methods.filter(m => m.type === 'auth-global');
-    expect(authGlobalMethods.length).toBeGreaterThanOrEqual(1);
+    expect(authGlobalMethods).toHaveLength(1);
 
     // The auth-global method should reference __NEXT_DATA__
-    const nextDataAuth = authGlobalMethods.find(m => m.details.includes('__NEXT_DATA__'));
-    expect(nextDataAuth).toBeDefined();
+    expect(authGlobalMethods[0]?.details).toContain('__NEXT_DATA__');
 
     // Should detect auth since __NEXT_DATA__ has auth data
     expect(analysis.auth.authenticated).toBe(true);
@@ -424,13 +422,13 @@ test.describe('plugin_analyze_site — tRPC API', () => {
     const analysis = await analyzeSite(mcpClient, siteUrl);
 
     // --- API detection ---
-    // The page makes requests to /api/trpc/<procedure> paths — should be classified as trpc
+    // The page makes 2 GET queries (user.list, item.list) and 1 POST mutation (item.create)
+    // Each unique URL+method combination is a separate tRPC endpoint entry
     const trpcEndpoints = analysis.apis.endpoints.filter(e => e.protocol === 'trpc');
-    expect(trpcEndpoints.length).toBeGreaterThanOrEqual(1);
+    expect(trpcEndpoints.length).toBeGreaterThanOrEqual(2);
 
     // Should detect tRPC endpoints with /api/trpc/ in the URL
-    const trpcEndpoint = trpcEndpoints.find(e => e.url.includes('/api/trpc/'));
-    expect(trpcEndpoint).toBeDefined();
+    expect(trpcEndpoints).toContainEqual(expect.objectContaining({ url: expect.stringContaining('/api/trpc/') }));
 
     // Should detect both GET (query) and POST (mutation) tRPC calls
     expect(trpcEndpoints).toContainEqual(expect.objectContaining({ method: 'GET' }));
@@ -439,7 +437,7 @@ test.describe('plugin_analyze_site — tRPC API', () => {
     // --- Suggestions ---
     // tRPC endpoints should generate procedure-based suggestions (trpc_<procedure>)
     const trpcSuggestions = analysis.suggestions.filter(s => s.toolName.startsWith('trpc_'));
-    expect(trpcSuggestions.length).toBeGreaterThanOrEqual(1);
+    expect(trpcSuggestions.length).toBeGreaterThanOrEqual(2);
 
     // --- Title ---
     expect(analysis.title).toBe('tRPC Test App');
@@ -459,15 +457,12 @@ test.describe('plugin_analyze_site — WebSocket real-time connection', () => {
     const analysis = await analyzeSite(mcpClient, siteUrl);
 
     // --- WebSocket detection ---
-    // The page creates a WebSocket connection (ws://...) which should be
-    // captured via the Network.webSocketCreated CDP event and classified
-    // as protocol: 'websocket' by detect-apis.
+    // The page creates exactly one WebSocket connection (ws://host/ws?token=...)
     const wsEndpoints = analysis.apis.endpoints.filter(e => e.protocol === 'websocket');
-    expect(wsEndpoints.length).toBeGreaterThanOrEqual(1);
+    expect(wsEndpoints).toHaveLength(1);
 
     // The WebSocket URL should contain /ws
-    const wsEndpoint = wsEndpoints.find(e => e.url.includes('/ws'));
-    expect(wsEndpoint).toBeDefined();
+    expect(wsEndpoints[0]?.url).toContain('/ws');
 
     // --- Suggestions ---
     // WebSocket endpoints should generate a subscribe_realtime suggestion
@@ -478,7 +473,8 @@ test.describe('plugin_analyze_site — WebSocket real-time connection', () => {
     // --- REST API also detected ---
     // The page also makes a REST call to /websocket-app/api/config
     const restEndpoints = analysis.apis.endpoints.filter(e => e.protocol === 'rest');
-    expect(restEndpoints.length).toBeGreaterThanOrEqual(1);
+    expect(restEndpoints).toHaveLength(1);
+    expect(restEndpoints[0]?.url).toContain('/websocket-app/api/config');
 
     // --- Title ---
     expect(analysis.title).toBe('WebSocket Test App');
@@ -502,13 +498,14 @@ test.describe('plugin_analyze_site — mixed auth (cookie + CSRF + Bearer)', () 
 
     // The "session" cookie should be detected (matches /^session$/i pattern)
     const cookieMethods = analysis.auth.methods.filter(m => m.type === 'cookie-session');
-    expect(cookieMethods.length).toBeGreaterThanOrEqual(1);
-    const sessionCookie = cookieMethods.find(m => m.details.includes('"session"'));
-    expect(sessionCookie).toBeDefined();
+    expect(cookieMethods).toHaveLength(1);
+    expect(cookieMethods[0]?.details).toContain('"session"');
 
     // --- CSRF token detection ---
+    // Two guaranteed CSRF sources: meta tag and hidden form input.
+    // A third (X-CSRF-Token header) depends on network capture timing.
     const csrfMethods = analysis.auth.methods.filter(m => m.type === 'csrf-token');
-    expect(csrfMethods.length).toBeGreaterThanOrEqual(1);
+    expect(csrfMethods.length).toBeGreaterThanOrEqual(2);
 
     // Should detect CSRF meta tag
     const csrfMetaMethod = csrfMethods.find(m => m.details.includes('meta'));
@@ -527,7 +524,7 @@ test.describe('plugin_analyze_site — mixed auth (cookie + CSRF + Bearer)', () 
 
     // --- Bearer header auth ---
     const bearerMethods = analysis.auth.methods.filter(m => m.type === 'bearer-header');
-    expect(bearerMethods.length).toBeGreaterThanOrEqual(1);
+    expect(bearerMethods).toHaveLength(1);
 
     // --- All three auth types present ---
     expect(analysis.auth.methods).toContainEqual(expect.objectContaining({ type: 'cookie-session' }));
@@ -535,14 +532,13 @@ test.describe('plugin_analyze_site — mixed auth (cookie + CSRF + Bearer)', () 
     expect(analysis.auth.methods).toContainEqual(expect.objectContaining({ type: 'bearer-header' }));
 
     // --- API detection ---
-    // The page makes GET and POST requests to /mixed-auth/api/* endpoints
-    expect(analysis.apis.endpoints.length).toBeGreaterThanOrEqual(1);
+    // The page makes GET /dashboard, GET /notifications, POST /actions — all REST
     const restEndpoints = analysis.apis.endpoints.filter(e => e.protocol === 'rest');
-    expect(restEndpoints.length).toBeGreaterThanOrEqual(1);
+    expect(restEndpoints).toContainEqual(expect.objectContaining({ url: expect.stringContaining('/mixed-auth/api/') }));
 
     // --- DOM detection ---
-    // The page has a form with hidden CSRF input and settings fields
-    expect(analysis.dom.forms.length).toBeGreaterThanOrEqual(1);
+    // The page has exactly one form with CSRF and settings fields
+    expect(analysis.dom.forms).toHaveLength(1);
     const form = analysis.dom.forms[0];
     expect(form).toBeDefined();
     if (form) {
@@ -595,7 +591,9 @@ test.describe('plugin_analyze_site — suggestion generation quality', () => {
     const siteUrl = `${analyzeSiteServer?.url ?? ''}/suggestions-app/`;
     const analysis = await analyzeSite(mcpClient, siteUrl);
 
-    // --- Suggestions array has at least 3 entries ---
+    // --- Suggestions array: 3 REST + form suggestions ---
+    // The page has 3 REST API calls (GET items, POST items, GET users) and 2 forms,
+    // so we expect at least 3 REST suggestions plus form submissions.
     expect(analysis.suggestions.length).toBeGreaterThanOrEqual(3);
 
     // --- Each suggestion has the required shape fields ---
@@ -632,17 +630,16 @@ test.describe('plugin_analyze_site — suggestion generation quality', () => {
       }),
     );
 
-    // --- Suggestions are relevant to detected APIs (approach mentions specific endpoints) ---
+    // --- All three REST suggestions present and reference their endpoints ---
     const restSuggestions = analysis.suggestions.filter(
       s => s.toolName === 'list_items' || s.toolName === 'create_items' || s.toolName === 'list_users',
     );
-    expect(restSuggestions.length).toBeGreaterThanOrEqual(3);
+    expect(restSuggestions).toHaveLength(3);
     for (const s of restSuggestions) {
-      // Each REST suggestion's approach must reference the actual API endpoint
       expect(s.approach).toMatch(/\/api\/(items|users)/);
     }
 
-    // --- Form suggestions exist ---
+    // --- Form suggestions exist (2 forms: search + settings) ---
     const formSuggestions = analysis.suggestions.filter(s => s.toolName.startsWith('submit_'));
     expect(formSuggestions.length).toBeGreaterThanOrEqual(1);
 
@@ -666,13 +663,13 @@ test.describe('plugin_analyze_site — sessionStorage JWT auth', () => {
     // --- Auth detection ---
     expect(analysis.auth.authenticated).toBe(true);
 
-    // Verify JWT in sessionStorage detected
+    // Verify JWT in sessionStorage detected (exactly one auth_token entry)
     const jwtSessionMethods = analysis.auth.methods.filter(m => m.type === 'jwt-sessionstorage');
-    expect(jwtSessionMethods.length).toBeGreaterThanOrEqual(1);
+    expect(jwtSessionMethods).toHaveLength(1);
 
     // The auth_token key should be mentioned in details
-    const authTokenMethod = jwtSessionMethods.find(m => m.details.includes('auth_token'));
-    expect(authTokenMethod).toBeDefined();
+    const authTokenMethod = jwtSessionMethods[0];
+    expect(authTokenMethod?.details).toContain('auth_token');
 
     // extractionHint should contain working JS code for sessionStorage access
     expect(authTokenMethod?.extractionHint).toContain('sessionStorage');
@@ -680,14 +677,14 @@ test.describe('plugin_analyze_site — sessionStorage JWT auth', () => {
 
     // Verify Bearer header detected in network requests
     const bearerMethods = analysis.auth.methods.filter(m => m.type === 'bearer-header');
-    expect(bearerMethods.length).toBeGreaterThanOrEqual(1);
+    expect(bearerMethods).toHaveLength(1);
 
     // --- API detection ---
-    expect(analysis.apis.endpoints.length).toBeGreaterThanOrEqual(1);
-
-    // Should detect REST endpoints
+    // The page makes GET /api/notes, POST /api/notes — all REST
     const restEndpoints = analysis.apis.endpoints.filter(e => e.protocol === 'rest');
-    expect(restEndpoints.length).toBeGreaterThanOrEqual(1);
+    expect(restEndpoints).toContainEqual(
+      expect.objectContaining({ url: expect.stringContaining('/jwt-sessionstorage/api/') }),
+    );
 
     // --- Storage detection ---
     // The JWT key should be reported in sessionStorage keys
@@ -715,9 +712,9 @@ test.describe('plugin_analyze_site — Basic Auth', () => {
     // --- Auth detection ---
     expect(analysis.auth.authenticated).toBe(true);
 
-    // Verify basic-auth method detected
+    // Verify basic-auth method detected (exactly one Basic Auth header)
     const basicMethods = analysis.auth.methods.filter(m => m.type === 'basic-auth');
-    expect(basicMethods.length).toBeGreaterThanOrEqual(1);
+    expect(basicMethods).toHaveLength(1);
 
     // The details should mention Basic Auth
     const basicMethod = basicMethods[0];
@@ -729,14 +726,14 @@ test.describe('plugin_analyze_site — Basic Auth', () => {
 
     // Should NOT be classified as bearer-header (Basic Auth is distinct)
     const bearerMethods = analysis.auth.methods.filter(m => m.type === 'bearer-header');
-    expect(bearerMethods.length).toBe(0);
+    expect(bearerMethods).toHaveLength(0);
 
     // --- API detection ---
-    expect(analysis.apis.endpoints.length).toBeGreaterThanOrEqual(1);
-
-    // Should detect REST endpoints
+    // The page makes GET /api/files, POST /api/files — all REST
     const restEndpoints = analysis.apis.endpoints.filter(e => e.protocol === 'rest');
-    expect(restEndpoints.length).toBeGreaterThanOrEqual(1);
+    expect(restEndpoints).toContainEqual(
+      expect.objectContaining({ url: expect.stringContaining('/basicauth-app/api/') }),
+    );
 
     // --- Title ---
     expect(analysis.title).toBe('Basic Auth Test App');
