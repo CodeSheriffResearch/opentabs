@@ -149,7 +149,7 @@ const printFirstTimeInstructions = (extensionDest: string, port: number, secret:
   console.log('');
   console.log('  2. Configure your MCP client:');
   console.log('');
-  printMcpClientConfigs(mcpUrl, secret);
+  printMcpClientConfigs(mcpUrl, secret, true);
 };
 
 const indent = (json: string, prefix: string): string =>
@@ -197,25 +197,43 @@ const getMcpClientConfigs = (
   ];
 };
 
-const printMcpClientConfigs = (mcpUrl: string, secret: string | null): void => {
+const printMcpClientConfigs = (mcpUrl: string, secret: string | null, primaryOnly = false): void => {
   const pad = '     ';
   const configs = getMcpClientConfigs(mcpUrl, secret);
+  const displayConfigs = primaryOnly ? configs.slice(0, 1) : configs;
 
-  for (const { label, file, json } of configs) {
+  for (const { label, file, json } of displayConfigs) {
     console.log(pc.dim(`${pad}${pc.bold(label)} (${file}):`));
     console.log(pc.dim(indent(JSON.stringify(json, null, 2), pad)));
     console.log('');
   }
 
-  console.log(pc.dim(`${pad}For other MCP clients, consult their documentation for adding a Streamable HTTP server`));
+  if (primaryOnly) {
+    const otherClients = configs
+      .slice(1)
+      .map(({ label }) => label)
+      .join(', ');
+    console.log(
+      pc.dim(`${pad}For other MCP clients (${otherClients}): run ${pc.bold('opentabs config show --show-secret')}`),
+    );
+    console.log('');
+  }
+
+  console.log(
+    pc.dim(
+      `${pad}For manual configuration, consult your MCP client's documentation for adding a Streamable HTTP server`,
+    ),
+  );
   if (secret) {
     console.log(pc.dim(`${pad}pointing to ${mcpUrl} with Authorization: Bearer ${secret}`));
   } else {
     console.log(pc.dim(`${pad}pointing to ${mcpUrl} with an Authorization: Bearer header`));
   }
-  console.log(
-    pc.dim(`${pad}Run ${pc.bold('opentabs config show --show-secret')} to see MCP client configuration at any time.`),
-  );
+  if (!primaryOnly) {
+    console.log(
+      pc.dim(`${pad}Run ${pc.bold('opentabs config show --show-secret')} to see MCP client configuration at any time.`),
+    );
+  }
   console.log('');
 };
 
@@ -273,7 +291,7 @@ const handleStart = async (options: StartOptions): Promise<void> => {
     } else {
       console.log(pc.dim('  MCP client config (add to your client):'));
       console.log('');
-      printMcpClientConfigs(`http://127.0.0.1:${port}/mcp`, secret);
+      printMcpClientConfigs(`http://127.0.0.1:${port}/mcp`, secret, true);
     }
   } else {
     console.log(pc.dim(`  Run ${pc.bold('opentabs config show --show-secret')} to see MCP client configuration.`));
