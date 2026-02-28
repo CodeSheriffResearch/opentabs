@@ -18,8 +18,10 @@ import {
   cleanupTestConfigDir,
   launchExtensionContext,
   createMcpClient,
+  symlinkCrossPlatform,
 } from './fixtures.js';
 import { waitForExtensionConnected, waitForLog, setupAdapterSymlink } from './helpers.js';
+import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
 import type { McpServer } from './fixtures.js';
@@ -86,6 +88,110 @@ test.describe('Auth bootstrap', () => {
           expect(result.isError).toBe(false);
         } finally {
           await client.close();
+        }
+      } finally {
+        await context.close();
+      }
+    } finally {
+      if (server) await server.kill();
+      cleanupTestConfigDir(configDir);
+      if (cleanupDir) {
+        try {
+          fs.rmSync(cleanupDir, { recursive: true, force: true });
+        } catch {
+          // best-effort cleanup
+        }
+      }
+    }
+  });
+
+  test('extension recovers from stale secret after server restart with new secret', async () => {
+    test.slow();
+
+    // 1. Create config dir (includes auth.json with the initial secret) and start server
+    const configDir = createTestConfigDir();
+    let server: McpServer | null = null;
+    let cleanupDir: string | null = null;
+
+    try {
+      server = await startMcpServer(configDir, true);
+
+      // 2. Create extension copy WITH the server's secret — extension starts connected
+      const {
+        context,
+        cleanupDir: extCleanupDir,
+        extensionDir,
+      } = await launchExtensionContext(server.port, server.secret);
+
+      cleanupDir = extCleanupDir;
+
+      // Set up adapter symlink so the server and extension share adapter IIFEs
+      setupAdapterSymlink(configDir, extensionDir);
+
+      // Symlink auth.json from server config dir to extension dir so writing
+      // to the server's auth.json automatically updates the extension's copy.
+      const serverAuthJson = path.join(configDir, 'extension', 'auth.json');
+      const extensionAuthJson = path.join(extensionDir, 'auth.json');
+      fs.rmSync(extensionAuthJson, { force: true });
+      symlinkCrossPlatform(serverAuthJson, extensionAuthJson, 'file');
+
+      try {
+        // 3. Wait for initial connection and verify tools work
+        await waitForExtensionConnected(server, 45_000);
+        await waitForLog(server, 'tab.syncAll received', 15_000);
+
+        const h1 = await server.health();
+        expect(h1).not.toBeNull();
+        if (!h1) throw new Error('health returned null');
+        expect(h1.extensionConnected).toBe(true);
+
+        const client1 = createMcpClient(server.port, server.secret);
+        await client1.initialize();
+        try {
+          const preResult = await client1.callTool('browser_list_tabs');
+          expect(preResult.isError).toBe(false);
+        } finally {
+          await client1.close();
+        }
+
+        // 4. Rotate the secret: write a new secret to auth.json.
+        //    Because of the symlink, writing to the server's auth.json
+        //    also updates the extension's copy.
+        const newSecret = `rotated-${crypto.randomUUID()}`;
+        const authPath = path.join(configDir, 'extension', 'auth.json');
+        fs.writeFileSync(authPath, JSON.stringify({ secret: newSecret }) + '\n', 'utf-8');
+
+        // 5. Trigger hot reload so the server picks up the new secret
+        server.logs.length = 0;
+        server.triggerHotReload();
+
+        // Wait for hot reload to complete
+        await waitForLog(server, 'Hot reload complete', 15_000);
+        server.secret = newSecret;
+
+        // 6. Wait for the extension to reconnect. The hot reload restarts the
+        //    worker, which breaks the existing WebSocket. The extension detects
+        //    the disconnect and reconnects. On reconnect, bootstrapFromAuthFile()
+        //    re-reads auth.json (via the symlink), picks up the new secret, and
+        //    authenticates with /ws-info using the rotated credentials.
+        await waitForExtensionConnected(server, 45_000);
+        await waitForLog(server, 'tab.syncAll received', 15_000);
+
+        // 7. Verify connection via /health
+        const h2 = await server.health();
+        expect(h2).not.toBeNull();
+        if (!h2) throw new Error('health returned null');
+        expect(h2.status).toBe('ok');
+        expect(h2.extensionConnected).toBe(true);
+
+        // 8. Verify tool dispatch works with the new secret
+        const client2 = createMcpClient(server.port, newSecret);
+        await client2.initialize();
+        try {
+          const postResult = await client2.callTool('browser_list_tabs');
+          expect(postResult.isError).toBe(false);
+        } finally {
+          await client2.close();
         }
       } finally {
         await context.close();
