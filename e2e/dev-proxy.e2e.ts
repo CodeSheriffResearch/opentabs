@@ -140,6 +140,90 @@ test.describe('Dev proxy concurrent overlapping reloads', () => {
   });
 });
 
+test.describe('Dev proxy graceful shutdown', () => {
+  test('SIGTERM kills worker and proxy exits cleanly', async () => {
+    const configDir = createTestConfigDir();
+    const server = await startMcpServer(configDir, true);
+
+    try {
+      // Verify server is healthy before sending SIGTERM
+      const initialHealth = await server.health();
+      expect(initialHealth).not.toBeNull();
+      if (!initialHealth) throw new Error('health returned null');
+      expect(initialHealth.status).toBe('ok');
+
+      const port = server.port;
+      const proxyPid = server.proc.pid;
+      if (proxyPid === undefined) throw new Error('proxy PID is undefined');
+
+      // Find the worker child process before sending SIGTERM so we can
+      // verify it is also cleaned up.
+      const pgrepOutput = execSync(`pgrep -P ${proxyPid}`, { encoding: 'utf-8' }).trim();
+      const workerPids = pgrepOutput
+        .split('\n')
+        .map(s => Number(s.trim()))
+        .filter(n => !Number.isNaN(n) && n > 0);
+      expect(workerPids.length).toBeGreaterThan(0);
+
+      // Create a promise that resolves when the proxy process exits.
+      // We listen on the ChildProcess 'exit' event directly to capture
+      // the exit code and signal.
+      const exitPromise = new Promise<{ code: number | null; signal: string | null }>(resolve => {
+        server.proc.once('exit', (code, signal) => {
+          resolve({ code, signal: signal as string | null });
+        });
+      });
+
+      // Send SIGTERM directly to the proxy process (not via the fixture's
+      // kill() method). The proxy's SIGTERM handler calls worker?.kill('SIGTERM')
+      // then process.exit(0).
+      process.kill(proxyPid, 'SIGTERM');
+
+      // Wait for the proxy to exit (should be nearly immediate since
+      // process.exit(0) is called synchronously in the SIGTERM handler)
+      const exitResult = await exitPromise;
+
+      // Verify the proxy exited cleanly. process.exit(0) produces code=0.
+      // On some platforms the signal field may also be set.
+      expect(exitResult.code === 0 || exitResult.signal === 'SIGTERM').toBe(true);
+
+      // Verify the port is no longer listening — the proxy's HTTP server
+      // should be closed. A fetch should fail with ECONNREFUSED.
+      const headers: Record<string, string> = {};
+      if (server.secret) headers['Authorization'] = `Bearer ${server.secret}`;
+
+      await expect(
+        fetch(`http://localhost:${port}/health`, {
+          headers,
+          signal: AbortSignal.timeout(3_000),
+        }),
+      ).rejects.toThrow();
+
+      // Verify no orphaned worker processes remain. After the proxy sends
+      // SIGTERM to the worker and calls process.exit(0), the worker should
+      // also be dead. Give it a brief moment to exit.
+      await new Promise(r => setTimeout(r, 500));
+
+      for (const workerPid of workerPids) {
+        let alive = true;
+        try {
+          // process.kill(pid, 0) throws if the process doesn't exist
+          process.kill(workerPid, 0);
+        } catch {
+          alive = false;
+        }
+        expect(alive).toBe(false);
+      }
+    } finally {
+      // The proxy is already dead from SIGTERM, but call kill() defensively
+      // in case the test failed before sending SIGTERM. killProcess handles
+      // already-exited processes gracefully.
+      await server.kill().catch(() => {});
+      cleanupTestConfigDir(configDir);
+    }
+  });
+});
+
 test.describe('Dev proxy 503 timeout', () => {
   test('returns 503 when worker is dead and no restart is triggered', async () => {
     const configDir = createTestConfigDir();
