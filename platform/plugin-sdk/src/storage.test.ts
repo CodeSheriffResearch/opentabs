@@ -5,6 +5,7 @@ import {
   removeLocalStorage,
   removeSessionStorage,
   setLocalStorage,
+  setSessionStorage,
 } from './storage.js';
 import { GlobalWindow } from 'happy-dom';
 import { afterEach, beforeEach, describe, expect, test } from 'vitest';
@@ -139,6 +140,32 @@ describe('getSessionStorage', () => {
       configurable: true,
     });
     expect(getSessionStorage('key')).toBeNull();
+    Object.defineProperty(globalThis, 'sessionStorage', {
+      value: win.sessionStorage as unknown as Storage,
+      configurable: true,
+      writable: true,
+    });
+  });
+});
+
+// ---------------------------------------------------------------------------
+// setSessionStorage
+// ---------------------------------------------------------------------------
+
+describe('setSessionStorage', () => {
+  test('stores a value', () => {
+    setSessionStorage('session-key', 'session-value');
+    expect(sessionStorage.getItem('session-key')).toBe('session-value');
+  });
+
+  test('silently fails when sessionStorage throws', () => {
+    Object.defineProperty(globalThis, 'sessionStorage', {
+      get: () => {
+        throw new DOMException('Access denied', 'SecurityError');
+      },
+      configurable: true,
+    });
+    expect(() => setSessionStorage('key', 'value')).not.toThrow();
     Object.defineProperty(globalThis, 'sessionStorage', {
       value: win.sessionStorage as unknown as Storage,
       configurable: true,
