@@ -510,16 +510,12 @@ describe('discoverGlobalNpmPlugins', () => {
     expect(errors).toHaveLength(0);
   });
 
-  test('deduplicates plugins found in overlapping npm and bun paths', async () => {
+  test('deduplicates plugins when the same path appears multiple times in global paths', async () => {
     const globalDir = join(tempDir, 'node_modules');
     writePluginPkgJson(join(globalDir, 'opentabs-plugin-slack'), 'opentabs-plugin-slack');
 
-    // Both npm root and bun pm bin resolve to the same node_modules
-    mockSpawnSync(cmd => {
-      if (cmd[0] === 'npm' && cmd[1] === 'root') return spawnResult(0, globalDir);
-      if (cmd[0] === 'bun' && cmd[1] === 'pm') return spawnResult(0, join(tempDir, 'bin'));
-      return spawnResult(1, '');
-    });
+    // Inject the same global path twice to exercise the deduplication logic
+    (globalThis as Record<string, unknown>)['__opentabs_global_paths__'] = [globalDir, globalDir];
 
     const { dirs } = await discoverGlobalNpmPlugins();
 
