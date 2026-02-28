@@ -506,14 +506,19 @@ const readLocalPluginInfo = async (
 
 /**
  * Scan global node_modules for npm-installed opentabs plugins using `npm list -g --json`.
+ * Reads each plugin's package.json and dist/tools.json to populate displayName and toolCount.
  */
 const scanNpmPlugins = async (): Promise<ListPluginEntry[]> => {
   const entries: ListPluginEntry[] = [];
   try {
-    const result = await spawnProcessAsync(platformExec('npm'), ['list', '-g', '--json', '--depth=0']);
-    const stdout = result.stdout;
+    const [listResult, rootResult] = await Promise.all([
+      spawnProcessAsync(platformExec('npm'), ['list', '-g', '--json', '--depth=0']),
+      spawnProcessAsync(platformExec('npm'), ['root', '-g']),
+    ]);
 
-    const data = JSON.parse(stdout) as Record<string, unknown>;
+    const globalRoot = rootResult.exitCode === 0 ? rootResult.stdout.trim() : '';
+
+    const data = JSON.parse(listResult.stdout) as Record<string, unknown>;
     const deps = typeof data.dependencies === 'object' && data.dependencies !== null ? data.dependencies : {};
 
     for (const [pkgName, info] of Object.entries(deps as Record<string, Record<string, unknown>>)) {
@@ -521,13 +526,16 @@ const scanNpmPlugins = async (): Promise<ListPluginEntry[]> => {
       if (!isPlugin) continue;
 
       const version = typeof info.version === 'string' ? info.version : null;
+      const pluginInfo = globalRoot ? await readLocalPluginInfo(join(globalRoot, pkgName)) : null;
+
       entries.push({
         name: pkgName,
-        displayName: pkgName,
-        version,
+        displayName: pluginInfo?.displayName ?? pkgName,
+        version: pluginInfo?.version ?? version,
         source: 'npm',
         tabState: null,
-        toolCount: 0,
+        toolCount: pluginInfo?.toolCount ?? 0,
+        toolNames: pluginInfo?.toolNames,
       });
     }
   } catch {
@@ -780,4 +788,6 @@ export {
   buildDirectLookupCandidates,
   parseMaintainer,
   KNOWN_OFFICIAL_PLUGIN_SLUGS,
+  scanNpmPlugins,
+  readLocalPluginInfo,
 };

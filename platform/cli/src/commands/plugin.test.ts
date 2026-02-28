@@ -2,8 +2,10 @@ import {
   buildDirectLookupCandidates,
   KNOWN_OFFICIAL_PLUGIN_SLUGS,
   parseMaintainer,
+  readLocalPluginInfo,
   removeFromLocalPlugins,
   resolvePackageName,
+  scanNpmPlugins,
   warnIfNotPlugin,
 } from './plugin.js';
 import {
@@ -346,5 +348,234 @@ describe('removeFromLocalPlugins', () => {
 
     const updated = JSON.parse(await readFile(join(testDir, 'config.json'), 'utf-8')) as Record<string, unknown>;
     expect(updated.localPlugins).toEqual([]);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// readLocalPluginInfo
+// ---------------------------------------------------------------------------
+
+describe('readLocalPluginInfo', () => {
+  let testDir: string;
+
+  beforeEach(() => {
+    testDir = mkdtempSync(join(tmpdir(), 'opentabs-readinfo-test-'));
+  });
+
+  afterEach(() => {
+    rmSync(testDir, { recursive: true, force: true });
+  });
+
+  test('reads displayName from opentabs.displayName in package.json', async () => {
+    const pluginDir = join(testDir, 'opentabs-plugin-slack');
+    mkdirSync(pluginDir, { recursive: true });
+    await writeFile(
+      join(pluginDir, 'package.json'),
+      JSON.stringify({ name: 'opentabs-plugin-slack', version: '1.2.3', opentabs: { displayName: 'Slack' } }),
+      'utf-8',
+    );
+
+    const info = await readLocalPluginInfo(pluginDir);
+
+    expect(info?.displayName).toBe('Slack');
+    expect(info?.name).toBe('opentabs-plugin-slack');
+    expect(info?.version).toBe('1.2.3');
+    expect(info?.toolCount).toBe(0);
+  });
+
+  test('falls back to package name as displayName when opentabs field is absent', async () => {
+    const pluginDir = join(testDir, 'opentabs-plugin-noop');
+    mkdirSync(pluginDir, { recursive: true });
+    await writeFile(
+      join(pluginDir, 'package.json'),
+      JSON.stringify({ name: 'opentabs-plugin-noop', version: '0.1.0' }),
+      'utf-8',
+    );
+
+    const info = await readLocalPluginInfo(pluginDir);
+
+    expect(info?.displayName).toBe('opentabs-plugin-noop');
+  });
+
+  test('reads toolCount and toolNames from dist/tools.json', async () => {
+    const pluginDir = join(testDir, 'opentabs-plugin-mytools');
+    mkdirSync(join(pluginDir, 'dist'), { recursive: true });
+    await writeFile(
+      join(pluginDir, 'package.json'),
+      JSON.stringify({ name: 'opentabs-plugin-mytools', version: '1.0.0', opentabs: { displayName: 'My Tools' } }),
+      'utf-8',
+    );
+    await writeFile(
+      join(pluginDir, 'dist', 'tools.json'),
+      JSON.stringify({ tools: [{ name: 'tool_a' }, { name: 'tool_b' }, { name: 'tool_c' }] }),
+      'utf-8',
+    );
+
+    const info = await readLocalPluginInfo(pluginDir);
+
+    expect(info?.toolCount).toBe(3);
+    expect(info?.toolNames).toEqual(['tool_a', 'tool_b', 'tool_c']);
+  });
+
+  test('returns null when package.json is missing', async () => {
+    const pluginDir = join(testDir, 'nonexistent-plugin');
+
+    const info = await readLocalPluginInfo(pluginDir);
+
+    expect(info).toBeNull();
+  });
+
+  test('returns toolCount 0 when dist/tools.json is absent', async () => {
+    const pluginDir = join(testDir, 'opentabs-plugin-notools');
+    mkdirSync(pluginDir, { recursive: true });
+    await writeFile(
+      join(pluginDir, 'package.json'),
+      JSON.stringify({ name: 'opentabs-plugin-notools', version: '1.0.0', opentabs: { displayName: 'No Tools' } }),
+      'utf-8',
+    );
+
+    const info = await readLocalPluginInfo(pluginDir);
+
+    expect(info?.toolCount).toBe(0);
+    expect(info?.toolNames).toEqual([]);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// scanNpmPlugins
+// ---------------------------------------------------------------------------
+
+describe('scanNpmPlugins', () => {
+  let testDir: string;
+
+  beforeEach(() => {
+    testDir = mkdtempSync(join(tmpdir(), 'opentabs-scannpm-test-'));
+    vi.mocked(spawn).mockReset();
+  });
+
+  afterEach(() => {
+    rmSync(testDir, { recursive: true, force: true });
+  });
+
+  test('returns display name from package.json for npm-installed plugin', async () => {
+    const pkgName = 'opentabs-plugin-slack';
+    const pluginDir = join(testDir, pkgName);
+    mkdirSync(pluginDir, { recursive: true });
+    await writeFile(
+      join(pluginDir, 'package.json'),
+      JSON.stringify({ name: pkgName, version: '2.0.0', opentabs: { displayName: 'Slack' } }),
+      'utf-8',
+    );
+
+    const npmListOutput = JSON.stringify({ dependencies: { [pkgName]: { version: '2.0.0' } } });
+    vi.mocked(spawn)
+      .mockImplementationOnce(() => createMockChild(0, npmListOutput) as ReturnType<typeof spawn>)
+      .mockImplementationOnce(() => createMockChild(0, `${testDir}\n`) as ReturnType<typeof spawn>);
+
+    const entries = await scanNpmPlugins();
+
+    expect(entries).toHaveLength(1);
+    expect(entries[0]?.displayName).toBe('Slack');
+    expect(entries[0]?.name).toBe(pkgName);
+    expect(entries[0]?.version).toBe('2.0.0');
+  });
+
+  test('returns correct toolCount from dist/tools.json for npm-installed plugin', async () => {
+    const pkgName = 'opentabs-plugin-mytools';
+    const pluginDir = join(testDir, pkgName);
+    mkdirSync(join(pluginDir, 'dist'), { recursive: true });
+    await writeFile(
+      join(pluginDir, 'package.json'),
+      JSON.stringify({ name: pkgName, version: '1.0.0', opentabs: { displayName: 'My Tools' } }),
+      'utf-8',
+    );
+    await writeFile(
+      join(pluginDir, 'dist', 'tools.json'),
+      JSON.stringify({ tools: [{ name: 'tool_a' }, { name: 'tool_b' }] }),
+      'utf-8',
+    );
+
+    const npmListOutput = JSON.stringify({ dependencies: { [pkgName]: { version: '1.0.0' } } });
+    vi.mocked(spawn)
+      .mockImplementationOnce(() => createMockChild(0, npmListOutput) as ReturnType<typeof spawn>)
+      .mockImplementationOnce(() => createMockChild(0, `${testDir}\n`) as ReturnType<typeof spawn>);
+
+    const entries = await scanNpmPlugins();
+
+    expect(entries[0]?.toolCount).toBe(2);
+    expect(entries[0]?.toolNames).toEqual(['tool_a', 'tool_b']);
+  });
+
+  test('falls back to raw pkg name as displayName when plugin dir has no package.json', async () => {
+    const pkgName = 'opentabs-plugin-missing';
+
+    const npmListOutput = JSON.stringify({ dependencies: { [pkgName]: { version: '0.1.0' } } });
+    vi.mocked(spawn)
+      .mockImplementationOnce(() => createMockChild(0, npmListOutput) as ReturnType<typeof spawn>)
+      .mockImplementationOnce(() => createMockChild(0, `${testDir}\n`) as ReturnType<typeof spawn>);
+
+    const entries = await scanNpmPlugins();
+
+    expect(entries).toHaveLength(1);
+    expect(entries[0]?.displayName).toBe(pkgName);
+    expect(entries[0]?.toolCount).toBe(0);
+  });
+
+  test('falls back to toolCount 0 when dist/tools.json is absent', async () => {
+    const pkgName = 'opentabs-plugin-notools';
+    const pluginDir = join(testDir, pkgName);
+    mkdirSync(pluginDir, { recursive: true });
+    await writeFile(
+      join(pluginDir, 'package.json'),
+      JSON.stringify({ name: pkgName, version: '1.0.0', opentabs: { displayName: 'No Tools Plugin' } }),
+      'utf-8',
+    );
+
+    const npmListOutput = JSON.stringify({ dependencies: { [pkgName]: { version: '1.0.0' } } });
+    vi.mocked(spawn)
+      .mockImplementationOnce(() => createMockChild(0, npmListOutput) as ReturnType<typeof spawn>)
+      .mockImplementationOnce(() => createMockChild(0, `${testDir}\n`) as ReturnType<typeof spawn>);
+
+    const entries = await scanNpmPlugins();
+
+    expect(entries[0]?.toolCount).toBe(0);
+    expect(entries[0]?.displayName).toBe('No Tools Plugin');
+  });
+
+  test('handles scoped package name when building plugin directory path', async () => {
+    const pkgName = '@opentabs-dev/opentabs-plugin-slack';
+    const pluginDir = join(testDir, pkgName);
+    mkdirSync(join(pluginDir, 'dist'), { recursive: true });
+    await writeFile(
+      join(pluginDir, 'package.json'),
+      JSON.stringify({ name: pkgName, version: '3.0.0', opentabs: { displayName: 'Slack' } }),
+      'utf-8',
+    );
+    await writeFile(
+      join(pluginDir, 'dist', 'tools.json'),
+      JSON.stringify({ tools: Array.from({ length: 22 }, (_, i) => ({ name: `tool_${i.toString()}` })) }),
+      'utf-8',
+    );
+
+    const npmListOutput = JSON.stringify({ dependencies: { [pkgName]: { version: '3.0.0' } } });
+    vi.mocked(spawn)
+      .mockImplementationOnce(() => createMockChild(0, npmListOutput) as ReturnType<typeof spawn>)
+      .mockImplementationOnce(() => createMockChild(0, `${testDir}\n`) as ReturnType<typeof spawn>);
+
+    const entries = await scanNpmPlugins();
+
+    expect(entries).toHaveLength(1);
+    expect(entries[0]?.displayName).toBe('Slack');
+    expect(entries[0]?.toolCount).toBe(22);
+  });
+
+  test('returns empty array when npm list fails', async () => {
+    vi.mocked(spawn)
+      .mockImplementationOnce(() => createMockChild(1, '') as ReturnType<typeof spawn>)
+      .mockImplementationOnce(() => createMockChild(0, `${testDir}\n`) as ReturnType<typeof spawn>);
+
+    const entries = await scanNpmPlugins();
+
+    expect(entries).toEqual([]);
   });
 });
