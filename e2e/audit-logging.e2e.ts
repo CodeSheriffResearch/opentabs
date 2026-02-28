@@ -85,7 +85,8 @@ test.describe('Audit logging', () => {
     // Fetch audit log
     const { status, entries } = await fetchAudit(mcpServer.port, mcpServer.secret);
     expect(status).toBe(200);
-    expect(entries.length).toBeGreaterThanOrEqual(2);
+    const testEntries = entries.filter(e => e.tool === 'e2e-test_echo' || e.tool === 'e2e-test_failing_tool');
+    expect(testEntries.length).toBe(2);
 
     // Verify entries have required fields
     for (const entry of entries) {
@@ -105,11 +106,11 @@ test.describe('Audit logging', () => {
       expect(new Date(previous.timestamp).getTime()).toBeGreaterThanOrEqual(new Date(current.timestamp).getTime());
     }
 
-    // Verify we have both success and failure entries
-    const successes = entries.filter(e => e.success);
-    const failures = entries.filter(e => !e.success);
-    expect(successes.length).toBeGreaterThanOrEqual(1);
-    expect(failures.length).toBeGreaterThanOrEqual(1);
+    // Verify we have exactly 1 success and 1 failure among the tools invoked
+    const successes = testEntries.filter(e => e.success);
+    const failures = testEntries.filter(e => !e.success);
+    expect(successes.length).toBe(1);
+    expect(failures.length).toBe(1);
 
     // Verify the failed entry has an error object
     const failedEntry = failures[0];
@@ -135,7 +136,8 @@ test.describe('Audit logging', () => {
 
     // Filter by plugin
     const { entries } = await fetchAudit(mcpServer.port, mcpServer.secret, { plugin: 'e2e-test' });
-    expect(entries.length).toBeGreaterThanOrEqual(1);
+    const echoEntries = entries.filter(e => e.tool === 'e2e-test_echo');
+    expect(echoEntries.length).toBe(1);
     for (const entry of entries) {
       expect(entry.plugin).toBe('e2e-test');
     }
