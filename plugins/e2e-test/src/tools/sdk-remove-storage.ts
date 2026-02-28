@@ -1,14 +1,12 @@
-import { defineTool, getLocalStorage, getSessionStorage } from '@opentabs-dev/plugin-sdk';
+import {
+  defineTool,
+  getLocalStorage,
+  getSessionStorage,
+  removeLocalStorage,
+  removeSessionStorage,
+} from '@opentabs-dev/plugin-sdk';
 import { z } from 'zod';
 
-/**
- * Tests removeLocalStorage and removeSessionStorage SDK utilities.
- *
- * The published SDK (v0.0.16) does not export removeLocalStorage or
- * removeSessionStorage — those were added in local source. This tool
- * implements the removal logic inline (try/catch around removeItem) to
- * test the full dispatch pipeline without depending on unpublished exports.
- */
 export const sdkRemoveStorage = defineTool({
   name: 'sdk_remove_storage',
   displayName: 'SDK Remove Storage',
@@ -26,15 +24,10 @@ export const sdkRemoveStorage = defineTool({
     const getter = params.storageType === 'local' ? getLocalStorage : getSessionStorage;
     const existed = getter(params.key) !== null;
 
-    // Inline removal logic (removeLocalStorage/removeSessionStorage not in published SDK)
-    try {
-      if (params.storageType === 'local') {
-        localStorage.removeItem(params.key);
-      } else {
-        sessionStorage.removeItem(params.key);
-      }
-    } catch {
-      // Silently fail on SecurityError (matches SDK pattern)
+    if (params.storageType === 'local') {
+      removeLocalStorage(params.key);
+    } else {
+      removeSessionStorage(params.key);
     }
 
     const afterRemoval = getter(params.key) !== null;

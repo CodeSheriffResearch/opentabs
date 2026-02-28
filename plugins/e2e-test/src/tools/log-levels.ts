@@ -1,24 +1,5 @@
-import { defineTool } from '@opentabs-dev/plugin-sdk';
+import { defineTool, log } from '@opentabs-dev/plugin-sdk';
 import { z } from 'zod';
-
-/**
- * Access the sdk.log namespace from globalThis.__openTabs.log, registered by
- * the SDK's log module at import time. This avoids importing `log` directly
- * from the SDK package (which may not include the log module in older published
- * versions). At runtime inside the adapter IIFE, the platform SDK bundles
- * log.ts which registers the log object on globalThis.
- */
-interface SdkLog {
-  debug: (message: string, ...args: unknown[]) => void;
-  info: (message: string, ...args: unknown[]) => void;
-  warn: (message: string, ...args: unknown[]) => void;
-  error: (message: string, ...args: unknown[]) => void;
-}
-
-const getSdkLog = (): SdkLog | undefined => {
-  const ot = (globalThis as Record<string, unknown>).__openTabs as Record<string, unknown> | undefined;
-  return ot?.log as SdkLog | undefined;
-};
 
 export const logLevels = defineTool({
   name: 'log_levels',
@@ -34,15 +15,10 @@ export const logLevels = defineTool({
     levels: z.array(z.string()).describe('The log levels that were emitted'),
   }),
   handle: async params => {
-    const sdkLog = getSdkLog();
-    if (!sdkLog) {
-      return { ok: false, levels: [] };
-    }
-
-    sdkLog.debug(`${params.prefix} debug-message`, { level: 'debug' });
-    sdkLog.info(`${params.prefix} info-message`, { level: 'info' });
-    sdkLog.warn(`${params.prefix} warning-message`, { level: 'warning' });
-    sdkLog.error(`${params.prefix} error-message`, { level: 'error' });
+    log.debug(`${params.prefix} debug-message`, { level: 'debug' });
+    log.info(`${params.prefix} info-message`, { level: 'info' });
+    log.warn(`${params.prefix} warning-message`, { level: 'warning' });
+    log.error(`${params.prefix} error-message`, { level: 'error' });
 
     return { ok: true, levels: ['debug', 'info', 'warning', 'error'] };
   },
