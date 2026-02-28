@@ -670,8 +670,20 @@ test.describe('Tab closing during in-flight dispatch', () => {
     const start = Date.now();
     const toolCallPromise = mcpClient.callTool('e2e-test_echo', { message: 'should-fail' });
 
-    // Wait ~2s for the script to start executing in the tab before closing it.
-    await new Promise(r => setTimeout(r, 2_000));
+    // Wait until the request actually reaches the test server before closing the tab.
+    // This ensures we're testing 'tab closed during in-flight fetch', not 'tab closed
+    // before dispatch started'.
+    await waitFor(
+      async () => {
+        const invocations = await testServer.invocations();
+        return invocations.some(
+          i => i.path === '/api/echo' && (i.body as Record<string, unknown>).message === 'should-fail',
+        );
+      },
+      10_000,
+      200,
+      'echo request to reach test server',
+    );
 
     // Close the tab — this causes chrome.scripting.executeScript to reject
     // with "No tab with id" or "Cannot access", triggering the catch block
