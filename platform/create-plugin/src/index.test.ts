@@ -278,6 +278,22 @@ describe('create-opentabs-plugin CLI', () => {
         }
         expect(build.status ?? 1).toBe(0);
 
+        // npm run lint — scaffolded code must pass lint with zero errors out of the box
+        const lint = spawnSync('npm', ['run', 'lint'], { cwd: projectDir, env: buildEnv });
+        if ((lint.status ?? 1) !== 0) {
+          console.error('lint stdout:', lint.stdout.toString());
+          console.error('lint stderr:', lint.stderr.toString());
+        }
+        expect(lint.status ?? 1).toBe(0);
+
+        // npm run format:check — scaffolded code must match prettier config out of the box
+        const formatCheck = spawnSync('npm', ['run', 'format:check'], { cwd: projectDir, env: buildEnv });
+        if ((formatCheck.status ?? 1) !== 0) {
+          console.error('format:check stdout:', formatCheck.stdout.toString());
+          console.error('format:check stderr:', formatCheck.stderr.toString());
+        }
+        expect(formatCheck.status ?? 1).toBe(0);
+
         // Verify dist/tools.json exists and is valid JSON
         const toolsJsonPath = join(projectDir, 'dist', 'tools.json');
         expect(existsSync(toolsJsonPath)).toBe(true);
