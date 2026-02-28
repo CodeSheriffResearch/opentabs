@@ -21,6 +21,18 @@ describe('sanitizeErrorMessage', () => {
       expect(sanitizeErrorMessage('Error at /usr/local/lib/node_modules/pkg/index.js:42')).toBe('Error at [PATH]:42');
     });
 
+    test('replaces single-segment unix paths like /tmp', () => {
+      expect(sanitizeErrorMessage('File not found in /tmp')).toBe('File not found in [PATH]');
+    });
+
+    test('replaces single-segment unix paths like /etc', () => {
+      expect(sanitizeErrorMessage('/etc permission denied')).toBe('[PATH] permission denied');
+    });
+
+    test('replaces single-segment unix paths like /var', () => {
+      expect(sanitizeErrorMessage('Could not access /var')).toBe('Could not access [PATH]');
+    });
+
     test('does not replace a single slash', () => {
       expect(sanitizeErrorMessage('status is 1/2 complete')).toBe('status is 1/2 complete');
     });
@@ -57,6 +69,10 @@ describe('sanitizeErrorMessage', () => {
 
     test('replaces localhost with high port', () => {
       expect(sanitizeErrorMessage('Error at localhost:54321')).toBe('Error at [LOCALHOST]');
+    });
+
+    test('replaces bare localhost without port', () => {
+      expect(sanitizeErrorMessage('connection refused to localhost')).toBe('connection refused to [LOCALHOST]');
     });
   });
 
