@@ -388,6 +388,11 @@ Admin endpoints (`/reload`, `/extension/reload`) are rate-limited to 10 requests
       <Table.Cell>Plugin removed — extension cleans up the adapter.</Table.Cell>
     </Table.Row>
     <Table.Row>
+      <Table.Cell className="font-medium">`plugins.changed`</Table.Cell>
+      <Table.Cell>Notification</Table.Cell>
+      <Table.Cell>Plugin registry changed (after install, update, or remove) — side panel refreshes its plugin list.</Table.Cell>
+    </Table.Row>
+    <Table.Row>
       <Table.Cell className="font-medium">`tool.dispatch`</Table.Cell>
       <Table.Cell>Request</Table.Cell>
       <Table.Cell>Dispatch a tool call to the correct tab's adapter.</Table.Cell>
