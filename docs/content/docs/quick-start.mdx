@@ -20,17 +20,9 @@ npm install -g @opentabs-dev/cli
 opentabs start
 ```
 
-You'll see:
+On first run, you'll see the MCP endpoint URL, log file path, Chrome extension setup instructions, and ready-to-copy configuration snippets for popular MCP clients (Claude Code, Cursor, Windsurf, OpenCode) — with your auth secret pre-filled.
 
-```
-Starting OpenTabs MCP server on port 9515...
-
-  MCP endpoint:  http://localhost:9515/mcp
-  Health check:  http://localhost:9515/health
-  Log file:      ~/.opentabs/server.log
-```
-
-On first run, this creates the `~/.opentabs/` directory, generates an auth secret, and installs the Chrome extension files.
+On first run, this also creates the `~/.opentabs/` directory, generates an auth secret, and installs the Chrome extension files.
 
 ## 3. Load the Chrome extension
 
@@ -55,7 +47,7 @@ Add the server to your MCP client config. For Claude Code (`~/.claude/settings/m
   "mcpServers": {
     "opentabs": {
       "type": "streamable-http",
-      "url": "http://localhost:9515/mcp",
+      "url": "http://127.0.0.1:9515/mcp",
       "headers": {
         "Authorization": "Bearer YOUR_SECRET_HERE"
       }
