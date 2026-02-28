@@ -1,4 +1,10 @@
-import { checkBearerAuth, createHandlers, isLocalhostHost, sweepStaleSessions } from './http-routes.js';
+import {
+  checkBearerAuth,
+  checkEndpointRateLimit,
+  createHandlers,
+  isLocalhostHost,
+  sweepStaleSessions,
+} from './http-routes.js';
 import { buildRegistry } from './registry.js';
 import { createState, STATE_SCHEMA_VERSION } from './state.js';
 import { version } from './version.js';
@@ -958,5 +964,34 @@ describe('/mcp session creation rate limiting', () => {
     const res = (await handlers.fetch(req, mockServer)) as Response;
     // GET without session ID returns 400, not 429
     expect(res.status).toBe(400);
+  });
+});
+
+describe('checkEndpointRateLimit', () => {
+  test('prunes stale map entry when all timestamps have expired', () => {
+    const state = createState();
+    const staleTime = Date.now() - 70_000; // 70 seconds ago, outside the 60s window
+    state.endpointCallTimestamps.set('/reload', [staleTime]);
+
+    checkEndpointRateLimit(state, '/reload', 10);
+
+    // The stale timestamp must have been pruned; only the new call's timestamp should remain.
+    // Use nullish coalescing to avoid non-null assertions while keeping the test assertion clear.
+    const stored = state.endpointCallTimestamps.get('/reload') ?? [];
+    expect(stored.length).toBe(1);
+    expect(stored[0]).toBeGreaterThan(staleTime + 60_000);
+  });
+
+  test('does not store an empty array when all timestamps have expired and rate limit is hit via maxPerMinute=0', () => {
+    const state = createState();
+    const staleTime = Date.now() - 70_000;
+    state.endpointCallTimestamps.set('/reload', [staleTime]);
+
+    // maxPerMinute=0 means every call is rate-limited; with all timestamps expired
+    // the filtered array is empty, so the key should be deleted rather than stored as []
+    const allowed = checkEndpointRateLimit(state, '/reload', 0);
+
+    expect(allowed).toBe(false);
+    expect(state.endpointCallTimestamps.has('/reload')).toBe(false);
   });
 });

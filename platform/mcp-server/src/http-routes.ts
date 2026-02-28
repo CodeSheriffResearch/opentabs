@@ -135,8 +135,15 @@ const isLocalhostHost = (hostHeader: string): boolean => {
 const checkEndpointRateLimit = (state: ServerState, endpoint: string, maxPerMinute: number): boolean => {
   const now = Date.now();
   const timestamps = (state.endpointCallTimestamps.get(endpoint) ?? []).filter(t => now - t < 60_000);
+  // Remove stale map entries when all timestamps have expired to prevent unbounded map growth.
+  if (timestamps.length === 0) {
+    state.endpointCallTimestamps.delete(endpoint);
+  }
   if (timestamps.length >= maxPerMinute) {
-    state.endpointCallTimestamps.set(endpoint, timestamps);
+    // Only persist non-empty arrays; an empty array has already been cleaned up above.
+    if (timestamps.length > 0) {
+      state.endpointCallTimestamps.set(endpoint, timestamps);
+    }
     return false;
   }
   timestamps.push(now);
@@ -562,7 +569,13 @@ const createHandleWsOpen =
         if (state.pendingExtensionReload) {
           state.pendingExtensionReload = false;
           log.info('Sending deferred extension reload (version was updated while extension was disconnected)');
-          setTimeout(() => sendExtensionReload(state), 500);
+          setTimeout(() => {
+            try {
+              sendExtensionReload(state);
+            } catch (err) {
+              log.warn('Failed to send extension reload signal:', err);
+            }
+          }, 500);
         }
       })
       .catch((err: unknown) => {
@@ -669,4 +682,11 @@ const sweepStaleSessions = (
 };
 
 export type { HotHandlers, ServerAdapter };
-export { checkBearerAuth, constantTimeEqual, createHandlers, isLocalhostHost, sweepStaleSessions };
+export {
+  checkBearerAuth,
+  checkEndpointRateLimit,
+  constantTimeEqual,
+  createHandlers,
+  isLocalhostHost,
+  sweepStaleSessions,
+};
