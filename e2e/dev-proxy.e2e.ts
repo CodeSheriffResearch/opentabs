@@ -206,16 +206,17 @@ test.describe('Dev proxy graceful shutdown', () => {
 
       // Verify no orphaned worker processes remain. After the proxy sends
       // SIGTERM to the worker and calls process.exit(0), the worker should
-      // also be dead. Give it a brief moment to exit.
-      await new Promise(r => setTimeout(r, 500));
-
+      // also be dead. Poll each worker PID until it exits (up to 5 seconds)
+      // to accommodate slower process teardown in Docker containers.
       for (const workerPid of workerPids) {
         let alive = true;
-        try {
-          // process.kill(pid, 0) throws if the process doesn't exist
-          process.kill(workerPid, 0);
-        } catch {
-          alive = false;
+        for (let attempt = 0; attempt < 50 && alive; attempt++) {
+          try {
+            process.kill(workerPid, 0);
+            await new Promise(r => setTimeout(r, 100));
+          } catch {
+            alive = false;
+          }
         }
         expect(alive).toBe(false);
       }
