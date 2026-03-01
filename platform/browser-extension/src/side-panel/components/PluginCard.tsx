@@ -160,12 +160,12 @@ const PluginCard = ({
       </AccordionPrimitive.Header>
 
       {toggleError && (
-        <Alert status="error" className="mx-3 mb-1 px-2 py-1 text-[11px]">
+        <Alert status="error" className="mx-3 mb-1 px-2 py-1 text-xs">
           {toggleError}
         </Alert>
       )}
       {actionError && (
-        <Alert status="error" className="mx-3 mb-1 px-2 py-1 text-[11px]">
+        <Alert status="error" className="mx-3 mb-1 px-2 py-1 text-xs">
           {actionError}
         </Alert>
       )}

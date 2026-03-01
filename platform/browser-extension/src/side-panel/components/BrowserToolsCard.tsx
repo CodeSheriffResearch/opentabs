@@ -116,7 +116,7 @@ const BrowserToolsCard = ({
       </AccordionPrimitive.Header>
 
       {toggleError && (
-        <Alert status="error" className="mx-3 mb-1 px-2 py-1 text-[11px]">
+        <Alert status="error" className="mx-3 mb-1 px-2 py-1 text-xs">
           {toggleError}
         </Alert>
       )}
