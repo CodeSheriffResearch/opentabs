@@ -16,9 +16,9 @@ export const getChannelInfo = defineTool({
     channel: channelSchema.describe('Detailed channel information'),
   }),
   handle: async params => {
-    const data = await slackApi<{ channel: SlackChannel }>('conversations.info', {
+    const data = await slackApi<{ channel?: SlackChannel }>('conversations.info', {
       channel: params.channel,
     });
-    return { channel: mapChannel(data.channel) };
+    return { channel: mapChannel(data.channel ?? {}) };
   },
 });

@@ -22,16 +22,16 @@ export const setChannelPurpose = defineTool({
   }),
   handle: async params => {
     const data = await slackApi<{
-      channel: { purpose: { value?: string; creator?: string; last_set?: number } };
+      channel?: { purpose?: { value?: string; creator?: string; last_set?: number } };
     }>('conversations.setPurpose', {
       channel: params.channel,
       purpose: params.purpose,
     });
     return {
       purpose: {
-        value: data.channel.purpose.value ?? params.purpose,
-        creator: data.channel.purpose.creator ?? '',
-        last_set: data.channel.purpose.last_set ?? 0,
+        value: data.channel?.purpose?.value ?? params.purpose,
+        creator: data.channel?.purpose?.creator ?? '',
+        last_set: data.channel?.purpose?.last_set ?? 0,
       },
     };
   },
