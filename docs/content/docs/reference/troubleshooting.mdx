@@ -100,7 +100,7 @@ Use `opentabs audit` to see recent tool invocations with their durations and err
 **Symptom**: Claude Code, Cursor, or another MCP client reports a connection or authentication error.
 
 1. **Server running?** — `opentabs status` or `curl http://127.0.0.1:9515/health`
-2. **Correct URL** — The endpoint is `http://localhost:9515/mcp` (not `/ws` or `/`)
+2. **Correct URL** — The endpoint is `http://127.0.0.1:9515/mcp` (not `/ws` or `/`)
 3. **Auth token** — `Authorization: Bearer <secret>` must match the `secret` in `~/.opentabs/extension/auth.json`. Get it with:
    ```bash
    opentabs config show --json --show-secret | jq -r .secret
