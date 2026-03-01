@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect } from 'react';
 
 type Theme = 'light' | 'dark';
 
@@ -28,14 +28,14 @@ const useTheme = (): { theme: Theme; toggleTheme: () => void } => {
     );
   }, []);
 
-  const toggleTheme = useCallback(() => {
+  const toggleTheme = () => {
     const next: Theme = document.documentElement.classList.contains('dark') ? 'light' : 'dark';
     applyTheme(next);
     setTheme(next);
     chrome.storage.local.set({ [STORAGE_KEY]: next }).catch(() => {
       // Storage write failed — theme is still applied visually
     });
-  }, []);
+  };
 
   return { theme, toggleTheme };
 };

@@ -3,7 +3,7 @@ import { NumberStepper } from './retro/NumberStepper.js';
 import { DEFAULT_SERVER_PORT, SERVER_PORT_KEY } from '../../constants.js';
 import { useTheme } from '../hooks/useTheme.js';
 import { Moon, Sun } from 'lucide-react';
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect } from 'react';
 import type { PortChangedMessage } from '../../extension-messages.js';
 
 const PortEditor = () => {
@@ -21,11 +21,11 @@ const PortEditor = () => {
     );
   }, []);
 
-  const handleChange = useCallback((value: number) => {
+  const handleChange = (value: number) => {
     chrome.storage.local.set({ [SERVER_PORT_KEY]: value }).catch(() => {});
     const message: PortChangedMessage = { type: 'port-changed', port: value };
     chrome.runtime.sendMessage(message).catch(() => {});
-  }, []);
+  };
 
   if (initialPort === null) return null;
 

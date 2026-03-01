@@ -20,7 +20,7 @@ import { Tooltip } from './components/retro/Tooltip.js';
 import { SearchResults } from './components/SearchResults.js';
 import { useServerNotifications } from './hooks/useServerNotifications.js';
 import { Search, X } from 'lucide-react';
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import type { BrowserToolState, FailedPluginState, PluginSearchResult, PluginState } from './bridge.js';
 import type { DisconnectReason, InternalMessage } from '../extension-messages.js';
 import type { ConfirmationData } from './components/ConfirmationDialog.js';
@@ -57,7 +57,7 @@ const App = () => {
     pluginsRef.current = plugins;
   }, [connected, loading, plugins]);
 
-  const loadPlugins = useCallback((): Promise<void> => {
+  const loadPlugins = (): Promise<void> => {
     const now = Date.now();
     if (now - lastFetchRef.current < 200) return Promise.resolve();
     lastFetchRef.current = now;
@@ -88,7 +88,7 @@ const App = () => {
       .catch(() => {
         // Server may not be ready yet
       });
-  }, [setActiveTools]);
+  };
 
   const { handleNotification, clearConfirmationTimeout } = useServerNotifications({
     setPlugins,
@@ -97,7 +97,7 @@ const App = () => {
     pendingTabStates,
   });
 
-  const handleSearchChange = useCallback((query: string) => {
+  const handleSearchChange = (query: string) => {
     setSearchQuery(query);
     clearTimeout(npmSearchTimer.current);
     if (!query.trim()) {
@@ -118,38 +118,35 @@ const App = () => {
           setNpmSearching(false);
         });
     }, 400);
-  }, []);
+  };
 
-  const handleInstall = useCallback(
-    (name: string) => {
-      setInstallingPlugins(prev => new Set(prev).add(name));
-      setInstallErrors(prev => {
-        const next = new Map(prev);
-        next.delete(name);
-        return next;
-      });
-      installPlugin(name)
-        .then(() => {
-          setInstallingPlugins(prev => {
-            const next = new Set(prev);
-            next.delete(name);
-            return next;
-          });
-          handleSearchChange('');
-        })
-        .catch((err: unknown) => {
-          setInstallingPlugins(prev => {
-            const next = new Set(prev);
-            next.delete(name);
-            return next;
-          });
-          setInstallErrors(prev => new Map(prev).set(name, err instanceof Error ? err.message : String(err)));
+  const handleInstall = (name: string) => {
+    setInstallingPlugins(prev => new Set(prev).add(name));
+    setInstallErrors(prev => {
+      const next = new Map(prev);
+      next.delete(name);
+      return next;
+    });
+    installPlugin(name)
+      .then(() => {
+        setInstallingPlugins(prev => {
+          const next = new Set(prev);
+          next.delete(name);
+          return next;
         });
-    },
-    [handleSearchChange],
-  );
+        handleSearchChange('');
+      })
+      .catch((err: unknown) => {
+        setInstallingPlugins(prev => {
+          const next = new Set(prev);
+          next.delete(name);
+          return next;
+        });
+        setInstallErrors(prev => new Map(prev).set(name, err instanceof Error ? err.message : String(err)));
+      });
+  };
 
-  const handleRemove = useCallback((pluginName: string) => {
+  const handleRemove = (pluginName: string) => {
     setRemovingPlugins(prev => new Set(prev).add(pluginName));
     removePlugin(pluginName)
       .then(() => {
@@ -166,13 +163,13 @@ const App = () => {
           return next;
         });
       });
-  }, []);
+  };
 
-  const handleUpdate = useCallback((pluginName: string) => {
+  const handleUpdate = (pluginName: string) => {
     updatePlugin(pluginName).catch(() => {
       // plugins.changed notification will refresh the list on success
     });
-  }, []);
+  };
 
   useEffect(() => {
     void getConnectionState()
@@ -264,26 +261,23 @@ const App = () => {
     return () => chrome.runtime.onMessage.removeListener(listener);
   }, [loadPlugins, handleNotification, handleSearchChange]);
 
-  const handleConfirmationRespond = useCallback(
-    (
-      id: string,
-      decision: 'allow_once' | 'allow_always' | 'deny',
-      scope?: 'tool_domain' | 'tool_all' | 'domain_all',
-    ) => {
-      clearConfirmationTimeout(id);
-      sendConfirmationResponse(id, decision, scope);
-      setPendingConfirmations(prev => prev.filter(c => c.id !== id));
-    },
-    [clearConfirmationTimeout],
-  );
+  const handleConfirmationRespond = (
+    id: string,
+    decision: 'allow_once' | 'allow_always' | 'deny',
+    scope?: 'tool_domain' | 'tool_all' | 'domain_all',
+  ) => {
+    clearConfirmationTimeout(id);
+    sendConfirmationResponse(id, decision, scope);
+    setPendingConfirmations(prev => prev.filter(c => c.id !== id));
+  };
 
-  const handleDenyAll = useCallback(() => {
+  const handleDenyAll = () => {
     for (const c of pendingConfirmations) {
       clearConfirmationTimeout(c.id);
       sendConfirmationResponse(c.id, 'deny');
     }
     setPendingConfirmations([]);
-  }, [pendingConfirmations, clearConfirmationTimeout]);
+  };
 
   const hasContent = plugins.length > 0 || failedPlugins.length > 0 || browserTools.length > 0;
   const showPlugins = !loading && connected && (hasContent || !!searchQuery);
