@@ -2,16 +2,13 @@ import { cn } from '../../lib/cn';
 import * as DialogPrimitive from '@radix-ui/react-dialog';
 import { VisuallyHidden } from '@radix-ui/react-visually-hidden';
 import { X } from 'lucide-react';
-import * as React from 'react';
+import type { ComponentProps } from 'react';
 
 const Dialog = DialogPrimitive.Root;
 const DialogTrigger = DialogPrimitive.Trigger;
 const DialogClose = DialogPrimitive.Close;
 
-const DialogOverlay = React.forwardRef<
-  React.ComponentRef<typeof DialogPrimitive.Overlay>,
-  React.ComponentPropsWithoutRef<typeof DialogPrimitive.Overlay>
->(({ className, ...props }, ref) => (
+const DialogOverlay = ({ className, ref, ...props }: ComponentProps<typeof DialogPrimitive.Overlay>) => (
   <DialogPrimitive.Overlay
     ref={ref}
     className={cn(
@@ -20,13 +17,9 @@ const DialogOverlay = React.forwardRef<
     )}
     {...props}
   />
-));
-DialogOverlay.displayName = DialogPrimitive.Overlay.displayName;
+);
 
-const DialogContent = React.forwardRef<
-  React.ComponentRef<typeof DialogPrimitive.Content>,
-  React.ComponentPropsWithoutRef<typeof DialogPrimitive.Content>
->(({ className, children, ...props }, ref) => (
+const DialogContent = ({ className, children, ref, ...props }: ComponentProps<typeof DialogPrimitive.Content>) => (
   <DialogPrimitive.Portal>
     <DialogOverlay />
     <DialogPrimitive.Content
@@ -42,42 +35,34 @@ const DialogContent = React.forwardRef<
       <div className="relative flex flex-col">{children}</div>
     </DialogPrimitive.Content>
   </DialogPrimitive.Portal>
-));
-DialogContent.displayName = DialogPrimitive.Content.displayName;
-
-const DialogHeader = React.forwardRef<HTMLDivElement, React.HTMLAttributes<HTMLDivElement>>(
-  ({ className, children, ...props }, ref) => (
-    <div
-      ref={ref}
-      className={cn(
-        'bg-primary text-primary-foreground border-border flex min-h-10 items-center justify-between border-b-2 px-4',
-        className,
-      )}
-      {...props}>
-      {children}
-      <DialogPrimitive.Close className="cursor-pointer outline-none" aria-label="Close">
-        <X className="h-4 w-4" />
-      </DialogPrimitive.Close>
-    </div>
-  ),
 );
-DialogHeader.displayName = 'DialogHeader';
 
-const DialogBody = React.forwardRef<HTMLDivElement, React.HTMLAttributes<HTMLDivElement>>(
-  ({ className, ...props }, ref) => <div ref={ref} className={cn('px-4 py-3', className)} {...props} />,
+const DialogHeader = ({ className, children, ref, ...props }: ComponentProps<'div'>) => (
+  <div
+    ref={ref}
+    className={cn(
+      'bg-primary text-primary-foreground border-border flex min-h-10 items-center justify-between border-b-2 px-4',
+      className,
+    )}
+    {...props}>
+    {children}
+    <DialogPrimitive.Close className="cursor-pointer outline-none" aria-label="Close">
+      <X className="h-4 w-4" />
+    </DialogPrimitive.Close>
+  </div>
 );
-DialogBody.displayName = 'DialogBody';
 
-const DialogFooter = React.forwardRef<HTMLDivElement, React.HTMLAttributes<HTMLDivElement>>(
-  ({ className, ...props }, ref) => (
-    <div
-      ref={ref}
-      className={cn('border-border flex items-center justify-end gap-2 border-t-2 px-4 py-2', className)}
-      {...props}
-    />
-  ),
+const DialogBody = ({ className, ref, ...props }: ComponentProps<'div'>) => (
+  <div ref={ref} className={cn('px-4 py-3', className)} {...props} />
 );
-DialogFooter.displayName = 'DialogFooter';
+
+const DialogFooter = ({ className, ref, ...props }: ComponentProps<'div'>) => (
+  <div
+    ref={ref}
+    className={cn('border-border flex items-center justify-end gap-2 border-t-2 px-4 py-2', className)}
+    {...props}
+  />
+);
 
 const DialogDescription = DialogPrimitive.Description;
 
