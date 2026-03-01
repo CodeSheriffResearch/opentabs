@@ -337,6 +337,7 @@ export const getEnabledToolsList = (
       const properties = (clonedSchema.properties ?? {}) as Record<string, unknown>;
       properties.tabId = {
         type: 'integer',
+        minimum: 1,
         description:
           'Optional. Target a specific browser tab by its ID. When omitted, the platform automatically selects the best matching tab. Use browser_list_tabs or plugin_list_tabs to discover tab IDs.',
       };
