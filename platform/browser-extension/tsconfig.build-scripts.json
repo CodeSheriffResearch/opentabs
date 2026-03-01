@@ -3,5 +3,5 @@
   "compilerOptions": {
     "noEmit": true
   },
-  "include": ["build-*.ts"]
+  "include": ["build-*.ts", "esbuild-plugin-babel.d.ts"]
 }

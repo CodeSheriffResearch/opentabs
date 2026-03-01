@@ -4,6 +4,7 @@
  */
 
 import { build } from 'esbuild';
+import babel from 'esbuild-plugin-babel';
 import { unlink } from 'node:fs/promises';
 import { join } from 'node:path';
 
@@ -29,6 +30,15 @@ await build({
   define: {
     'process.env.NODE_ENV': '"production"',
   },
+  plugins: [
+    babel({
+      filter: /\.[jt]sx?$/,
+      config: {
+        plugins: ['babel-plugin-react-compiler'],
+        presets: ['@babel/preset-typescript', ['@babel/preset-react', { runtime: 'automatic' }]],
+      },
+    }),
+  ],
 });
 
 console.log('[opentabs:build:side-panel] Built successfully');
