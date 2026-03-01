@@ -268,6 +268,54 @@ describe('handleStatus --json error paths', () => {
     expect(exitSpy).toHaveBeenCalledWith(1);
   });
 
+  test('outputs JSON with status "not_found" when response has status but no OpenTabs-specific fields (e.g. ChromeDriver)', async () => {
+    fetchMock.mockResolvedValue(
+      new Response(JSON.stringify({ status: 'ok' }), {
+        status: 200,
+        headers: { 'content-type': 'application/json' },
+      }),
+    );
+
+    await expect(handleStatus({ json: true })).rejects.toThrow('process.exit(1)');
+
+    expect(consoleSpy).toHaveBeenCalledWith(
+      JSON.stringify({ status: 'not_found', error: 'No OpenTabs server found on port 9515' }),
+    );
+    expect(exitSpy).toHaveBeenCalledWith(1);
+  });
+
+  test('outputs JSON with status "not_found" when version is missing (non-OpenTabs server)', async () => {
+    fetchMock.mockResolvedValue(
+      new Response(JSON.stringify({ status: 'ok', toolCount: 0 }), {
+        status: 200,
+        headers: { 'content-type': 'application/json' },
+      }),
+    );
+
+    await expect(handleStatus({ json: true })).rejects.toThrow('process.exit(1)');
+
+    expect(consoleSpy).toHaveBeenCalledWith(
+      JSON.stringify({ status: 'not_found', error: 'No OpenTabs server found on port 9515' }),
+    );
+    expect(exitSpy).toHaveBeenCalledWith(1);
+  });
+
+  test('outputs JSON with status "not_found" when toolCount is missing (non-OpenTabs server)', async () => {
+    fetchMock.mockResolvedValue(
+      new Response(JSON.stringify({ status: 'ok', version: '1.0.0' }), {
+        status: 200,
+        headers: { 'content-type': 'application/json' },
+      }),
+    );
+
+    await expect(handleStatus({ json: true })).rejects.toThrow('process.exit(1)');
+
+    expect(consoleSpy).toHaveBeenCalledWith(
+      JSON.stringify({ status: 'not_found', error: 'No OpenTabs server found on port 9515' }),
+    );
+    expect(exitSpy).toHaveBeenCalledWith(1);
+  });
+
   test('outputs JSON with status "invalid_response" when response is not valid JSON', async () => {
     fetchMock.mockResolvedValue(
       new Response('not valid json', { status: 200, headers: { 'content-type': 'text/plain' } }),

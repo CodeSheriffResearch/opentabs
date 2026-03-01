@@ -114,7 +114,7 @@ const handleStatus = async (options: StatusOptions): Promise<void> => {
       process.exit(1);
     }
     const data = (await res.json()) as Record<string, unknown>;
-    if (typeof data.status !== 'string') {
+    if (typeof data.status !== 'string' || typeof data.version !== 'string' || typeof data.toolCount !== 'number') {
       if (options.json) {
         console.log(JSON.stringify({ status: 'not_found', error: `No OpenTabs server found on port ${port}` }));
       } else {
@@ -128,7 +128,7 @@ const handleStatus = async (options: StatusOptions): Promise<void> => {
     } else {
       const mcpClients = Number(data.mcpClients) || 0;
       const plugins = Number(data.plugins) || 0;
-      const toolCount = Number(data.toolCount) || 0;
+      const toolCount = data.toolCount || 0;
       const browserToolCount = typeof data.browserToolCount === 'number' ? data.browserToolCount : null;
       const pluginToolCount = typeof data.pluginToolCount === 'number' ? data.pluginToolCount : null;
       const uptime = Number(data.uptime) || 0;
@@ -138,7 +138,7 @@ const handleStatus = async (options: StatusOptions): Promise<void> => {
 
       console.log(pc.bold('OpenTabs MCP Server'));
       console.log(`${pad('Status')}${pc.green('running')}`);
-      console.log(`${pad('Version')}${String(data.version)}`);
+      console.log(`${pad('Version')}${data.version}`);
       if (serverSdkVersion) {
         console.log(`${pad('SDK')}${serverSdkVersion}`);
       }
@@ -170,7 +170,7 @@ const handleStatus = async (options: StatusOptions): Promise<void> => {
       } else {
         console.log(`${pad('Tools')}${toolCount > 0 ? pc.green(String(toolCount)) : pc.dim('0')}`);
       }
-      console.log(`${pad('Plugin reloads')}${String(data.reloadCount)}`);
+      console.log(`${pad('Plugin reloads')}${typeof data.reloadCount === 'number' ? String(data.reloadCount) : '0'}`);
 
       if (mcpClients === 0) {
         console.log('');
