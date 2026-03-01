@@ -472,6 +472,10 @@ This runs `tsc` (TypeScript compilation) then `opentabs-plugin build`, which:
 4. Auto-registers the plugin in `~/.opentabs/config.json` (first build only)
 5. Calls `POST /reload` to notify the running MCP server
 
+<Alert status="info">
+  `opentabs-plugin` is the binary provided by `@opentabs-dev/plugin-tools`, installed as a devDependency when you run `npm install`. It runs automatically via `npm run build` and `npm run dev` — there is no need to invoke it directly. If you do need to run it outside your plugin directory, use `npx @opentabs-dev/plugin-tools build` (not `npx opentabs-plugin`, which will fail with a 404 error because there is no unscoped npm package by that name).
+</Alert>
+
 After building, verify the server sees your plugin:
 
 ```bash
