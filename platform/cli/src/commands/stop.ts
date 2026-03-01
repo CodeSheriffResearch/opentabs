@@ -90,12 +90,14 @@ const handleStop = async (options: StopOptions): Promise<void> => {
     const res = await fetch(url, { signal: AbortSignal.timeout(3_000) });
     if (res.ok) {
       const data = (await res.json()) as Record<string, unknown>;
-      if (typeof data.status === 'string') {
+      if (typeof data.status === 'string' && typeof data.version === 'string') {
         console.log(
-          'Server is running but was not started with --background. Stop it with Ctrl+C in the terminal where it is running.',
+          `Server is running but was not started with --background.\n  - If running in a terminal: press Ctrl+C\n  - Otherwise: find the process with \`lsof -i :${port}\` and kill it`,
         );
         return;
       }
+      console.log(`No OpenTabs server found on port ${port}.`);
+      return;
     }
   } catch (err: unknown) {
     if (isConnectionRefused(err)) {
