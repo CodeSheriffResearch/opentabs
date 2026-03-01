@@ -2017,6 +2017,11 @@ test.describe('Browser tools — WebSocket frame capture', () => {
     const data = parseToolResult(getResult.content);
     expect((data.frames as Array<unknown>).length).toBeGreaterThan(0);
 
+    // Navigate away to sever the WebSocket connection before verifying the buffer is empty.
+    // Without this, the echo server can deliver new frames between the clear and the read,
+    // causing a spurious non-zero frame count.
+    await mcpClient.callTool('browser_navigate_tab', { tabId, url: testServer.url });
+
     // Verify the buffer is now empty
     const getResult2 = await mcpClient.callTool('browser_get_websocket_frames', { tabId });
     expect(getResult2.isError).toBe(false);
