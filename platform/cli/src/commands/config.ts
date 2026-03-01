@@ -35,6 +35,15 @@ const maskSecret = (secret: string): string => {
   return '****';
 };
 
+/**
+ * Normalize a raw config object for display: ensures expected sections always appear
+ * regardless of whether they were written to the config file. Does not modify the file.
+ */
+const normalizeConfigForDisplay = (config: Record<string, unknown>): Record<string, unknown> => ({
+  ...config,
+  browserToolPolicy: config.browserToolPolicy ?? {},
+});
+
 const handleConfigShow = async (options: ConfigShowOptions): Promise<void> => {
   const configPath = getConfigPath();
   const result = await readConfig(configPath);
@@ -50,6 +59,7 @@ const handleConfigShow = async (options: ConfigShowOptions): Promise<void> => {
   }
 
   const config = result.config;
+  const normalized = normalizeConfigForDisplay(config);
   const secret = await readAuthSecret();
   const displaySecret = secret ? (options.showSecret ? secret : maskSecret(secret)) : null;
 
@@ -63,7 +73,7 @@ const handleConfigShow = async (options: ConfigShowOptions): Promise<void> => {
       );
     }
     const output = {
-      ...config,
+      ...normalized,
       ...(displaySecret ? { secret: displaySecret } : {}),
       ...(mcpClients !== undefined ? { mcpClients } : {}),
     };
@@ -73,7 +83,7 @@ const handleConfigShow = async (options: ConfigShowOptions): Promise<void> => {
     console.log(pc.dim(configPath));
     console.log('');
 
-    for (const [key, value] of Object.entries(config)) {
+    for (const [key, value] of Object.entries(normalized)) {
       if (key === 'localPlugins' && Array.isArray(value)) {
         console.log(`  ${pc.cyan('localPlugins')}`);
         if (value.length === 0) {
@@ -810,4 +820,5 @@ export {
   KNOWN_KEYS,
   applyPolicyEntry,
   handleSetLocalPluginsAdd,
+  normalizeConfigForDisplay,
 };

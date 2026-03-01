@@ -3,6 +3,7 @@ import {
   handleSetLocalPluginsAdd,
   levenshtein,
   maskSecret,
+  normalizeConfigForDisplay,
   resolveStoredPluginPath,
   suggestKey,
 } from './config.js';
@@ -200,6 +201,52 @@ describe('applyPolicyEntry', () => {
     applyPolicyEntry(map, 'tool_a', true);
     expect(Object.hasOwn(map, 'tool_a')).toBe(false);
     expect(map['tool_b']).toBe(false);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// normalizeConfigForDisplay
+// ---------------------------------------------------------------------------
+
+describe('normalizeConfigForDisplay', () => {
+  test('adds browserToolPolicy: {} when key is absent from config', () => {
+    const result = normalizeConfigForDisplay({ permissions: {} });
+    expect(result['browserToolPolicy']).toEqual({});
+  });
+
+  test('preserves existing browserToolPolicy entries when present', () => {
+    const policy = { browser_execute_script: false };
+    const result = normalizeConfigForDisplay({ browserToolPolicy: policy });
+    expect(result['browserToolPolicy']).toEqual(policy);
+  });
+
+  test('preserves empty object {} browserToolPolicy as-is (not replaced)', () => {
+    const result = normalizeConfigForDisplay({ browserToolPolicy: {} });
+    expect(result['browserToolPolicy']).toEqual({});
+  });
+
+  test('preserves all other keys unchanged', () => {
+    const config = {
+      port: 9000,
+      permissions: { trustedDomains: ['example.com'] },
+      localPlugins: ['/some/plugin'],
+    };
+    const result = normalizeConfigForDisplay(config);
+    expect(result['port']).toBe(9000);
+    expect(result['permissions']).toEqual({ trustedDomains: ['example.com'] });
+    expect(result['localPlugins']).toEqual(['/some/plugin']);
+  });
+
+  test('does not modify the input config object', () => {
+    const config: Record<string, unknown> = { permissions: {} };
+    normalizeConfigForDisplay(config);
+    expect(Object.hasOwn(config, 'browserToolPolicy')).toBe(false);
+  });
+
+  test('browserToolPolicy appears in output even for empty config', () => {
+    const result = normalizeConfigForDisplay({});
+    expect(Object.hasOwn(result, 'browserToolPolicy')).toBe(true);
+    expect(result['browserToolPolicy']).toEqual({});
   });
 });
 
