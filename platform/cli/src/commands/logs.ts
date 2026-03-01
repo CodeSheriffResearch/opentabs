@@ -109,8 +109,11 @@ const followFile = async (filePath: string, initialOffset: number, filter?: stri
     }
     if (currentSize <= offset) return;
     reading = true;
+    const startOffset = offset;
+    let actualBytesRead = 0;
     const stream = createReadStream(filePath, { start: offset });
     stream.on('data', (chunk: string | Buffer) => {
+      actualBytesRead += Buffer.isBuffer(chunk) ? chunk.length : Buffer.byteLength(chunk);
       const text = Buffer.isBuffer(chunk) ? decoder.write(chunk) : chunk;
       if (!filter) {
         process.stdout.write(text);
@@ -128,7 +131,7 @@ const followFile = async (filePath: string, initialOffset: number, filter?: stri
       }
     });
     stream.on('end', () => {
-      offset = currentSize;
+      offset = startOffset + actualBytesRead;
       reading = false;
       if (readRequested) {
         readRequested = false;

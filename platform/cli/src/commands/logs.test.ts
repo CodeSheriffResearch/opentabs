@@ -144,6 +144,51 @@ describe('followFile', () => {
     }
   });
 
+  test('does not re-read bytes consumed beyond statSync size when concurrent writes extend the stream', async () => {
+    // Simulate: statSync reports 100 bytes before the stream opens, but the server
+    // writes 50 more bytes while the stream is active — so the stream reads 150 bytes.
+    // offset must advance to 150 (actual bytes consumed), not 100 (stale currentSize).
+    // Without the fix, offset would be set to 100 on 'end', causing the next cycle to
+    // re-read bytes 100-150 and print them again as duplicate output.
+    let firstStream: EventEmitter | undefined;
+
+    mockStatSync
+      .mockReturnValueOnce({ size: 100 } as ReturnType<typeof statSync>) // first cycle
+      .mockReturnValueOnce({ size: 150 } as ReturnType<typeof statSync>); // second cycle check
+
+    mockCreateReadStream.mockImplementationOnce(() => {
+      firstStream = new EventEmitter();
+      return firstStream as unknown as ReturnType<typeof createReadStream>;
+    });
+
+    mockWatch.mockReturnValue(createMockWatcher() as unknown as ReturnType<typeof watch>);
+
+    const writeSpy = vi.spyOn(process.stdout, 'write').mockReturnValue(true);
+    try {
+      void followFile('/tmp/test.log', 0);
+      await Promise.resolve();
+
+      expect(firstStream).toBeDefined();
+
+      // Emit 150 bytes total — 50 beyond statSync's reported size (concurrent server write)
+      const chunk = Buffer.alloc(150, 0x78); // 'x' * 150
+      (firstStream as EventEmitter).emit('data', chunk);
+      (firstStream as EventEmitter).emit('end');
+      await Promise.resolve();
+
+      // Trigger another file-change event via the watcher callback
+      const [, watchListener] = mockWatch.mock.calls[0] as [unknown, () => void];
+      watchListener();
+      await Promise.resolve();
+
+      // createReadStream must NOT be called again: offset advanced to 150 which equals
+      // the current file size, so there is no new content to read.
+      expect(mockCreateReadStream).toHaveBeenCalledTimes(1);
+    } finally {
+      writeSpy.mockRestore();
+    }
+  });
+
   test('does not propagate watcher errors (e.g., when the log file is deleted)', async () => {
     const mockWatcher = createMockWatcher();
     mockStatSync.mockReturnValue({ size: 0 } as ReturnType<typeof statSync>);
