@@ -149,7 +149,7 @@ const printFirstTimeInstructions = (extensionDest: string, port: number, secret:
   console.log('');
   console.log('  2. Configure your MCP client:');
   console.log('');
-  printMcpClientConfigs(mcpUrl, secret, true);
+  printMcpClientConfigs(mcpUrl, secret, false);
 };
 
 const indent = (json: string, prefix: string): string =>
@@ -197,7 +197,7 @@ const getMcpClientConfigs = (
   ];
 };
 
-const printMcpClientConfigs = (mcpUrl: string, secret: string | null, primaryOnly = false): void => {
+const printMcpClientConfigs = (mcpUrl: string, secret: string | null, primaryOnly = false, showHint = true): void => {
   const pad = '     ';
   const configs = getMcpClientConfigs(mcpUrl, secret);
   const displayConfigs = primaryOnly ? configs.slice(0, 1) : configs;
@@ -229,7 +229,7 @@ const printMcpClientConfigs = (mcpUrl: string, secret: string | null, primaryOnl
   } else {
     console.log(pc.dim(`${pad}pointing to ${mcpUrl} with an Authorization: Bearer header`));
   }
-  if (!primaryOnly) {
+  if (!primaryOnly && showHint) {
     console.log(
       pc.dim(`${pad}Run ${pc.bold('opentabs config show --show-secret')} to see MCP client configuration at any time.`),
     );
@@ -265,7 +265,7 @@ const handleStart = async (options: StartOptions): Promise<void> => {
     }
     console.log(pc.dim('  MCP client config (add to your client):'));
     console.log('');
-    printMcpClientConfigs(`http://127.0.0.1:${port}/mcp`, secret);
+    printMcpClientConfigs(`http://127.0.0.1:${port}/mcp`, secret, false, false);
     process.exit(0);
   }
 
@@ -288,21 +288,25 @@ const handleStart = async (options: StartOptions): Promise<void> => {
 
   const logFilePath = getLogFilePath();
 
-  console.log(`Starting OpenTabs MCP server on port ${pc.bold(String(port))}...`);
-  console.log('');
-  const label = (s: string) => `  ${pc.cyan(s.padEnd(15))}`;
-  console.log(`${label('MCP endpoint:')}http://127.0.0.1:${port}/mcp`);
-  console.log(`${label('Health check:')}http://127.0.0.1:${port}/health`);
-  console.log(`${label('Log file:')}${logFilePath}`);
-  console.log('');
-
-  if (isFirstTime) {
-    const extensionDest = resolve(configDir, 'extension');
-    printFirstTimeInstructions(extensionDest, port, secret);
-  } else {
-    console.log(pc.dim(`  Run ${pc.bold('opentabs config show --show-secret')} to see MCP client configuration.`));
+  const printStartupHeader = (): void => {
+    console.log(`Starting OpenTabs MCP server on port ${pc.bold(String(port))}...`);
     console.log('');
-  }
+    const label = (s: string) => `  ${pc.cyan(s.padEnd(15))}`;
+    console.log(`${label('MCP endpoint:')}http://127.0.0.1:${port}/mcp`);
+    console.log(`${label('Health check:')}http://127.0.0.1:${port}/health`);
+    console.log(`${label('Log file:')}${logFilePath}`);
+    console.log('');
+  };
+
+  const printSetupHints = (): void => {
+    if (isFirstTime) {
+      const extensionDest = resolve(configDir, 'extension');
+      printFirstTimeInstructions(extensionDest, port, secret);
+    } else {
+      console.log(pc.dim(`  Run ${pc.bold('opentabs config show --show-secret')} to see MCP client configuration.`));
+      console.log('');
+    }
+  };
 
   if (options.background) {
     const logStream = createWriteStream(logFilePath, { flags: 'a', mode: 0o600 });
@@ -319,13 +323,41 @@ const handleStart = async (options: StartOptions): Promise<void> => {
       process.exit(1);
     }
 
-    await writeFile(getPidFilePath(), String(pid), { mode: 0o600 });
+    // Wait briefly to detect early crashes (e.g., port conflict, missing entry)
+    const crashed = await new Promise<boolean>(resolve => {
+      const timer = setTimeout(() => {
+        child.removeAllListeners('exit');
+        resolve(false);
+      }, 2000);
+      child.on('exit', () => {
+        clearTimeout(timer);
+        resolve(true);
+      });
+    });
+
+    if (crashed) {
+      console.error(pc.yellow(`Warning: Background server exited unexpectedly. Check logs: ${logFilePath}`));
+      process.exit(1);
+    }
+
+    try {
+      await writeFile(getPidFilePath(), String(pid), { mode: 0o600 });
+    } catch (err) {
+      console.error(pc.red(`Error: Failed to write PID file: ${toErrorMessage(err)}`));
+      process.exit(1);
+    }
+
+    printStartupHeader();
+    printSetupHints();
 
     console.log(`Server started in background (PID: ${String(pid)})`);
     console.log(pc.dim(`Logs: ${logFilePath}`));
     console.log(pc.dim(`Stop: opentabs stop`));
     return;
   }
+
+  printStartupHeader();
+  printSetupHints();
 
   console.log(pc.dim('  Press Ctrl+C to stop'));
   console.log('');

@@ -205,7 +205,7 @@ const handleConfigShow = async (options: ConfigShowOptions): Promise<void> => {
       console.log('');
       console.log(pc.dim('  MCP client config (add to your client):'));
       console.log('');
-      printMcpClientConfigs(mcpUrl, secret);
+      printMcpClientConfigs(mcpUrl, secret, false, false);
     }
   }
 };
