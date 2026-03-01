@@ -109,8 +109,7 @@ test.describe('Plugin logging — full pipeline', () => {
     await callToolExpectSuccess(mcpClient, mcpServer, 'e2e-test_log_levels', { prefix });
 
     // The log_levels tool emits exactly 4 entries (debug, info, warning, error).
-    // Wait for the buffer to reach exactly bufferBefore + 4 — if duplicate
-    // entries were emitted the count would overshoot.
+    // Wait for the buffer to grow by at least 4 entries.
     await mcpServer.waitForHealth(h => {
       const buf = h.pluginDetails?.find(p => p.name === 'e2e-test')?.logBufferSize ?? 0;
       return buf >= bufferBefore + 4;
@@ -118,7 +117,11 @@ test.describe('Plugin logging — full pipeline', () => {
 
     const healthAfter = await mcpServer.health();
     const bufferAfter = healthAfter?.pluginDetails?.find(p => p.name === 'e2e-test')?.logBufferSize ?? 0;
-    expect(bufferAfter).toBeGreaterThanOrEqual(bufferBefore + 4);
+    // Allow a small margin for parallel test activity (e.g. another test emitting 1-2 extra
+    // entries into the shared buffer). A tolerance of [4, 6] catches gross overcounting like
+    // double-emission (which would produce 8 entries) while staying green under concurrency.
+    expect(bufferAfter - bufferBefore).toBeGreaterThanOrEqual(4);
+    expect(bufferAfter - bufferBefore).toBeLessThanOrEqual(6);
 
     await page.close();
   });
