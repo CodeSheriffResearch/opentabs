@@ -2712,7 +2712,7 @@ export const InstallPaths = () => (
         fontFamily="var(--font-mono), monospace"
         fill="var(--color-primary)"
         textAnchor="middle">
-        create-opentabs-plugin
+        opentabs plugin create
       </text>
       <text
         x="354"
@@ -2722,7 +2722,7 @@ export const InstallPaths = () => (
         fill="var(--color-foreground)"
         opacity="0.5"
         textAnchor="middle">
-        Users setup + SDK + plugin CLI
+        CLI + SDK + build tools
       </text>
 
       {/* ── Box 3: For Contributors ──────────────────────── */}
