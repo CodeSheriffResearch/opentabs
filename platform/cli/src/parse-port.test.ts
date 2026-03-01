@@ -1,5 +1,8 @@
-import { parsePort, resolvePort } from './parse-port.js';
-import { afterAll, beforeAll, describe, expect, test } from 'vitest';
+import { parsePort, resetConfigPortCache, resolvePort } from './parse-port.js';
+import { afterAll, beforeAll, beforeEach, describe, expect, test } from 'vitest';
+import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 
 // ---------------------------------------------------------------------------
 // parsePort
@@ -47,9 +50,18 @@ describe('parsePort', () => {
 
 describe('resolvePort', () => {
   const originalEnv = process.env.OPENTABS_PORT;
+  const originalConfigDir = process.env.OPENTABS_CONFIG_DIR;
+  let tmpDir: string;
 
   beforeAll(() => {
     delete process.env.OPENTABS_PORT;
+    // Point config dir to an empty temp dir so real ~/.opentabs/config.json doesn't interfere
+    tmpDir = mkdtempSync(join(tmpdir(), 'opentabs-parse-port-test-'));
+    process.env.OPENTABS_CONFIG_DIR = tmpDir;
+  });
+
+  beforeEach(() => {
+    resetConfigPortCache();
   });
 
   afterAll(() => {
@@ -58,6 +70,12 @@ describe('resolvePort', () => {
     } else {
       delete process.env.OPENTABS_PORT;
     }
+    if (originalConfigDir !== undefined) {
+      process.env.OPENTABS_CONFIG_DIR = originalConfigDir;
+    } else {
+      delete process.env.OPENTABS_CONFIG_DIR;
+    }
+    rmSync(tmpDir, { recursive: true, force: true });
   });
 
   test('returns options.port when provided', () => {
@@ -103,5 +121,100 @@ describe('resolvePort', () => {
     process.env.OPENTABS_PORT = '3000.5';
     expect(resolvePort({})).toBe(9515);
     delete process.env.OPENTABS_PORT;
+  });
+});
+
+// ---------------------------------------------------------------------------
+// resolvePort — config.json integration
+// ---------------------------------------------------------------------------
+
+describe('resolvePort with config.json', () => {
+  const originalEnv = process.env.OPENTABS_PORT;
+  const originalConfigDir = process.env.OPENTABS_CONFIG_DIR;
+  let tmpDir: string;
+  let configPath: string;
+
+  beforeAll(() => {
+    delete process.env.OPENTABS_PORT;
+    tmpDir = mkdtempSync(join(tmpdir(), 'opentabs-config-port-test-'));
+    configPath = join(tmpDir, 'config.json');
+    process.env.OPENTABS_CONFIG_DIR = tmpDir;
+  });
+
+  beforeEach(() => {
+    resetConfigPortCache();
+    // Clean up config file before each test
+    rmSync(configPath, { force: true });
+  });
+
+  afterAll(() => {
+    if (originalEnv !== undefined) {
+      process.env.OPENTABS_PORT = originalEnv;
+    } else {
+      delete process.env.OPENTABS_PORT;
+    }
+    if (originalConfigDir !== undefined) {
+      process.env.OPENTABS_CONFIG_DIR = originalConfigDir;
+    } else {
+      delete process.env.OPENTABS_CONFIG_DIR;
+    }
+    rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  test('reads port from config.json when no flag or env var is set', () => {
+    writeFileSync(configPath, JSON.stringify({ port: 8888 }));
+    expect(resolvePort({})).toBe(8888);
+  });
+
+  test('--port flag overrides config.json port', () => {
+    writeFileSync(configPath, JSON.stringify({ port: 8888 }));
+    expect(resolvePort({ port: 3000 })).toBe(3000);
+  });
+
+  test('OPENTABS_PORT env var overrides config.json port', () => {
+    writeFileSync(configPath, JSON.stringify({ port: 8888 }));
+    process.env.OPENTABS_PORT = '5000';
+    expect(resolvePort({})).toBe(5000);
+    delete process.env.OPENTABS_PORT;
+  });
+
+  test('falls back to default when config.json is missing', () => {
+    // configPath does not exist (cleaned up in beforeEach)
+    expect(resolvePort({})).toBe(9515);
+  });
+
+  test('falls back to default when config.json has no port field', () => {
+    writeFileSync(configPath, JSON.stringify({ localPlugins: [] }));
+    expect(resolvePort({})).toBe(9515);
+  });
+
+  test('falls back to default when config.json port is not a number', () => {
+    writeFileSync(configPath, JSON.stringify({ port: 'abc' }));
+    expect(resolvePort({})).toBe(9515);
+  });
+
+  test('falls back to default when config.json port is out of range', () => {
+    writeFileSync(configPath, JSON.stringify({ port: 0 }));
+    expect(resolvePort({})).toBe(9515);
+  });
+
+  test('falls back to default when config.json port exceeds 65535', () => {
+    writeFileSync(configPath, JSON.stringify({ port: 70000 }));
+    expect(resolvePort({})).toBe(9515);
+  });
+
+  test('falls back to default when config.json port is a float', () => {
+    writeFileSync(configPath, JSON.stringify({ port: 3000.5 }));
+    expect(resolvePort({})).toBe(9515);
+  });
+
+  test('falls back to default when config.json contains invalid JSON', () => {
+    writeFileSync(configPath, '{ not valid json }');
+    expect(resolvePort({})).toBe(9515);
+  });
+
+  test('falls back to default when config.json is an array', () => {
+    writeFileSync(configPath, JSON.stringify([{ port: 8888 }]));
+    expect(resolvePort({})).toBe(9515);
   });
 });
