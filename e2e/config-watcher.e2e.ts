@@ -220,9 +220,11 @@ test.describe('Config watcher — auto-discovery', () => {
       await waitForLog(server, 'Config watcher: Watching', 10_000);
 
       // Trigger a hot reload (this restarts all file watchers including config watcher).
-      // Count existing occurrences first so we can detect NEW log lines rather than
-      // truncating the log array (truncation races with log lines arriving mid-reload).
+      // Capture both baseline counts before triggering — the config watcher may restart
+      // (emitting 'Config watcher: Watching') before 'Hot reload complete' is logged, so
+      // both counts must be snapshotted before triggerHotReload() to avoid missing new lines.
       const hotReloadCountBefore = server.logs.filter(l => l.includes('Hot reload complete')).length;
+      const watcherCountBefore = server.logs.filter(l => l.includes('Config watcher: Watching')).length;
       server.triggerHotReload();
       await waitFor(
         () => server.logs.filter(l => l.includes('Hot reload complete')).length > hotReloadCountBefore,
@@ -232,7 +234,6 @@ test.describe('Config watcher — auto-discovery', () => {
       );
 
       // Verify config watcher was restarted after hot reload
-      const watcherCountBefore = server.logs.filter(l => l.includes('Config watcher: Watching')).length;
       await waitFor(
         () => server.logs.filter(l => l.includes('Config watcher: Watching')).length > watcherCountBefore,
         10_000,

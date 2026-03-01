@@ -845,6 +845,29 @@ test.describe('Malformed WebSocket messages', () => {
 });
 
 // ---------------------------------------------------------------------------
+// Stale MCP session ID
+// ---------------------------------------------------------------------------
+
+test.describe('Stale MCP session ID', () => {
+  test('stale session ID returns 400 missing session', async ({ mcpServer }) => {
+    const res = await fetch(`http://localhost:${mcpServer.port}/mcp`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Accept: 'application/json',
+        'mcp-session-id': 'nonexistent-session-id-12345',
+        ...(mcpServer.secret ? { Authorization: `Bearer ${mcpServer.secret}` } : {}),
+      },
+      body: JSON.stringify({ jsonrpc: '2.0', method: 'tools/list', params: {}, id: 1 }),
+      signal: AbortSignal.timeout(5_000),
+    });
+    expect(res.status).toBe(400);
+    const text = await res.text();
+    expect(text.toLowerCase()).toContain('missing session');
+  });
+});
+
+// ---------------------------------------------------------------------------
 // MCP session invalidation after close
 // ---------------------------------------------------------------------------
 
