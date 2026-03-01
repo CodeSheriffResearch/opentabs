@@ -123,12 +123,12 @@ const pipeTscStdout = async (
 };
 
 /**
- * Read the wsSecret from ~/.opentabs/config.json for authenticating
+ * Read the wsSecret from ~/.opentabs/extension/auth.json for authenticating
  * with the MCP server's /extension/reload endpoint.
  */
 const readWsSecret = async (): Promise<string | null> => {
   try {
-    const configPath = join(homedir(), '.opentabs', 'config.json');
+    const configPath = join(homedir(), '.opentabs', 'extension', 'auth.json');
     const raw = await readFile(configPath, 'utf-8');
     const parsed: unknown = JSON.parse(raw);
     if (typeof parsed === 'object' && parsed !== null && !Array.isArray(parsed)) {
