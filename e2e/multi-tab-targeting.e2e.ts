@@ -430,3 +430,97 @@ test.describe('Multi-tab targeting — targeted dispatch to unavailable tab', ()
     await page.close();
   });
 });
+
+// ---------------------------------------------------------------------------
+// Test 8: plugin_list_tabs reflects mixed readiness across tabs
+// ---------------------------------------------------------------------------
+
+test.describe('Multi-tab targeting — mixed readiness', () => {
+  test('plugin_list_tabs reports one tab ready:true and another ready:false for the same plugin', async ({
+    mcpServer,
+    testServer,
+    extensionContext,
+    mcpClient,
+  }) => {
+    test.slow();
+
+    // Open first tab and wait for ready
+    const page1 = await setupToolTest(mcpServer, testServer, extensionContext, mcpClient);
+
+    // Open second tab to the same test server
+    const page2 = await openTestAppTab(extensionContext, testServer.url, mcpServer, testServer);
+
+    // Wait for both tabs to be tracked and ready
+    const initialPlugins = await waitForTabCount(mcpClient.callTool.bind(mcpClient), 2);
+    const initialEntry = initialPlugins[0];
+    if (!initialEntry) throw new Error('Expected plugin entry in plugin_list_tabs response');
+    expect(initialEntry.tabs.length).toBe(2);
+    expect(initialEntry.tabs.every(t => t.ready)).toBe(true);
+
+    // Override isReady on page2 to return false. This monkey-patches the
+    // adapter's isReady function in the page's MAIN world without replacing
+    // the adapter itself.
+    await page2.evaluate(() => {
+      const ot = (globalThis as Record<string, unknown>).__openTabs as
+        | { adapters?: Record<string, { isReady?: () => Promise<boolean> }> }
+        | undefined;
+      if (ot?.adapters?.['e2e-test']) {
+        ot.adapters['e2e-test'].isReady = () => Promise.resolve(false);
+      }
+    });
+
+    // Trigger a readiness re-probe by navigating the hash on page2. A hash
+    // change fires chrome.tabs.onUpdated with changeInfo.url, which calls
+    // checkTabChanged → computePluginTabState → probeTabReadiness — without
+    // re-injecting the adapter IIFE (that only happens on status='complete').
+    await page2.evaluate(() => {
+      window.location.hash = '#probe-trigger';
+    });
+
+    // Poll plugin_list_tabs until we see mixed readiness: one tab ready:true,
+    // one tab ready:false
+    await waitFor(
+      async () => {
+        const result = await mcpClient.callTool('plugin_list_tabs', { plugin: 'e2e-test' });
+        if (result.isError) return false;
+        const data = JSON.parse(result.content) as PluginTabsEntry[];
+        const entry = data[0];
+        if (!entry || entry.tabs.length !== 2) return false;
+        const readyCount = entry.tabs.filter(t => t.ready).length;
+        const notReadyCount = entry.tabs.filter(t => !t.ready).length;
+        return readyCount === 1 && notReadyCount === 1;
+      },
+      15_000,
+      500,
+      'plugin_list_tabs to show mixed readiness (1 ready, 1 not ready)',
+    );
+
+    // Final verification: read the plugin_list_tabs response and assert
+    const finalResult = await mcpClient.callTool('plugin_list_tabs', { plugin: 'e2e-test' });
+    expect(finalResult.isError).toBe(false);
+    const finalPlugins = JSON.parse(finalResult.content) as PluginTabsEntry[];
+    const finalEntry = finalPlugins[0];
+    if (!finalEntry) throw new Error('Expected plugin entry in final plugin_list_tabs response');
+
+    // The plugin should still be in 'ready' state (aggregate) because one
+    // tab is still ready
+    expect(finalEntry.state).toBe('ready');
+    expect(finalEntry.tabs.length).toBe(2);
+
+    // Verify exactly one tab is ready and one is not
+    const readyTabs = finalEntry.tabs.filter(t => t.ready);
+    const notReadyTabs = finalEntry.tabs.filter(t => !t.ready);
+    expect(readyTabs.length).toBe(1);
+    expect(notReadyTabs.length).toBe(1);
+
+    // Both tabs should have distinct, valid tab IDs
+    const tabIds = finalEntry.tabs.map(t => t.tabId);
+    expect(new Set(tabIds).size).toBe(2);
+    for (const tab of finalEntry.tabs) {
+      expect(tab.tabId).toBeGreaterThan(0);
+    }
+
+    await page1.close();
+    await page2.close();
+  });
+});
