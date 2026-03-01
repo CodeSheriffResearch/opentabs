@@ -197,7 +197,7 @@ const getMcpClientConfigs = (
   ];
 };
 
-const printMcpClientConfigs = (mcpUrl: string, secret: string | null, primaryOnly = false): void => {
+const printMcpClientConfigs = (mcpUrl: string, secret: string | null, primaryOnly = false, showHint = true): void => {
   const pad = '     ';
   const configs = getMcpClientConfigs(mcpUrl, secret);
   const displayConfigs = primaryOnly ? configs.slice(0, 1) : configs;
@@ -229,7 +229,7 @@ const printMcpClientConfigs = (mcpUrl: string, secret: string | null, primaryOnl
   } else {
     console.log(pc.dim(`${pad}pointing to ${mcpUrl} with an Authorization: Bearer header`));
   }
-  if (!primaryOnly) {
+  if (!primaryOnly && showHint) {
     console.log(
       pc.dim(`${pad}Run ${pc.bold('opentabs config show --show-secret')} to see MCP client configuration at any time.`),
     );
@@ -265,7 +265,7 @@ const handleStart = async (options: StartOptions): Promise<void> => {
     }
     console.log(pc.dim('  MCP client config (add to your client):'));
     console.log('');
-    printMcpClientConfigs(`http://127.0.0.1:${port}/mcp`, secret);
+    printMcpClientConfigs(`http://127.0.0.1:${port}/mcp`, secret, false, false);
     process.exit(0);
   }
 
