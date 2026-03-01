@@ -214,22 +214,6 @@ For each step, evaluate from a first-time plugin developer's perspective:
 6. **Error messages**: Do errors tell the developer what to do next?
 7. **CLI consistency**: Are patterns consistent across `opentabs` and `opentabs-plugin`?
 
-### Known friction categories from prior testing:
-
-These are frictions that HAVE been observed. Verify they still exist and add any new ones:
-
-1. **Scaffolded code fails lint/format** — The scaffold generates double-quoted strings but .prettierrc enforces singleQuote:true. Every fresh scaffold has 7 lint errors on `npm run lint`.
-
-2. **`npx create-opentabs-plugin` returns 404** — The docs reference this command but the package is scoped as `@opentabs-dev/create-plugin`. Only `npx @opentabs-dev/create-plugin` or `npm create @opentabs-dev/plugin` works.
-
-3. **`resources` and `prompts` need `override` but developer doesn't know** — When adding resources or prompts to a plugin, TypeScript requires `override readonly resources` because they're optional properties with defaults on the base class. The scaffolded code doesn't show this, the first-plugin tutorial doesn't cover it, and the error message (TS4114) doesn't explain the fix.
-
-4. **`npx opentabs-plugin build` outside a plugin dir gives 404** — Running the command when not installed locally causes npm to look for an unscoped `opentabs-plugin` package which doesn't exist. The error is a confusing npm 404.
-
-5. **`localPlugins.add` accepts nonexistent paths** — Adding a nonexistent path succeeds with only a dim warning. Easy to typo a path and have a broken config.
-
-6. **Non-interactive scaffold error is unhelpful** — Running `opentabs plugin create` without args in a non-TTY context says "run interactively" without showing the full flag syntax.
-
 ## Step 5: Create PRD(s) using the ralph skill
 
 After completing all testing, compile your findings and use the skill tool to load the "ralph" skill, then create PRD(s).

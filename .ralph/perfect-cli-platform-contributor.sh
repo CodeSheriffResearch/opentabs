@@ -250,18 +250,6 @@ For each step, evaluate from a first-time platform contributor's perspective:
 8. **Build pipeline**: Is it clear which commands to run and when?
 9. **Tooling exclusions**: Does .prettierignore/.eslintignore cover all generated artifacts?
 
-### Known friction categories from prior testing:
-
-These are frictions that HAVE been observed. Verify they still exist and add any new ones:
-
-1. **`.prettierignore` missing docs build artifacts** — When `docs/.next/`, `docs/.content-collections/`, or `docs/next-env.d.ts` exist, `npm run format:check` fails because these generated files aren't in `.prettierignore`. This breaks `npm run check` for any contributor who has built or run the docs site.
-
-2. **CONTRIBUTING.md type-check description is wrong** — Line 102 says `npm run type-check` uses `--noEmit` (no file emission), but the actual script is `tsc --build` which DOES emit files. This confuses contributors about the build pipeline.
-
-3. **dev-proxy SIGTERM E2E test fails in Docker** — The `e2e/dev-proxy.e2e.ts` "SIGTERM kills worker and proxy exits cleanly" test consistently fails in Docker. It waits only 500ms for worker processes to die after SIGTERM, but Docker's process cleanup is slower than native macOS.
-
-4. **`npm run build` always rebuilds extension bundle** — Even for TypeScript-only changes, `npm run build` regenerates the extension esbuild bundle (~2s), icons (~0.3s), and installs the extension (~0.2s). There's no `npm run build:ts` for fast TypeScript-only builds. The `npm run type-check` command does just `tsc --build` but the name implies checking not building.
-
 ## Step 5: Create PRD(s) using the ralph skill
 
 After completing all testing, compile your findings and use the skill tool to load the "ralph" skill, then create PRD(s).
