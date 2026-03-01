@@ -71,4 +71,4 @@ echo "=== perfect-extension.sh ==="
 echo "Launching Claude to audit browser extension and create PRD(s)..."
 echo ""
 
-echo "$PROMPT" | bash "$SCRIPT_DIR/run-prompt.sh" --perfect
+echo "$PROMPT" | bash "$SCRIPT_DIR/run-prompt.sh"

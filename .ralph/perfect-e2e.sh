@@ -76,4 +76,4 @@ echo "=== perfect-e2e.sh ==="
 echo "Launching Claude to audit E2E test code and create PRD(s)..."
 echo ""
 
-echo "$PROMPT" | bash "$SCRIPT_DIR/run-prompt.sh" --perfect
+echo "$PROMPT" | bash "$SCRIPT_DIR/run-prompt.sh"

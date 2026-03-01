@@ -67,4 +67,4 @@ echo "=== perfect-plugins.sh ==="
 echo "Launching Claude to audit example plugins and create PRD(s)..."
 echo ""
 
-echo "$PROMPT" | bash "$SCRIPT_DIR/run-prompt.sh" --perfect
+echo "$PROMPT" | bash "$SCRIPT_DIR/run-prompt.sh"

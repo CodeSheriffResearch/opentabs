@@ -135,4 +135,4 @@ echo "=== perfect-cli-platform-contributor.sh ==="
 echo "Launching Claude to test platform contributor experience and create PRD(s)..."
 echo ""
 
-echo "$PROMPT" | bash "$SCRIPT_DIR/run-prompt.sh" --perfect
+echo "$PROMPT" | bash "$SCRIPT_DIR/run-prompt.sh"

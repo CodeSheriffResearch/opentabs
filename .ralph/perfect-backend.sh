@@ -60,4 +60,4 @@ echo "=== perfect-backend.sh ==="
 echo "Launching Claude to audit backend code and create PRD(s)..."
 echo ""
 
-echo "$PROMPT" | bash "$SCRIPT_DIR/run-prompt.sh" --perfect
+echo "$PROMPT" | bash "$SCRIPT_DIR/run-prompt.sh"

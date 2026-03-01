@@ -129,4 +129,4 @@ echo "=== perfect-cli-plugin-developer.sh ==="
 echo "Launching Claude to test plugin developer experience and create PRD(s)..."
 echo ""
 
-echo "$PROMPT" | bash "$SCRIPT_DIR/run-prompt.sh" --perfect
+echo "$PROMPT" | bash "$SCRIPT_DIR/run-prompt.sh"

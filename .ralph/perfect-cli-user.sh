@@ -121,4 +121,4 @@ echo "=== perfect-cli-user.sh ==="
 echo "Launching Claude to test CLI user experience and create PRD(s)..."
 echo ""
 
-echo "$PROMPT" | bash "$SCRIPT_DIR/run-prompt.sh" --perfect
+echo "$PROMPT" | bash "$SCRIPT_DIR/run-prompt.sh"

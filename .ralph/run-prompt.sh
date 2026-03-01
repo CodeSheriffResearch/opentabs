@@ -14,7 +14,6 @@
 # Options:
 #   -p <prompt>   Pass prompt as argument instead of stdin
 #   --model <m>   Override the default model
-#   --perfect      Prepend .ralph/perfect-prompt.md (shared audit guidelines)
 
 set -euo pipefail
 
@@ -27,7 +26,6 @@ unset CLAUDECODE
 # --- Argument parsing ---
 PROMPT=""
 MODEL=""
-PERFECT=true
 
 while [[ $# -gt 0 ]]; do
   case $1 in
@@ -41,10 +39,6 @@ while [[ $# -gt 0 ]]; do
       ;;
     --model=*)
       MODEL="${1#*=}"
-      shift
-      ;;
-    --perfect)
-      PERFECT=true
       shift
       ;;
     *)
@@ -64,12 +58,8 @@ if [ -z "$PROMPT" ]; then
 fi
 
 # --- Prepend shared perfect audit guidelines ---
-if [ "$PERFECT" = true ]; then
-  PERFECT_PROMPT_FILE="$SCRIPT_DIR/perfect-prompt.md"
-  if [ ! -f "$PERFECT_PROMPT_FILE" ]; then
-    echo "Error: --perfect flag set but $PERFECT_PROMPT_FILE not found." >&2
-    exit 1
-  fi
+PERFECT_PROMPT_FILE="$SCRIPT_DIR/perfect-prompt.md"
+if [ -f "$PERFECT_PROMPT_FILE" ]; then
   PROMPT="$(cat "$PERFECT_PROMPT_FILE")
 
 ---
