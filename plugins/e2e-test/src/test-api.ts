@@ -51,9 +51,14 @@ const testApi = async <T extends Record<string, unknown>>(
 
   const record = data as Record<string, unknown>;
   if (record.ok !== true) {
-    const error = typeof record.error === 'string' ? record.error : 'unknown_error';
-    const errorCode = typeof record.error_code === 'string' ? record.error_code : error;
-    throw new ToolError(error, errorCode);
+    const errorCode = typeof record.error_code === 'string' ? record.error_code : 'unknown_error';
+    const errorMessage =
+      typeof record.error_message === 'string'
+        ? record.error_message
+        : typeof record.error === 'string'
+          ? record.error
+          : errorCode;
+    throw new ToolError(errorMessage, errorCode);
   }
 
   return data as T & { ok: true };
