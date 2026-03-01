@@ -310,11 +310,13 @@ test.describe('Tool call during reconnect window', () => {
       };
     });
 
-    // Wait for server to recognize the replacement
-    await waitForLog(mcpServer, 'Closing previous extension WebSocket', 5_000);
-
-    // Close the fake client too — server now has no extension
-    fakeWs.close();
+    // Wait for server to recognize the replacement, then close the fake WS
+    try {
+      await waitForLog(mcpServer, 'Closing previous extension WebSocket', 5_000);
+    } finally {
+      // Always close the fake WS so orphaned connections don't accumulate on failure
+      fakeWs.close();
+    }
 
     // Wait until the server reports no extension connected
     await waitForExtensionDisconnected(mcpServer, 5_000);
@@ -360,8 +362,12 @@ test.describe('Tool call during reconnect window', () => {
         reject(new Error('WebSocket connect failed'));
       };
     });
-    await waitForLog(mcpServer, 'Closing previous extension WebSocket', 5_000);
-    fakeWs.close();
+    try {
+      await waitForLog(mcpServer, 'Closing previous extension WebSocket', 5_000);
+    } finally {
+      // Always close the fake WS so orphaned connections don't accumulate on failure
+      fakeWs.close();
+    }
     await waitForExtensionDisconnected(mcpServer, 5_000);
 
     // Browser tool should also fail cleanly when extension is disconnected
@@ -563,24 +569,28 @@ test.describe('Server-side dispatch timeout', () => {
       };
     });
 
-    await waitForLog(mcpServer, 'Closing previous extension WebSocket', 5_000);
+    try {
+      await waitForLog(mcpServer, 'Closing previous extension WebSocket', 5_000);
 
-    // Wait for the server's DISPATCH_TIMEOUT_MS (30s) to fire
-    const response = await toolCallPromise;
-    const elapsed = Date.now() - start;
+      // Wait for the server's DISPATCH_TIMEOUT_MS (30s) to fire
+      const response = await toolCallPromise;
+      const elapsed = Date.now() - start;
 
-    // Verify the server returned a dispatch timeout error
-    expect(response.isError).toBe(true);
-    expect(response.content.toLowerCase()).toContain('timed out');
+      // Verify the server returned a dispatch timeout error
+      expect(response.isError).toBe(true);
+      expect(response.content.toLowerCase()).toContain('timed out');
 
-    // The timeout should take approximately 30s (DISPATCH_TIMEOUT_MS)
-    expect(elapsed).toBeGreaterThan(25_000);
-    expect(elapsed).toBeLessThan(40_000);
+      // The timeout should take approximately 30s (DISPATCH_TIMEOUT_MS)
+      expect(elapsed).toBeGreaterThan(25_000);
+      expect(elapsed).toBeLessThan(40_000);
+    } finally {
+      // Always close the fake WS so orphaned connections don't accumulate on failure
+      fakeWs.close();
+    }
 
-    // Clean up: reset slow mode, close the fake WS, wait for the real
-    // extension to reconnect, then verify subsequent tool calls work.
+    // Clean up: reset slow mode, wait for the real extension to reconnect,
+    // then verify subsequent tool calls work.
     await testServer.setSlow(0);
-    fakeWs.close();
     await timeoutClient.close();
     await waitForExtensionConnected(mcpServer, 45_000);
     await waitForLog(mcpServer, 'tab.syncAll received');
