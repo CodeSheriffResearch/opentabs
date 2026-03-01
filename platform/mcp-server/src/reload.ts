@@ -107,6 +107,19 @@ const pruneStaleState = (state: ServerState): void => {
       .filter((n): n is string => n !== undefined),
   );
   state.outdatedPlugins = state.outdatedPlugins.filter(o => npmPkgNames.has(o.name));
+
+  // Prune activeNetworkCaptures for tab IDs no longer present in tabMapping
+  const allTabIds = new Set<number>();
+  for (const mapping of state.tabMapping.values()) {
+    for (const tab of mapping.tabs) {
+      allTabIds.add(tab.tabId);
+    }
+  }
+  for (const tabId of state.activeNetworkCaptures) {
+    if (!allTabIds.has(tabId)) {
+      state.activeNetworkCaptures.delete(tabId);
+    }
+  }
 };
 
 /** Arguments for the shared reload core */

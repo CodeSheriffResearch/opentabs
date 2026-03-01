@@ -3,6 +3,8 @@ import {
   handleConfigSetBrowserToolEnabled,
   handleConfirmationResponse,
   handlePluginLog,
+  handleTabStateChanged,
+  handleTabSyncAll,
   handleToolProgress,
   rejectAllPendingConfirmations,
 } from './extension-handlers.js';
@@ -10,7 +12,7 @@ import { clearAllLogs, getLogs } from './log-buffer.js';
 import { createState, DISPATCH_TIMEOUT_MS, MAX_DISPATCH_TIMEOUT_MS } from './state.js';
 import { afterEach, beforeEach, describe, expect, vi, test } from 'vitest';
 import type { McpCallbacks } from './extension-handlers.js';
-import type { PendingConfirmation, PendingDispatch, SessionPermissionRule } from './state.js';
+import type { PendingConfirmation, PendingDispatch, RegisteredPlugin, SessionPermissionRule } from './state.js';
 
 /** Create a tracked PendingConfirmation that records resolve/reject calls */
 const createPendingConfirmation = (
@@ -812,5 +814,117 @@ describe('handleConfigSetBrowserToolEnabled', () => {
     handleConfigSetBrowserToolEnabled(state, { tool: 'browser_list_tabs', enabled: true }, 'req-6', noopCallbacks);
 
     expect(state.browserToolPolicy.browser_list_tabs).toBe(true);
+  });
+});
+
+describe('handleTabSyncAll — activeNetworkCaptures cleanup', () => {
+  test('removes stale activeNetworkCaptures entries for tabs absent from sync', () => {
+    const state = createState();
+    // Tab 1 and 2 had active captures before the sync
+    state.activeNetworkCaptures.add(1);
+    state.activeNetworkCaptures.add(2);
+    state.activeNetworkCaptures.add(3);
+
+    // Sync arrives: only tab 2 is still present
+    handleTabSyncAll(state, {
+      tabs: {
+        slack: { state: 'ready', tabs: [{ tabId: 2, url: 'https://app.slack.com', ready: true }] },
+      },
+    });
+
+    expect(state.activeNetworkCaptures.has(1)).toBe(false);
+    expect(state.activeNetworkCaptures.has(2)).toBe(true);
+    expect(state.activeNetworkCaptures.has(3)).toBe(false);
+  });
+
+  test('clears all activeNetworkCaptures when sync has no tabs', () => {
+    const state = createState();
+    state.activeNetworkCaptures.add(10);
+    state.activeNetworkCaptures.add(20);
+
+    handleTabSyncAll(state, { tabs: {} });
+
+    expect(state.activeNetworkCaptures.size).toBe(0);
+  });
+
+  test('retains activeNetworkCaptures entries for tabs still present after sync', () => {
+    const state = createState();
+    state.activeNetworkCaptures.add(5);
+
+    handleTabSyncAll(state, {
+      tabs: {
+        slack: { state: 'ready', tabs: [{ tabId: 5, url: 'https://app.slack.com', ready: true }] },
+      },
+    });
+
+    expect(state.activeNetworkCaptures.has(5)).toBe(true);
+  });
+});
+
+describe('handleTabStateChanged — activeNetworkCaptures cleanup', () => {
+  /** Set up a minimal registry with a given plugin name */
+  const withPlugin = (state: ReturnType<typeof createState>, pluginName: string) => {
+    state.registry = {
+      ...state.registry,
+      plugins: new Map([[pluginName, {} as RegisteredPlugin]]) as ReadonlyMap<string, RegisteredPlugin>,
+    };
+  };
+
+  test('removes activeNetworkCaptures entry when a tab is removed from the plugin mapping', () => {
+    const state = createState();
+    withPlugin(state, 'slack');
+    // Plugin currently has tabs 10 and 11, both with active captures
+    state.tabMapping.set('slack', {
+      state: 'ready',
+      tabs: [
+        { tabId: 10, url: 'https://app.slack.com', title: 'Slack', ready: true },
+        { tabId: 11, url: 'https://app.slack.com', title: 'Slack', ready: true },
+      ],
+    });
+    state.activeNetworkCaptures.add(10);
+    state.activeNetworkCaptures.add(11);
+
+    // State change arrives: only tab 10 remains
+    handleTabStateChanged(state, {
+      plugin: 'slack',
+      state: 'ready',
+      tabs: [{ tabId: 10, url: 'https://app.slack.com', title: 'Slack', ready: true }],
+    });
+
+    expect(state.activeNetworkCaptures.has(10)).toBe(true);
+    expect(state.activeNetworkCaptures.has(11)).toBe(false);
+  });
+
+  test('removes all plugin tab activeNetworkCaptures entries when state changes to closed', () => {
+    const state = createState();
+    withPlugin(state, 'slack');
+    state.tabMapping.set('slack', {
+      state: 'ready',
+      tabs: [{ tabId: 42, url: 'https://app.slack.com', title: 'Slack', ready: true }],
+    });
+    state.activeNetworkCaptures.add(42);
+
+    handleTabStateChanged(state, { plugin: 'slack', state: 'closed', tabs: [] });
+
+    expect(state.activeNetworkCaptures.has(42)).toBe(false);
+  });
+
+  test('does not touch activeNetworkCaptures for tabs that remain in the mapping', () => {
+    const state = createState();
+    withPlugin(state, 'slack');
+    state.tabMapping.set('slack', {
+      state: 'ready',
+      tabs: [{ tabId: 7, url: 'https://app.slack.com', title: 'Slack', ready: true }],
+    });
+    state.activeNetworkCaptures.add(7);
+
+    // Same tab 7 still present
+    handleTabStateChanged(state, {
+      plugin: 'slack',
+      state: 'ready',
+      tabs: [{ tabId: 7, url: 'https://app.slack.com', title: 'Slack', ready: true }],
+    });
+
+    expect(state.activeNetworkCaptures.has(7)).toBe(true);
   });
 });
