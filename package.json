@@ -83,9 +83,12 @@
     "ws": "^8.19.0"
   },
   "lint-staged": {
-    "*.{ts,tsx,json}": [
+    "*.{ts,tsx}": [
       "prettier --write",
       "eslint --fix"
+    ],
+    "*.json": [
+      "prettier --write"
     ],
     "*.md": [
       "prettier --write"
