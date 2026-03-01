@@ -14,7 +14,13 @@ import {
   removePlugin,
   checkPluginUpdates,
 } from './plugin-management.js';
-import { prefixedToolName, isToolEnabled, DISPATCH_TIMEOUT_MS, MAX_DISPATCH_TIMEOUT_MS } from './state.js';
+import {
+  prefixedToolName,
+  isToolEnabled,
+  isBrowserToolEnabled,
+  DISPATCH_TIMEOUT_MS,
+  MAX_DISPATCH_TIMEOUT_MS,
+} from './state.js';
 import type { PluginLogEntry } from './log-buffer.js';
 import type { RegisteredPlugin, ServerState, TabMapping, ConfirmationScope, SessionPermissionRule } from './state.js';
 import type {
@@ -228,11 +234,21 @@ const handleConfigGetState = (state: ServerState, id: string | number): void => 
       };
     });
 
+  const browserTools = state.cachedBrowserTools
+    .slice()
+    .sort((a, b) => a.name.localeCompare(b.name))
+    .map(ct => ({
+      name: ct.name,
+      description: ct.description,
+      enabled: isBrowserToolEnabled(state, ct.name),
+    }));
+
   sendToExtension(state, {
     jsonrpc: '2.0',
     result: {
       plugins,
       failedPlugins: state.discoveryErrors.map(e => ({ specifier: e.specifier, error: e.error })),
+      browserTools,
     },
     id,
   });

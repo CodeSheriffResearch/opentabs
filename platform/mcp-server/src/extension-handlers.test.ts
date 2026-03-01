@@ -1,4 +1,5 @@
 import {
+  handleConfigGetState,
   handleConfirmationResponse,
   handlePluginLog,
   handleToolProgress,
@@ -579,5 +580,97 @@ describe('handlePluginLog', () => {
     expect(receivedEntry).toBeDefined();
     const entry = receivedEntry as { data: unknown };
     expect(entry.data).toEqual({ key: 'value' });
+  });
+});
+
+describe('handleConfigGetState', () => {
+  /** Create a mock WsHandle that captures sent JSON messages */
+  const createMockWs = (): { ws: { send: (msg: string) => void; close: () => void }; messages: string[] } => {
+    const messages: string[] = [];
+    return { ws: { send: msg => messages.push(msg), close: () => {} }, messages };
+  };
+
+  test('includes browserTools in the result', () => {
+    const state = createState();
+    const { ws, messages } = createMockWs();
+    state.extensionWs = ws;
+    state.cachedBrowserTools = [
+      { name: 'browser_list_tabs', description: 'List all open browser tabs', inputSchema: {}, tool: null as never },
+      { name: 'browser_screenshot', description: 'Capture a screenshot', inputSchema: {}, tool: null as never },
+    ];
+
+    handleConfigGetState(state, 'req-1');
+
+    expect(messages).toHaveLength(1);
+    const response = JSON.parse(messages[0] as string) as {
+      result: { browserTools: { name: string; description: string; enabled: boolean }[] };
+    };
+    expect(response.result.browserTools).toHaveLength(2);
+    expect(response.result.browserTools[0]).toEqual({
+      name: 'browser_list_tabs',
+      description: 'List all open browser tabs',
+      enabled: true,
+    });
+    expect(response.result.browserTools[1]).toEqual({
+      name: 'browser_screenshot',
+      description: 'Capture a screenshot',
+      enabled: true,
+    });
+  });
+
+  test('browser tools are sorted alphabetically by name', () => {
+    const state = createState();
+    const { ws, messages } = createMockWs();
+    state.extensionWs = ws;
+    state.cachedBrowserTools = [
+      { name: 'browser_screenshot', description: 'Screenshot', inputSchema: {}, tool: null as never },
+      { name: 'browser_click', description: 'Click', inputSchema: {}, tool: null as never },
+      { name: 'browser_list_tabs', description: 'List tabs', inputSchema: {}, tool: null as never },
+    ];
+
+    handleConfigGetState(state, 'req-2');
+
+    const response = JSON.parse(messages[0] as string) as {
+      result: { browserTools: { name: string }[] };
+    };
+    expect(response.result.browserTools.map(t => t.name)).toEqual([
+      'browser_click',
+      'browser_list_tabs',
+      'browser_screenshot',
+    ]);
+  });
+
+  test('browser tool disabled in browserToolPolicy has enabled: false', () => {
+    const state = createState();
+    const { ws, messages } = createMockWs();
+    state.extensionWs = ws;
+    state.cachedBrowserTools = [
+      { name: 'browser_list_tabs', description: 'List tabs', inputSchema: {}, tool: null as never },
+      { name: 'browser_screenshot', description: 'Screenshot', inputSchema: {}, tool: null as never },
+    ];
+    state.browserToolPolicy = { browser_list_tabs: false };
+
+    handleConfigGetState(state, 'req-3');
+
+    const response = JSON.parse(messages[0] as string) as {
+      result: { browserTools: { name: string; enabled: boolean }[] };
+    };
+    const listTabs = response.result.browserTools.find(t => t.name === 'browser_list_tabs');
+    const screenshot = response.result.browserTools.find(t => t.name === 'browser_screenshot');
+    expect(listTabs?.enabled).toBe(false);
+    expect(screenshot?.enabled).toBe(true);
+  });
+
+  test('empty cachedBrowserTools returns empty browserTools array', () => {
+    const state = createState();
+    const { ws, messages } = createMockWs();
+    state.extensionWs = ws;
+
+    handleConfigGetState(state, 'req-4');
+
+    const response = JSON.parse(messages[0] as string) as {
+      result: { browserTools: unknown[] };
+    };
+    expect(response.result.browserTools).toEqual([]);
   });
 });
