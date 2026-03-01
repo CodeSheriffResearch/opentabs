@@ -120,6 +120,20 @@ describe('handleConfirmationResponse', () => {
     expect(rule.scope).toBe('domain_all');
   });
 
+  test('allow_always with scope domain_all falls back to tool_domain when pending.domain is null', () => {
+    const state = createState();
+    const pending = createPendingConfirmation({ tool: 'browser_screenshot', domain: null });
+    state.pendingConfirmations.set('conf-6b', pending);
+
+    handleConfirmationResponse(state, { id: 'conf-6b', decision: 'allow_always', scope: 'domain_all' });
+
+    expect(state.sessionPermissions).toHaveLength(1);
+    const rule = state.sessionPermissions[0] as SessionPermissionRule;
+    expect(rule.tool).toBe('browser_screenshot');
+    expect(rule.domain).toBeNull();
+    expect(rule.scope).toBe('tool_domain');
+  });
+
   test('missing params is silently ignored', () => {
     const state = createState();
     handleConfirmationResponse(state, undefined);

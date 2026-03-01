@@ -535,7 +535,15 @@ const handleConfirmationResponse = (state: ServerState, params: Record<string, u
     if (scope === 'tool_all') {
       rule.domain = null;
     } else if (scope === 'domain_all') {
-      rule.tool = null;
+      if (pending.domain === null) {
+        // domain_all without a domain context would match all domains — fall back to tool_domain
+        log.warn(
+          `domain_all scope requested for '${pending.tool}' but no domain context — falling back to tool_domain`,
+        );
+        rule.scope = 'tool_domain';
+      } else {
+        rule.tool = null;
+      }
     }
 
     const isDuplicate = state.sessionPermissions.some(
