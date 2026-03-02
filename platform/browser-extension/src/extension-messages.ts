@@ -58,6 +58,11 @@ export interface BgGetConnectionStateMessage {
   type: 'bg:getConnectionState';
 }
 
+/** Side panel → Background: request full merged state for initial render */
+export interface BgGetFullStateMessage {
+  type: 'bg:getFullState';
+}
+
 /** Background → Offscreen: request log entries from the offscreen LogCollector */
 export interface OffscreenGetLogsMessage {
   type: 'offscreen:getLogs';
@@ -152,6 +157,7 @@ export type InternalMessage =
   | WsSetUrlMessage
   | BgSendMessage
   | BgGetConnectionStateMessage
+  | BgGetFullStateMessage
   | OffscreenGetLogsMessage
   | BgForceReconnectMessage
   | PluginLogsMessage

@@ -6,10 +6,12 @@ import {
 import { buildWsUrl, SERVER_PORT_KEY, WS_CONNECTED_KEY } from './constants.js';
 import { handleServerMessage } from './message-router.js';
 import { forwardToSidePanel, sendToServer } from './messaging.js';
-import { clearServerStateCache } from './server-state-cache.js';
-import { clearTabStateCache, stopReadinessPoll } from './tab-state.js';
+import { getAllPluginMeta } from './plugin-storage.js';
+import { clearServerStateCache, getServerStateCache } from './server-state-cache.js';
+import { clearTabStateCache, getLastKnownStates, stopReadinessPoll } from './tab-state.js';
 import { notifyDispatchProgress } from './tool-dispatch.js';
-import type { DisconnectReason, InternalMessage } from './extension-messages.js';
+import type { DisconnectReason, InternalMessage, PluginTabStateInfo } from './extension-messages.js';
+import type { ConfigStatePlugin, TabState } from '@opentabs-dev/shared';
 
 // ---------------------------------------------------------------------------
 // WebSocket connection state
@@ -106,6 +108,85 @@ const handleBgGetConnectionState: MessageHandler = (_message, sendResponse) => {
   sendResponse({
     connected: wsConnected,
     disconnectReason: wsConnected ? undefined : lastDisconnectReason,
+  });
+};
+
+/**
+ * Handle bg:getFullState — return merged state from all local caches.
+ * Combines plugin metadata (chrome.storage.local), server state cache
+ * (tool enabled states, browserTools, failedPlugins, serverVersion),
+ * and tab state cache (per-plugin tab state) into a single response.
+ */
+const handleBgGetFullState: MessageHandler = (_message, sendResponse) => {
+  (async () => {
+    const metaIndex = await getAllPluginMeta();
+    const serverCache = getServerStateCache();
+    const tabStates = getLastKnownStates();
+
+    // Build a lookup from server cache plugins by name for O(1) merge
+    const serverPluginMap = new Map<string, ConfigStatePlugin>();
+    for (const sp of serverCache.plugins) {
+      serverPluginMap.set(sp.name, sp);
+    }
+
+    // Merge each plugin from metaCache with server state and tab state
+    const plugins: ConfigStatePlugin[] = Object.values(metaIndex).map(meta => {
+      const serverPlugin = serverPluginMap.get(meta.name);
+
+      // Tab state from lastKnownState cache (serialized JSON)
+      let tabState: TabState = 'closed';
+      const serialized = tabStates.get(meta.name);
+      if (serialized) {
+        try {
+          const parsed = JSON.parse(serialized) as PluginTabStateInfo;
+          tabState = parsed.state;
+        } catch {
+          // Fall back to 'closed' on parse error
+        }
+      }
+
+      // Tool enabled states: prefer server cache, default to enabled=true
+      const tools = meta.tools.map(metaTool => {
+        const serverTool = serverPlugin?.tools.find(st => st.name === metaTool.name);
+        return {
+          ...metaTool,
+          enabled: serverTool?.enabled ?? true,
+        };
+      });
+
+      return {
+        name: meta.name,
+        displayName: meta.displayName,
+        version: meta.version,
+        trustTier: meta.trustTier,
+        urlPatterns: meta.urlPatterns,
+        iconSvg: meta.iconSvg,
+        iconInactiveSvg: meta.iconInactiveSvg,
+        tools,
+        tabState,
+        source: serverPlugin?.source ?? 'local',
+        sdkVersion: serverPlugin?.sdkVersion,
+        update: serverPlugin?.update,
+      };
+    });
+
+    sendResponse({
+      connected: wsConnected,
+      disconnectReason: wsConnected ? undefined : lastDisconnectReason,
+      plugins,
+      failedPlugins: serverCache.failedPlugins,
+      browserTools: serverCache.browserTools,
+      serverVersion: serverCache.serverVersion,
+    });
+  })().catch(() => {
+    sendResponse({
+      connected: wsConnected,
+      disconnectReason: wsConnected ? undefined : lastDisconnectReason,
+      plugins: [],
+      failedPlugins: [],
+      browserTools: [],
+      serverVersion: undefined,
+    });
   });
 };
 
@@ -210,6 +291,7 @@ const backgroundHandlers = new Map<InternalMessage['type'], MessageHandler>([
   ['ws:message', handleWsMessage],
   ['bg:send', handleBgSend],
   ['bg:getConnectionState', handleBgGetConnectionState],
+  ['bg:getFullState', handleBgGetFullState],
   ['plugin:logs', handlePluginLogs],
   ['tool:progress', handleToolProgress],
   ['sp:confirmationResponse', handleSpConfirmationResponse],
@@ -225,6 +307,7 @@ const EXTENSION_ONLY_TYPES: ReadonlySet<InternalMessage['type']> = new Set([
   'ws:message',
   'bg:send',
   'bg:getConnectionState',
+  'bg:getFullState',
   'offscreen:getLogs',
   'sp:confirmationResponse',
   'sp:confirmationTimeout',
@@ -263,6 +346,7 @@ const backgroundHandlerNames: readonly string[] = [...backgroundHandlers.keys()]
 export {
   backgroundHandlerNames,
   handleBgGetConnectionState,
+  handleBgGetFullState,
   handleBgSend,
   handleOffscreenGetUrl,
   handlePluginLogs,

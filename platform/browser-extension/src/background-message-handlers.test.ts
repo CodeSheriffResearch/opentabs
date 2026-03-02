@@ -1,4 +1,16 @@
 import { vi, describe, expect, test, beforeEach } from 'vitest';
+import type { DisconnectReason } from './extension-messages.js';
+import type { ConfigStateBrowserTool, ConfigStateFailedPlugin, ConfigStatePlugin } from '@opentabs-dev/shared';
+
+/** Response shape returned by handleBgGetFullState */
+interface FullStateResponse {
+  connected: boolean;
+  disconnectReason?: DisconnectReason;
+  plugins: ConfigStatePlugin[];
+  failedPlugins: ConfigStateFailedPlugin[];
+  browserTools: ConfigStateBrowserTool[];
+  serverVersion?: string;
+}
 
 // ---------------------------------------------------------------------------
 // Module mocks — set up before importing background-message-handlers.js so
@@ -10,21 +22,41 @@ const {
   mockForwardToSidePanel,
   mockClearTabStateCache,
   mockStopReadinessPoll,
+  mockGetLastKnownStates,
   mockClearAllConfirmationBadges,
   mockClearConfirmationBackgroundTimeout,
   mockClearConfirmationBadge,
   mockHandleServerMessage,
   mockNotifyDispatchProgress,
+  mockGetAllPluginMeta,
+  mockGetServerStateCache,
+  mockClearServerStateCache,
 } = vi.hoisted(() => ({
   mockSendToServer: vi.fn<(data: unknown) => void>(),
   mockForwardToSidePanel: vi.fn(),
   mockClearTabStateCache: vi.fn(),
   mockStopReadinessPoll: vi.fn(),
+  mockGetLastKnownStates: vi.fn(() => new Map<string, string>()),
   mockClearAllConfirmationBadges: vi.fn(),
   mockClearConfirmationBackgroundTimeout: vi.fn(),
   mockClearConfirmationBadge: vi.fn(),
   mockHandleServerMessage: vi.fn(),
   mockNotifyDispatchProgress: vi.fn(),
+  mockGetAllPluginMeta: vi.fn<() => Promise<Record<string, unknown>>>(() => Promise.resolve({})),
+  mockGetServerStateCache: vi.fn<
+    () => {
+      plugins: unknown[];
+      failedPlugins: unknown[];
+      browserTools: unknown[];
+      serverVersion: string | undefined;
+    }
+  >(() => ({
+    plugins: [],
+    failedPlugins: [],
+    browserTools: [],
+    serverVersion: undefined,
+  })),
+  mockClearServerStateCache: vi.fn(),
 }));
 
 vi.mock('./messaging.js', () => ({
@@ -35,6 +67,7 @@ vi.mock('./messaging.js', () => ({
 vi.mock('./tab-state.js', () => ({
   clearTabStateCache: mockClearTabStateCache,
   stopReadinessPoll: mockStopReadinessPoll,
+  getLastKnownStates: mockGetLastKnownStates,
 }));
 
 vi.mock('./confirmation-badge.js', () => ({
@@ -49,6 +82,15 @@ vi.mock('./message-router.js', () => ({
 
 vi.mock('./tool-dispatch.js', () => ({
   notifyDispatchProgress: mockNotifyDispatchProgress,
+}));
+
+vi.mock('./plugin-storage.js', () => ({
+  getAllPluginMeta: mockGetAllPluginMeta,
+}));
+
+vi.mock('./server-state-cache.js', () => ({
+  getServerStateCache: mockGetServerStateCache,
+  clearServerStateCache: mockClearServerStateCache,
 }));
 
 // ---------------------------------------------------------------------------
@@ -83,6 +125,7 @@ const {
   handleSpConfirmationResponse,
   handleSpConfirmationTimeout,
   handleBgGetConnectionState,
+  handleBgGetFullState,
 } = await import('./background-message-handlers.js');
 
 // ---------------------------------------------------------------------------
@@ -475,5 +518,126 @@ describe('handleBgGetConnectionState', () => {
     const sendResponse = vi.fn();
     handleBgGetConnectionState({}, sendResponse);
     expect(sendResponse).toHaveBeenCalledWith(expect.objectContaining({ connected: true }));
+  });
+});
+
+// ---------------------------------------------------------------------------
+// handleBgGetFullState
+// ---------------------------------------------------------------------------
+
+describe('handleBgGetFullState', () => {
+  test('returns empty state when no plugins exist', async () => {
+    const sendResponse = vi.fn();
+    handleBgGetFullState({}, sendResponse);
+    await vi.waitFor(() => expect(sendResponse).toHaveBeenCalled());
+
+    expect(sendResponse).toHaveBeenCalledWith({
+      connected: false,
+      disconnectReason: undefined,
+      plugins: [],
+      failedPlugins: [],
+      browserTools: [],
+      serverVersion: undefined,
+    });
+  });
+
+  test('merges plugin metadata with server cache and tab state', async () => {
+    handleWsState({ connected: true }, () => {});
+    vi.clearAllMocks();
+
+    mockGetAllPluginMeta.mockResolvedValueOnce({
+      'test-plugin': {
+        name: 'test-plugin',
+        displayName: 'Test Plugin',
+        version: '1.0.0',
+        trustTier: 'community',
+        urlPatterns: ['https://example.com/*'],
+        tools: [{ name: 'test_tool', displayName: 'Test Tool', description: 'A test tool' }],
+        iconSvg: '<svg/>',
+      },
+    });
+
+    mockGetServerStateCache.mockReturnValueOnce({
+      plugins: [
+        {
+          name: 'test-plugin',
+          displayName: 'Test Plugin',
+          version: '1.0.0',
+          trustTier: 'community',
+          source: 'npm',
+          tabState: 'closed',
+          urlPatterns: ['https://example.com/*'],
+          sdkVersion: '2.0.0',
+          tools: [{ name: 'test_tool', displayName: 'Test Tool', description: 'A test tool', enabled: false }],
+        },
+      ],
+      failedPlugins: [{ specifier: 'bad-plugin', error: 'load failed' }],
+      browserTools: [{ name: 'screenshot', description: 'Take a screenshot', enabled: true }],
+      serverVersion: '1.2.3',
+    });
+
+    mockGetLastKnownStates.mockReturnValueOnce(
+      new Map([
+        [
+          'test-plugin',
+          JSON.stringify({
+            state: 'ready',
+            tabs: [{ tabId: 1, url: 'https://example.com', title: 'Example', ready: true }],
+          }),
+        ],
+      ]),
+    );
+
+    const sendResponse = vi.fn();
+    handleBgGetFullState({}, sendResponse);
+    await vi.waitFor(() => expect(sendResponse).toHaveBeenCalled());
+
+    expect(sendResponse).toHaveBeenCalledWith(
+      expect.objectContaining({
+        connected: true,
+        serverVersion: '1.2.3',
+        failedPlugins: [{ specifier: 'bad-plugin', error: 'load failed' }],
+        browserTools: [{ name: 'screenshot', description: 'Take a screenshot', enabled: true }],
+      }),
+    );
+
+    const result = sendResponse.mock.calls.at(0)?.at(0) as FullStateResponse;
+    expect(result.plugins).toHaveLength(1);
+    expect(result.plugins).toEqual([
+      expect.objectContaining({
+        name: 'test-plugin',
+        tabState: 'ready',
+        source: 'npm',
+        sdkVersion: '2.0.0',
+        tools: [expect.objectContaining({ enabled: false })],
+      }),
+    ]);
+  });
+
+  test('defaults tool enabled to true when server cache is empty', async () => {
+    mockGetAllPluginMeta.mockResolvedValueOnce({
+      'test-plugin': {
+        name: 'test-plugin',
+        displayName: 'Test Plugin',
+        version: '1.0.0',
+        trustTier: 'local',
+        urlPatterns: [],
+        tools: [{ name: 'my_tool', displayName: 'My Tool', description: 'desc' }],
+      },
+    });
+
+    const sendResponse = vi.fn();
+    handleBgGetFullState({}, sendResponse);
+    await vi.waitFor(() => expect(sendResponse).toHaveBeenCalled());
+
+    const result = sendResponse.mock.calls.at(0)?.at(0) as FullStateResponse;
+    expect(result.plugins).toHaveLength(1);
+    expect(result.plugins).toEqual([
+      expect.objectContaining({
+        source: 'local',
+        tabState: 'closed',
+        tools: [expect.objectContaining({ enabled: true })],
+      }),
+    ]);
   });
 });
