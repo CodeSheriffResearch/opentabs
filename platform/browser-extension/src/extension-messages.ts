@@ -141,6 +141,58 @@ export interface SpConfirmationTimeoutMessage {
   id: string;
 }
 
+/** Side panel → Background: toggle a single tool's enabled state */
+export interface BgSetToolEnabledMessage {
+  type: 'bg:setToolEnabled';
+  plugin: string;
+  tool: string;
+  enabled: boolean;
+}
+
+/** Side panel → Background: toggle all tools for a plugin */
+export interface BgSetAllToolsEnabledMessage {
+  type: 'bg:setAllToolsEnabled';
+  plugin: string;
+  enabled: boolean;
+}
+
+/** Side panel → Background: toggle a browser tool's enabled state */
+export interface BgSetBrowserToolEnabledMessage {
+  type: 'bg:setBrowserToolEnabled';
+  tool: string;
+  enabled: boolean;
+}
+
+/** Side panel → Background: toggle all browser tools' enabled state */
+export interface BgSetAllBrowserToolsEnabledMessage {
+  type: 'bg:setAllBrowserToolsEnabled';
+  enabled: boolean;
+}
+
+/** Side panel → Background: search npm registry for plugins */
+export interface BgSearchPluginsMessage {
+  type: 'bg:searchPlugins';
+  query: string;
+}
+
+/** Side panel → Background: install a plugin by package name */
+export interface BgInstallPluginMessage {
+  type: 'bg:installPlugin';
+  name: string;
+}
+
+/** Side panel → Background: remove an installed plugin */
+export interface BgRemovePluginMessage {
+  type: 'bg:removePlugin';
+  name: string;
+}
+
+/** Side panel → Background: update a plugin to the latest registry version */
+export interface BgUpdatePluginMessage {
+  type: 'bg:updatePlugin';
+  name: string;
+}
+
 /** Side panel → Background → Offscreen: MCP server port changed */
 export interface PortChangedMessage {
   type: 'port-changed';
@@ -158,6 +210,14 @@ export type InternalMessage =
   | BgSendMessage
   | BgGetConnectionStateMessage
   | BgGetFullStateMessage
+  | BgSetToolEnabledMessage
+  | BgSetAllToolsEnabledMessage
+  | BgSetBrowserToolEnabledMessage
+  | BgSetAllBrowserToolsEnabledMessage
+  | BgSearchPluginsMessage
+  | BgInstallPluginMessage
+  | BgRemovePluginMessage
+  | BgUpdatePluginMessage
   | OffscreenGetLogsMessage
   | BgForceReconnectMessage
   | PluginLogsMessage

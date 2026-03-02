@@ -33,6 +33,9 @@ const {
   mockGetServerStateCache,
   mockClearServerStateCache,
   mockLoadServerStateCacheFromSession,
+  mockUpdateServerStateCache,
+  mockSendServerRequest,
+  mockRejectAllPendingServerRequests,
 } = vi.hoisted(() => ({
   mockSendToServer: vi.fn<(data: unknown) => void>(),
   mockForwardToSidePanel: vi.fn(),
@@ -61,6 +64,11 @@ const {
   })),
   mockClearServerStateCache: vi.fn(),
   mockLoadServerStateCacheFromSession: vi.fn<() => Promise<void>>(() => Promise.resolve()),
+  mockUpdateServerStateCache: vi.fn(),
+  mockSendServerRequest: vi.fn<(method: string, params?: Record<string, unknown>) => Promise<unknown>>(() =>
+    Promise.resolve({}),
+  ),
+  mockRejectAllPendingServerRequests: vi.fn(),
 }));
 
 vi.mock('./messaging.js', () => ({
@@ -97,6 +105,12 @@ vi.mock('./server-state-cache.js', () => ({
   getServerStateCache: mockGetServerStateCache,
   clearServerStateCache: mockClearServerStateCache,
   loadServerStateCacheFromSession: mockLoadServerStateCacheFromSession,
+  updateServerStateCache: mockUpdateServerStateCache,
+}));
+
+vi.mock('./server-request.js', () => ({
+  sendServerRequest: mockSendServerRequest,
+  rejectAllPendingServerRequests: mockRejectAllPendingServerRequests,
 }));
 
 // ---------------------------------------------------------------------------
@@ -132,6 +146,14 @@ const {
   handleSpConfirmationTimeout,
   handleBgGetConnectionState,
   handleBgGetFullState,
+  handleBgSetToolEnabled,
+  handleBgSetAllToolsEnabled,
+  handleBgSetBrowserToolEnabled,
+  handleBgSetAllBrowserToolsEnabled,
+  handleBgSearchPlugins,
+  handleBgInstallPlugin,
+  handleBgRemovePlugin,
+  handleBgUpdatePlugin,
 } = await import('./background-message-handlers.js');
 
 // ---------------------------------------------------------------------------
@@ -785,5 +807,301 @@ describe('handleBgGetFullState', () => {
 
     expect(mockLoadLastKnownStateFromSession).not.toHaveBeenCalled();
     expect(mockLoadServerStateCacheFromSession).not.toHaveBeenCalled();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// handleWsState — rejectAllPendingServerRequests on disconnect
+// ---------------------------------------------------------------------------
+
+describe('handleWsState — rejectAllPendingServerRequests', () => {
+  test('calls rejectAllPendingServerRequests on disconnect', () => {
+    handleWsState({ connected: true }, () => {});
+    vi.clearAllMocks();
+
+    handleWsState({ connected: false }, () => {});
+
+    expect(mockRejectAllPendingServerRequests).toHaveBeenCalledOnce();
+  });
+
+  test('does NOT call rejectAllPendingServerRequests on connect', () => {
+    handleWsState({ connected: true }, () => {});
+
+    expect(mockRejectAllPendingServerRequests).not.toHaveBeenCalled();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// bg:setToolEnabled
+// ---------------------------------------------------------------------------
+
+describe('handleBgSetToolEnabled', () => {
+  test('optimistically updates server state cache and calls sendServerRequest', async () => {
+    mockGetServerStateCache.mockReturnValue({
+      plugins: [
+        {
+          name: 'slack',
+          displayName: 'Slack',
+          version: '1.0.0',
+          trustTier: 'community',
+          source: 'npm',
+          tabState: 'closed',
+          urlPatterns: [],
+          tools: [{ name: 'send', displayName: 'Send', description: 'desc', enabled: true }],
+        },
+      ],
+      failedPlugins: [],
+      browserTools: [],
+      serverVersion: '1.0.0',
+    });
+
+    mockSendServerRequest.mockResolvedValueOnce({ ok: true });
+
+    const sendResponse = vi.fn();
+    handleBgSetToolEnabled({ plugin: 'slack', tool: 'send', enabled: false }, sendResponse);
+
+    // Optimistic update should have been called
+    expect(mockUpdateServerStateCache).toHaveBeenCalledOnce();
+    const updateCall = mockUpdateServerStateCache.mock.calls[0]?.[0] as {
+      plugins: Array<{ tools: Array<{ enabled: boolean }> }>;
+    };
+    expect(updateCall.plugins[0]?.tools[0]?.enabled).toBe(false);
+
+    // sendServerRequest should have been called
+    expect(mockSendServerRequest).toHaveBeenCalledWith('config.setToolEnabled', {
+      plugin: 'slack',
+      tool: 'send',
+      enabled: false,
+    });
+
+    await vi.waitFor(() => expect(sendResponse).toHaveBeenCalled());
+    expect(sendResponse).toHaveBeenCalledWith({ ok: true });
+  });
+
+  test('reverts optimistic update on server error', async () => {
+    mockGetServerStateCache.mockReturnValue({
+      plugins: [
+        {
+          name: 'slack',
+          displayName: 'Slack',
+          version: '1.0.0',
+          trustTier: 'community',
+          source: 'npm',
+          tabState: 'closed',
+          urlPatterns: [],
+          tools: [{ name: 'send', displayName: 'Send', description: 'desc', enabled: true }],
+        },
+      ],
+      failedPlugins: [],
+      browserTools: [],
+      serverVersion: '1.0.0',
+    });
+
+    mockSendServerRequest.mockRejectedValueOnce(new Error('Server error'));
+
+    const sendResponse = vi.fn();
+    handleBgSetToolEnabled({ plugin: 'slack', tool: 'send', enabled: false }, sendResponse);
+
+    await vi.waitFor(() => expect(sendResponse).toHaveBeenCalled());
+
+    // Should have been called twice: optimistic + revert
+    expect(mockUpdateServerStateCache).toHaveBeenCalledTimes(2);
+    const revertCall = mockUpdateServerStateCache.mock.calls[1]?.[0] as {
+      plugins: Array<{ tools: Array<{ enabled: boolean }> }>;
+    };
+    expect(revertCall.plugins[0]?.tools[0]?.enabled).toBe(true);
+
+    expect(sendResponse).toHaveBeenCalledWith({ error: 'Server error' });
+  });
+});
+
+// ---------------------------------------------------------------------------
+// bg:setAllToolsEnabled
+// ---------------------------------------------------------------------------
+
+describe('handleBgSetAllToolsEnabled', () => {
+  test('optimistically updates all tools and calls sendServerRequest', async () => {
+    mockGetServerStateCache.mockReturnValue({
+      plugins: [
+        {
+          name: 'slack',
+          displayName: 'Slack',
+          version: '1.0.0',
+          trustTier: 'community',
+          source: 'npm',
+          tabState: 'closed',
+          urlPatterns: [],
+          tools: [
+            { name: 'send', displayName: 'Send', description: 'desc', enabled: true },
+            { name: 'read', displayName: 'Read', description: 'desc', enabled: true },
+          ],
+        },
+      ],
+      failedPlugins: [],
+      browserTools: [],
+      serverVersion: '1.0.0',
+    });
+
+    mockSendServerRequest.mockResolvedValueOnce({ ok: true });
+
+    const sendResponse = vi.fn();
+    handleBgSetAllToolsEnabled({ plugin: 'slack', enabled: false }, sendResponse);
+
+    expect(mockUpdateServerStateCache).toHaveBeenCalledOnce();
+    const updateCall = mockUpdateServerStateCache.mock.calls[0]?.[0] as {
+      plugins: Array<{ tools: Array<{ enabled: boolean }> }>;
+    };
+    expect(updateCall.plugins[0]?.tools.every(t => !t.enabled)).toBe(true);
+
+    await vi.waitFor(() => expect(sendResponse).toHaveBeenCalled());
+    expect(sendResponse).toHaveBeenCalledWith({ ok: true });
+  });
+});
+
+// ---------------------------------------------------------------------------
+// bg:setBrowserToolEnabled
+// ---------------------------------------------------------------------------
+
+describe('handleBgSetBrowserToolEnabled', () => {
+  test('optimistically updates browser tool and calls sendServerRequest', async () => {
+    mockGetServerStateCache.mockReturnValue({
+      plugins: [],
+      failedPlugins: [],
+      browserTools: [
+        { name: 'screenshot', description: 'Take a screenshot', enabled: true },
+        { name: 'console', description: 'Get console logs', enabled: true },
+      ],
+      serverVersion: '1.0.0',
+    });
+
+    mockSendServerRequest.mockResolvedValueOnce({ ok: true });
+
+    const sendResponse = vi.fn();
+    handleBgSetBrowserToolEnabled({ tool: 'screenshot', enabled: false }, sendResponse);
+
+    expect(mockUpdateServerStateCache).toHaveBeenCalledOnce();
+    const updateCall = mockUpdateServerStateCache.mock.calls[0]?.[0] as {
+      browserTools: Array<{ name: string; enabled: boolean }>;
+    };
+    expect(updateCall.browserTools.find(bt => bt.name === 'screenshot')?.enabled).toBe(false);
+    expect(updateCall.browserTools.find(bt => bt.name === 'console')?.enabled).toBe(true);
+
+    await vi.waitFor(() => expect(sendResponse).toHaveBeenCalled());
+    expect(sendResponse).toHaveBeenCalledWith({ ok: true });
+  });
+});
+
+// ---------------------------------------------------------------------------
+// bg:setAllBrowserToolsEnabled
+// ---------------------------------------------------------------------------
+
+describe('handleBgSetAllBrowserToolsEnabled', () => {
+  test('optimistically updates all browser tools and calls sendServerRequest', async () => {
+    mockGetServerStateCache.mockReturnValue({
+      plugins: [],
+      failedPlugins: [],
+      browserTools: [
+        { name: 'screenshot', description: 'Take a screenshot', enabled: true },
+        { name: 'console', description: 'Get console logs', enabled: true },
+      ],
+      serverVersion: '1.0.0',
+    });
+
+    mockSendServerRequest.mockResolvedValueOnce({ ok: true });
+
+    const sendResponse = vi.fn();
+    handleBgSetAllBrowserToolsEnabled({ enabled: false }, sendResponse);
+
+    expect(mockUpdateServerStateCache).toHaveBeenCalledOnce();
+    const updateCall = mockUpdateServerStateCache.mock.calls[0]?.[0] as { browserTools: Array<{ enabled: boolean }> };
+    expect(updateCall.browserTools.every(bt => !bt.enabled)).toBe(true);
+
+    await vi.waitFor(() => expect(sendResponse).toHaveBeenCalled());
+    expect(sendResponse).toHaveBeenCalledWith({ ok: true });
+  });
+});
+
+// ---------------------------------------------------------------------------
+// bg:searchPlugins
+// ---------------------------------------------------------------------------
+
+describe('handleBgSearchPlugins', () => {
+  test('relays plugin.search to the server and returns results', async () => {
+    const results = { results: [{ name: 'opentabs-plugin-test', description: 'test', version: '1.0.0' }] };
+    mockSendServerRequest.mockResolvedValueOnce(results);
+
+    const sendResponse = vi.fn();
+    handleBgSearchPlugins({ query: 'test' }, sendResponse);
+
+    expect(mockSendServerRequest).toHaveBeenCalledWith('plugin.search', { query: 'test' });
+
+    await vi.waitFor(() => expect(sendResponse).toHaveBeenCalled());
+    expect(sendResponse).toHaveBeenCalledWith(results);
+  });
+
+  test('returns error on server failure', async () => {
+    mockSendServerRequest.mockRejectedValueOnce(new Error('Search failed'));
+
+    const sendResponse = vi.fn();
+    handleBgSearchPlugins({ query: 'test' }, sendResponse);
+
+    await vi.waitFor(() => expect(sendResponse).toHaveBeenCalled());
+    expect(sendResponse).toHaveBeenCalledWith({ error: 'Search failed' });
+  });
+});
+
+// ---------------------------------------------------------------------------
+// bg:installPlugin
+// ---------------------------------------------------------------------------
+
+describe('handleBgInstallPlugin', () => {
+  test('relays plugin.install to the server and returns result', async () => {
+    const result = { ok: true, plugin: { name: 'test', displayName: 'Test', version: '1.0.0', toolCount: 2 } };
+    mockSendServerRequest.mockResolvedValueOnce(result);
+
+    const sendResponse = vi.fn();
+    handleBgInstallPlugin({ name: 'opentabs-plugin-test' }, sendResponse);
+
+    expect(mockSendServerRequest).toHaveBeenCalledWith('plugin.install', { name: 'opentabs-plugin-test' });
+
+    await vi.waitFor(() => expect(sendResponse).toHaveBeenCalled());
+    expect(sendResponse).toHaveBeenCalledWith(result);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// bg:removePlugin
+// ---------------------------------------------------------------------------
+
+describe('handleBgRemovePlugin', () => {
+  test('relays plugin.remove to the server and returns result', async () => {
+    mockSendServerRequest.mockResolvedValueOnce({ ok: true });
+
+    const sendResponse = vi.fn();
+    handleBgRemovePlugin({ name: 'test-plugin' }, sendResponse);
+
+    expect(mockSendServerRequest).toHaveBeenCalledWith('plugin.remove', { name: 'test-plugin' });
+
+    await vi.waitFor(() => expect(sendResponse).toHaveBeenCalled());
+    expect(sendResponse).toHaveBeenCalledWith({ ok: true });
+  });
+});
+
+// ---------------------------------------------------------------------------
+// bg:updatePlugin
+// ---------------------------------------------------------------------------
+
+describe('handleBgUpdatePlugin', () => {
+  test('relays plugin.updateFromRegistry to the server and returns result', async () => {
+    const result = { ok: true, plugin: { name: 'test', displayName: 'Test', version: '2.0.0', toolCount: 3 } };
+    mockSendServerRequest.mockResolvedValueOnce(result);
+
+    const sendResponse = vi.fn();
+    handleBgUpdatePlugin({ name: 'test-plugin' }, sendResponse);
+
+    expect(mockSendServerRequest).toHaveBeenCalledWith('plugin.updateFromRegistry', { name: 'test-plugin' });
+
+    await vi.waitFor(() => expect(sendResponse).toHaveBeenCalled());
+    expect(sendResponse).toHaveBeenCalledWith(result);
   });
 });

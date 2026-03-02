@@ -44,6 +44,7 @@ import { forwardToSidePanel, sendTabStateNotification, sendToServer } from './me
 import { getAllPluginMeta, removePlugin, removePluginsBatch, storePluginsBatch } from './plugin-storage.js';
 import { checkRateLimit } from './rate-limiter.js';
 import { handleResourceRead, handlePromptGet } from './resource-prompt-dispatch.js';
+import { consumeServerResponse } from './server-request.js';
 import { getServerStateCache, updateServerStateCache } from './server-state-cache.js';
 import {
   clearPluginTabState,
@@ -531,6 +532,13 @@ const handleServerMessage = (message: Record<string, unknown>): void => {
   const id = message.id as string | number | undefined;
   const params = (message.params ?? {}) as Record<string, unknown>;
 
+  // Consume responses to pending server requests (sent via sendServerRequest
+  // in background mutation handlers). If consumed, the response resolves
+  // the corresponding promise — no further processing needed.
+  if (!method && consumeServerResponse(message)) {
+    return;
+  }
+
   // Update the server state cache from plugins.changed push notifications
   // BEFORE forwarding to the side panel so the side panel reads fresh data.
   if (method === 'plugins.changed') {
@@ -546,7 +554,7 @@ const handleServerMessage = (message: Record<string, unknown>): void => {
   // Forward notifications to the side panel only if the method is in the
   // allowed set. Responses (id without method) are NOT forwarded — the side
   // panel no longer sends JSON-RPC requests through the background relay.
-  // Server responses are consumed by server-request.ts (US-006) instead.
+  // Unclaimed responses (not consumed above) are discarded.
   if (method && SIDE_PANEL_METHODS.has(method)) {
     forwardToSidePanel({ type: 'sp:serverMessage', data: message });
   }

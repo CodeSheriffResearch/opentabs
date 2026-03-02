@@ -7,7 +7,13 @@ import { buildWsUrl, SERVER_PORT_KEY, WS_CONNECTED_KEY } from './constants.js';
 import { handleServerMessage } from './message-router.js';
 import { forwardToSidePanel, sendToServer } from './messaging.js';
 import { getAllPluginMeta } from './plugin-storage.js';
-import { clearServerStateCache, getServerStateCache, loadServerStateCacheFromSession } from './server-state-cache.js';
+import { rejectAllPendingServerRequests, sendServerRequest } from './server-request.js';
+import {
+  clearServerStateCache,
+  getServerStateCache,
+  loadServerStateCacheFromSession,
+  updateServerStateCache,
+} from './server-state-cache.js';
 import {
   clearTabStateCache,
   getLastKnownStates,
@@ -91,6 +97,7 @@ const handleWsState: MessageHandler = (message, sendResponse) => {
     stopReadinessPoll();
     clearTabStateCache();
     clearServerStateCache();
+    rejectAllPendingServerRequests();
     clearAllConfirmationBadges();
   }
   sendResponse({ ok: true });
@@ -289,6 +296,164 @@ const handleSpConfirmationTimeout: MessageHandler = (message, sendResponse) => {
   sendResponse({ ok: true });
 };
 
+/** Handle bg:setToolEnabled — toggle a single tool's enabled state via the MCP server */
+const handleBgSetToolEnabled: MessageHandler = (message, sendResponse) => {
+  const plugin = message.plugin as string;
+  const tool = message.tool as string;
+  const enabled = message.enabled as boolean;
+
+  // Optimistically update the local server state cache
+  const cache = getServerStateCache();
+  const updatedPlugins = cache.plugins.map(p => {
+    if (p.name !== plugin) return p;
+    return {
+      ...p,
+      tools: p.tools.map(t => (t.name === tool ? { ...t, enabled } : t)),
+    };
+  });
+  updateServerStateCache({ plugins: updatedPlugins });
+
+  sendServerRequest('config.setToolEnabled', { plugin, tool, enabled })
+    .then((result: unknown) => {
+      sendResponse(result);
+    })
+    .catch((err: unknown) => {
+      // Revert the optimistic update on failure
+      const revertCache = getServerStateCache();
+      const revertPlugins = revertCache.plugins.map(p => {
+        if (p.name !== plugin) return p;
+        return {
+          ...p,
+          tools: p.tools.map(t => (t.name === tool ? { ...t, enabled: !enabled } : t)),
+        };
+      });
+      updateServerStateCache({ plugins: revertPlugins });
+      sendResponse({ error: err instanceof Error ? err.message : String(err) });
+    });
+};
+
+/** Handle bg:setAllToolsEnabled — toggle all tools for a plugin via the MCP server */
+const handleBgSetAllToolsEnabled: MessageHandler = (message, sendResponse) => {
+  const plugin = message.plugin as string;
+  const enabled = message.enabled as boolean;
+
+  // Optimistically update the local server state cache
+  const cache = getServerStateCache();
+  const originalPlugins = cache.plugins;
+  const updatedPlugins = cache.plugins.map(p => {
+    if (p.name !== plugin) return p;
+    return {
+      ...p,
+      tools: p.tools.map(t => ({ ...t, enabled })),
+    };
+  });
+  updateServerStateCache({ plugins: updatedPlugins });
+
+  sendServerRequest('config.setAllToolsEnabled', { plugin, enabled })
+    .then((result: unknown) => {
+      sendResponse(result);
+    })
+    .catch((err: unknown) => {
+      // Revert to the original plugins on failure
+      updateServerStateCache({ plugins: originalPlugins });
+      sendResponse({ error: err instanceof Error ? err.message : String(err) });
+    });
+};
+
+/** Handle bg:setBrowserToolEnabled — toggle a browser tool's enabled state via the MCP server */
+const handleBgSetBrowserToolEnabled: MessageHandler = (message, sendResponse) => {
+  const tool = message.tool as string;
+  const enabled = message.enabled as boolean;
+
+  // Optimistically update the local server state cache
+  const cache = getServerStateCache();
+  const updatedBrowserTools = cache.browserTools.map(bt => (bt.name === tool ? { ...bt, enabled } : bt));
+  updateServerStateCache({ browserTools: updatedBrowserTools });
+
+  sendServerRequest('config.setBrowserToolEnabled', { tool, enabled })
+    .then((result: unknown) => {
+      sendResponse(result);
+    })
+    .catch((err: unknown) => {
+      // Revert the optimistic update on failure
+      const revertCache = getServerStateCache();
+      const revertBrowserTools = revertCache.browserTools.map(bt =>
+        bt.name === tool ? { ...bt, enabled: !enabled } : bt,
+      );
+      updateServerStateCache({ browserTools: revertBrowserTools });
+      sendResponse({ error: err instanceof Error ? err.message : String(err) });
+    });
+};
+
+/** Handle bg:setAllBrowserToolsEnabled — toggle all browser tools via the MCP server */
+const handleBgSetAllBrowserToolsEnabled: MessageHandler = (message, sendResponse) => {
+  const enabled = message.enabled as boolean;
+
+  // Optimistically update the local server state cache
+  const cache = getServerStateCache();
+  const originalBrowserTools = cache.browserTools;
+  const updatedBrowserTools = cache.browserTools.map(bt => ({ ...bt, enabled }));
+  updateServerStateCache({ browserTools: updatedBrowserTools });
+
+  sendServerRequest('config.setAllBrowserToolsEnabled', { enabled })
+    .then((result: unknown) => {
+      sendResponse(result);
+    })
+    .catch((err: unknown) => {
+      // Revert to the original browser tools on failure
+      updateServerStateCache({ browserTools: originalBrowserTools });
+      sendResponse({ error: err instanceof Error ? err.message : String(err) });
+    });
+};
+
+/** Handle bg:searchPlugins — search npm registry for plugins */
+const handleBgSearchPlugins: MessageHandler = (message, sendResponse) => {
+  const query = message.query as string;
+  sendServerRequest('plugin.search', { query })
+    .then((result: unknown) => {
+      sendResponse(result);
+    })
+    .catch((err: unknown) => {
+      sendResponse({ error: err instanceof Error ? err.message : String(err) });
+    });
+};
+
+/** Handle bg:installPlugin — install a plugin by package name */
+const handleBgInstallPlugin: MessageHandler = (message, sendResponse) => {
+  const name = message.name as string;
+  sendServerRequest('plugin.install', { name })
+    .then((result: unknown) => {
+      sendResponse(result);
+    })
+    .catch((err: unknown) => {
+      sendResponse({ error: err instanceof Error ? err.message : String(err) });
+    });
+};
+
+/** Handle bg:removePlugin — remove an installed plugin */
+const handleBgRemovePlugin: MessageHandler = (message, sendResponse) => {
+  const name = message.name as string;
+  sendServerRequest('plugin.remove', { name })
+    .then((result: unknown) => {
+      sendResponse(result);
+    })
+    .catch((err: unknown) => {
+      sendResponse({ error: err instanceof Error ? err.message : String(err) });
+    });
+};
+
+/** Handle bg:updatePlugin — update a plugin to the latest registry version */
+const handleBgUpdatePlugin: MessageHandler = (message, sendResponse) => {
+  const name = message.name as string;
+  sendServerRequest('plugin.updateFromRegistry', { name })
+    .then((result: unknown) => {
+      sendResponse(result);
+    })
+    .catch((err: unknown) => {
+      sendResponse({ error: err instanceof Error ? err.message : String(err) });
+    });
+};
+
 /** Handle port-changed — relay port change to offscreen document for reconnect */
 const handlePortChanged: MessageHandler = (message, sendResponse) => {
   chrome.runtime.sendMessage(message as unknown as InternalMessage).catch(() => {
@@ -308,6 +473,14 @@ const backgroundHandlers = new Map<InternalMessage['type'], MessageHandler>([
   ['bg:send', handleBgSend],
   ['bg:getConnectionState', handleBgGetConnectionState],
   ['bg:getFullState', handleBgGetFullState],
+  ['bg:setToolEnabled', handleBgSetToolEnabled],
+  ['bg:setAllToolsEnabled', handleBgSetAllToolsEnabled],
+  ['bg:setBrowserToolEnabled', handleBgSetBrowserToolEnabled],
+  ['bg:setAllBrowserToolsEnabled', handleBgSetAllBrowserToolsEnabled],
+  ['bg:searchPlugins', handleBgSearchPlugins],
+  ['bg:installPlugin', handleBgInstallPlugin],
+  ['bg:removePlugin', handleBgRemovePlugin],
+  ['bg:updatePlugin', handleBgUpdatePlugin],
   ['plugin:logs', handlePluginLogs],
   ['tool:progress', handleToolProgress],
   ['sp:confirmationResponse', handleSpConfirmationResponse],
@@ -324,6 +497,14 @@ const EXTENSION_ONLY_TYPES: ReadonlySet<InternalMessage['type']> = new Set([
   'bg:send',
   'bg:getConnectionState',
   'bg:getFullState',
+  'bg:setToolEnabled',
+  'bg:setAllToolsEnabled',
+  'bg:setBrowserToolEnabled',
+  'bg:setAllBrowserToolsEnabled',
+  'bg:searchPlugins',
+  'bg:installPlugin',
+  'bg:removePlugin',
+  'bg:updatePlugin',
   'offscreen:getLogs',
   'sp:confirmationResponse',
   'sp:confirmationTimeout',
@@ -363,7 +544,15 @@ export {
   backgroundHandlerNames,
   handleBgGetConnectionState,
   handleBgGetFullState,
+  handleBgInstallPlugin,
+  handleBgRemovePlugin,
+  handleBgSearchPlugins,
   handleBgSend,
+  handleBgSetAllBrowserToolsEnabled,
+  handleBgSetAllToolsEnabled,
+  handleBgSetBrowserToolEnabled,
+  handleBgSetToolEnabled,
+  handleBgUpdatePlugin,
   handleOffscreenGetUrl,
   handlePluginLogs,
   handlePortChanged,
