@@ -6,7 +6,7 @@
  * for post-restart forensics.
  */
 
-import { isTimeout } from './status.js';
+import { isNonOpenTabsHttpError, isTimeout } from './status.js';
 import { getConfigDir, isConnectionRefused, readAuthSecret } from '../config.js';
 import { resolvePort } from '../parse-port.js';
 import { DEFAULT_HOST, toErrorMessage } from '@opentabs-dev/shared';
@@ -250,6 +250,12 @@ const handleAudit = async (options: AuditOptions): Promise<void> => {
     if (res.status === 401) {
       console.error(pc.red('Authentication failed.'));
       console.error(pc.dim('Is the server secret correct? Check ~/.opentabs/extension/auth.json'));
+      process.exit(1);
+    }
+
+    if (isNonOpenTabsHttpError(res.status, res.headers.get('content-type'))) {
+      console.error(pc.red(`No OpenTabs server found on port ${port}.`));
+      console.error(pc.dim('The port may be in use by another service.'));
       process.exit(1);
     }
 
