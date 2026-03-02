@@ -1773,7 +1773,7 @@ export const ProgressFlow = () => (
 export const LifecycleSequence = () => (
   <div className="my-8">
     <svg
-      viewBox="0 0 480 400"
+      viewBox="0 0 480 490"
       fill="none"
       xmlns="http://www.w3.org/2000/svg"
       className="w-full max-w-lg"
@@ -1785,7 +1785,7 @@ export const LifecycleSequence = () => (
       </defs>
 
       {/* ── Central timeline line ──────────────────────── */}
-      <line x1="60" y1="24" x2="60" y2="376" stroke="var(--color-foreground)" strokeWidth="2" opacity="0.2" />
+      <line x1="60" y1="24" x2="60" y2="462" stroke="var(--color-foreground)" strokeWidth="2" opacity="0.2" />
 
       {/* ── Phase 1: Registration (once) ──────────────── */}
       {/* Timeline dot */}
@@ -2082,6 +2082,64 @@ export const LifecycleSequence = () => (
       <text
         x="414"
         y="375"
+        fontSize="9"
+        fontFamily="var(--font-mono), monospace"
+        fill="var(--color-primary)"
+        fontWeight="bold"
+        textAnchor="middle">
+        once
+      </text>
+
+      {/* ── Arrow 5→6 ──────────────────────────────────── */}
+      <line
+        x1="60"
+        y1="396"
+        x2="60"
+        y2="432"
+        stroke="var(--color-foreground)"
+        strokeWidth="2"
+        markerEnd="url(#lc-arrow)"
+      />
+
+      {/* ── Phase 6: Teardown (once) ──────────────────── */}
+      {/* Timeline dot */}
+      <circle cx="60" cy="460" r="6" fill="var(--color-foreground)" />
+      {/* Shadow */}
+      <rect x="88" y="442" width="372" height="40" fill="var(--color-foreground)" />
+      {/* Body — solid box for one-time hook */}
+      <rect
+        x="84"
+        y="438"
+        width="372"
+        height="40"
+        fill="var(--color-primary)"
+        opacity="0.12"
+        stroke="var(--color-foreground)"
+        strokeWidth="3"
+      />
+      <text
+        x="100"
+        y="458"
+        fontSize="12"
+        fontFamily="var(--font-mono), monospace"
+        fill="var(--color-foreground)"
+        fontWeight="bold">
+        teardown()
+      </text>
+      <text
+        x="100"
+        y="472"
+        fontSize="9"
+        fontFamily="var(--font-mono), monospace"
+        fill="var(--color-foreground)"
+        opacity="0.5">
+        After onDeactivate, before re-injection (plugin update only)
+      </text>
+      {/* "once" badge */}
+      <rect x="388" y="448" width="52" height="18" fill="var(--color-foreground)" />
+      <text
+        x="414"
+        y="461"
         fontSize="9"
         fontFamily="var(--font-mono), monospace"
         fill="var(--color-primary)"
