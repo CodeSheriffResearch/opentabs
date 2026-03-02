@@ -68,8 +68,10 @@ test.describe('Side panel — plugin list rendering', () => {
       // Verify plugin card shows display name
       await expect(sidePanelPage.getByText('E2E Test')).toBeVisible({ timeout: 30_000 });
 
+      const e2ePluginCard = sidePanelPage.locator('button[aria-expanded]').filter({ hasText: 'E2E Test' });
+
       // With no matching tab open, the PluginIcon shows a closed state (no status dot)
-      await expect(sidePanelPage.locator('.bg-success').first()).toBeHidden({
+      await expect(e2ePluginCard.locator('.bg-success')).toBeHidden({
         timeout: 5_000,
       });
 
@@ -103,7 +105,7 @@ test.describe('Side panel — plugin list rendering', () => {
       await expect(sidePanelPage.getByText('E2E Test')).toBeVisible({ timeout: 15_000 });
 
       // The PluginIcon now shows a ready state (green status dot visible)
-      await expect(sidePanelPage.locator('.bg-success').first()).toBeVisible({
+      await expect(e2ePluginCard.locator('.bg-success')).toBeVisible({
         timeout: 15_000,
       });
 

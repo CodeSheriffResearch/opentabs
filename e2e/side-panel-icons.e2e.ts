@@ -129,7 +129,7 @@ test.describe('Icon pipeline — side panel rendering', () => {
       expect(inactiveHtml).toContain('<svg');
 
       // No status dot should be visible in closed state
-      await expect(sidePanelPage.locator('.bg-success').first()).toBeHidden({ timeout: 5_000 });
+      await expect(e2ePluginButton.locator('.bg-success')).toBeHidden({ timeout: 5_000 });
 
       // 2. Open a matching tab to transition to 'ready' state
       const appTab = await context.newPage();
@@ -170,7 +170,7 @@ test.describe('Icon pipeline — side panel rendering', () => {
       expect(activeHtml).toContain('<svg');
 
       // Ready state should show green status dot
-      await expect(sidePanelPage.locator('.bg-success').first()).toBeVisible({ timeout: 5_000 });
+      await expect(activePluginButton.locator('.bg-success')).toBeVisible({ timeout: 5_000 });
 
       // The active and inactive SVG content should differ (different fill values)
       expect(activeHtml).not.toBe(inactiveHtml);

@@ -118,6 +118,7 @@ const BrowserToolsCard = ({
           <PluginIcon
             pluginName="browser"
             displayName="Browser"
+            tabState="ready"
             size={32}
             iconSvg={CHROME_ICON_SVG}
             iconInactiveSvg={CHROME_ICON_SVG}
