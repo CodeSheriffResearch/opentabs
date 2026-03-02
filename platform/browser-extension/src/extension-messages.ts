@@ -47,12 +47,6 @@ export interface WsSetUrlMessage {
   url: string;
 }
 
-/** Side panel → Background: send a JSON-RPC message to the MCP server */
-export interface BgSendMessage {
-  type: 'bg:send';
-  data: unknown;
-}
-
 /** Side panel → Background: query WebSocket connection state */
 export interface BgGetConnectionStateMessage {
   type: 'bg:getConnectionState';
@@ -207,7 +201,6 @@ export type InternalMessage =
   | WsSendMessage
   | WsGetStateMessage
   | WsSetUrlMessage
-  | BgSendMessage
   | BgGetConnectionStateMessage
   | BgGetFullStateMessage
   | BgSetToolEnabledMessage

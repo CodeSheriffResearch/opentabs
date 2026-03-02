@@ -1,13 +1,10 @@
 /**
- * Bridge for side panel ↔ background script ↔ MCP server communication.
+ * Bridge for side panel ↔ background script communication.
  *
- * Uses chrome.runtime.sendMessage with bg:* message types to relay JSON-RPC
- * requests to the MCP server. Responses return asynchronously via sp:serverMessage
- * and are correlated by request ID using a pending-request map.
- *
- * Each pending request has a 30-second timeout to prevent hanging promises when
- * the server disconnects between send and response. All pending requests are
- * also rejected on WebSocket disconnect (sp:connectionState connected=false).
+ * All state is fetched from the background script's local caches via
+ * bg:getFullState. Mutations (tool toggles, plugin management) are relayed
+ * to the MCP server via dedicated bg:* message handlers in the background
+ * script. The side panel never communicates with the MCP server directly.
  */
 
 import type { DisconnectReason } from '../extension-messages.js';
@@ -15,7 +12,6 @@ import type {
   ConfigStateBrowserTool,
   ConfigStateFailedPlugin,
   ConfigStatePlugin,
-  ConfigStateResult,
   WireToolDef,
 } from '@opentabs-dev/shared';
 
@@ -48,6 +44,16 @@ interface PluginInstallResult {
   };
 }
 
+/** Full state returned by bg:getFullState */
+interface FullStateResult {
+  connected: boolean;
+  disconnectReason?: DisconnectReason;
+  plugins: PluginState[];
+  failedPlugins: FailedPluginState[];
+  browserTools: BrowserToolState[];
+  serverVersion?: string;
+}
+
 /** Returns true if a tool's displayName, name, or description matches the filter string */
 const matchesTool = (tool: WireToolDef, filterLower: string): boolean =>
   tool.displayName.toLowerCase().includes(filterLower) ||
@@ -72,145 +78,60 @@ const matchesPlugin = (plugin: PluginState, filterLower: string): boolean =>
  */
 const extractShortName = (name: string): string => (name.split('/').pop() ?? name).replace(/^opentabs-plugin-/, '');
 
-/** Timeout for pending JSON-RPC requests relayed through the background script (ms) */
-const REQUEST_TIMEOUT_MS = 30_000;
-
-/** Pending JSON-RPC request awaiting a server response */
-interface PendingRequest {
-  resolve: (value: unknown) => void;
-  reject: (error: Error) => void;
-  timerId: ReturnType<typeof setTimeout>;
-}
-
-/** Map of request ID → pending request. Responses are matched by ID. */
-const pendingRequests = new Map<string, PendingRequest>();
-
 /**
- * Reject all pending requests immediately.
- * Called on WebSocket disconnect (sp:connectionState connected=false) so the
- * side panel gets fast errors instead of waiting for individual 30s timeouts.
+ * Send a message to the background script and return the response as a Promise.
+ * Rejects with an Error if chrome.runtime.lastError is set or the response
+ * contains an `error` field (the pattern used by bg:* mutation handlers).
  */
-const rejectAllPending = (): void => {
-  for (const [id, pending] of pendingRequests) {
-    pendingRequests.delete(id);
-    clearTimeout(pending.timerId);
-    pending.reject(new Error('Server disconnected'));
-  }
-};
-
-/**
- * Send a JSON-RPC request to the MCP server via the background script.
- * Returns a promise that resolves with the MCP server's response (not the
- * background script's ack). Call handleServerResponse() when sp:serverMessage
- * arrives to resolve pending requests.
- */
-const sendRequest = (method: string, params: Record<string, unknown> = {}): Promise<unknown> => {
-  const id = crypto.randomUUID();
-  const data = { jsonrpc: '2.0', method, params, id };
-
-  return new Promise<unknown>((resolve, reject) => {
-    const timerId = setTimeout(() => {
-      if (pendingRequests.has(id)) {
-        pendingRequests.delete(id);
-        reject(new Error(`Request ${method} timed out after ${REQUEST_TIMEOUT_MS}ms`));
+const sendBgMessage = <T>(message: Record<string, unknown>): Promise<T> =>
+  new Promise((resolve, reject) => {
+    chrome.runtime.sendMessage(message, (response: unknown) => {
+      if (chrome.runtime.lastError) {
+        reject(new Error(chrome.runtime.lastError.message ?? 'Unknown error'));
+        return;
       }
-    }, REQUEST_TIMEOUT_MS);
-
-    pendingRequests.set(id, { resolve, reject, timerId });
-
-    chrome.runtime.sendMessage({ type: 'bg:send', data }).catch((err: unknown) => {
-      clearTimeout(timerId);
-      pendingRequests.delete(id);
-      reject(err instanceof Error ? err : new Error(String(err)));
+      if (response && typeof response === 'object' && 'error' in response) {
+        reject(new Error((response as { error: string }).error));
+        return;
+      }
+      resolve(response as T);
     });
   });
-};
 
-/**
- * Handle a server message forwarded by the background script.
- * If the message is a response (has id, no method), resolve the matching
- * pending request and return true. Otherwise return false so the caller
- * can handle it as a notification.
- */
-const handleServerResponse = (data: Record<string, unknown>): boolean => {
-  const rawId = data.id as string | number | null | undefined;
-  if (rawId === undefined || rawId === null || data.method) return false;
-  const id = String(rawId);
-
-  const pending = pendingRequests.get(id);
-  if (!pending) return false;
-
-  pendingRequests.delete(id);
-  clearTimeout(pending.timerId);
-
-  if ('error' in data) {
-    const err = data.error as { message?: string };
-    pending.reject(new Error(err.message ?? 'Unknown server error'));
-  } else {
-    pending.resolve(data.result);
-  }
-
-  return true;
-};
-
-/** Result from querying the background script for WebSocket connection state */
-interface ConnectionStateResult {
-  connected: boolean;
-  disconnectReason?: DisconnectReason;
-}
-
-/** Query the background script for WebSocket connection state */
-const getConnectionState = (): Promise<ConnectionStateResult> =>
-  new Promise(resolve => {
-    chrome.runtime.sendMessage(
-      { type: 'bg:getConnectionState' },
-      (response: { connected?: boolean; disconnectReason?: DisconnectReason } | undefined) => {
-        if (chrome.runtime.lastError) {
-          resolve({ connected: false });
-        } else {
-          resolve({
-            connected: response?.connected === true,
-            disconnectReason: response?.disconnectReason,
-          });
-        }
-      },
-    );
-  });
-
-/** Request full state from MCP server via config.getState */
-const fetchConfigState = () => sendRequest('config.getState') as Promise<Partial<ConfigStateResult>>;
+/** Fetch full merged state from the background script's local caches */
+const getFullState = (): Promise<FullStateResult> => sendBgMessage<FullStateResult>({ type: 'bg:getFullState' });
 
 /** Toggle a single tool's enabled state */
 const setToolEnabled = (plugin: string, tool: string, enabled: boolean): Promise<unknown> =>
-  sendRequest('config.setToolEnabled', { plugin, tool, enabled });
+  sendBgMessage({ type: 'bg:setToolEnabled', plugin, tool, enabled });
 
 /** Toggle all tools for a plugin */
 const setAllToolsEnabled = (plugin: string, enabled: boolean): Promise<unknown> =>
-  sendRequest('config.setAllToolsEnabled', { plugin, enabled });
+  sendBgMessage({ type: 'bg:setAllToolsEnabled', plugin, enabled });
 
 /** Toggle a browser tool's enabled state */
 const setBrowserToolEnabled = (tool: string, enabled: boolean): Promise<unknown> =>
-  sendRequest('config.setBrowserToolEnabled', { tool, enabled });
+  sendBgMessage({ type: 'bg:setBrowserToolEnabled', tool, enabled });
 
 /** Toggle all browser tools' enabled state in a single batch request */
 const setAllBrowserToolsEnabled = (enabled: boolean): Promise<unknown> =>
-  sendRequest('config.setAllBrowserToolsEnabled', { enabled });
+  sendBgMessage({ type: 'bg:setAllBrowserToolsEnabled', enabled });
 
 /** Search npm registry for plugins matching the given query */
 const searchPlugins = (query: string): Promise<{ results: PluginSearchResult[] }> =>
-  sendRequest('plugin.search', { query }) as Promise<{ results: PluginSearchResult[] }>;
+  sendBgMessage<{ results: PluginSearchResult[] }>({ type: 'bg:searchPlugins', query });
 
 /** Install a plugin by package name */
 const installPlugin = (name: string): Promise<PluginInstallResult> =>
-  sendRequest('plugin.install', { name }) as Promise<PluginInstallResult>;
+  sendBgMessage<PluginInstallResult>({ type: 'bg:installPlugin', name });
 
 /** Remove an installed plugin by name */
 const removePlugin = (name: string): Promise<{ ok: true }> =>
-  sendRequest('plugin.remove', { name }) as Promise<{ ok: true }>;
+  sendBgMessage<{ ok: true }>({ type: 'bg:removePlugin', name });
 
 /** Update an installed plugin to the latest registry version */
 const updatePlugin = (name: string): Promise<PluginInstallResult> =>
-  sendRequest('plugin.updateFromRegistry', { name }) as Promise<PluginInstallResult>;
+  sendBgMessage<PluginInstallResult>({ type: 'bg:updatePlugin', name });
 
 /** Send a confirmation response to the MCP server via the background script (fire-and-forget) */
 const sendConfirmationResponse = (
@@ -228,22 +149,27 @@ const sendConfirmationResponse = (
     });
 };
 
-export type { BrowserToolState, FailedPluginState, PluginInstallResult, PluginSearchResult, PluginState, WireToolDef };
+export type {
+  BrowserToolState,
+  FailedPluginState,
+  FullStateResult,
+  PluginInstallResult,
+  PluginSearchResult,
+  PluginState,
+  WireToolDef,
+};
 export {
-  getConnectionState,
-  fetchConfigState,
   extractShortName,
+  getFullState,
+  installPlugin,
   matchesPlugin,
   matchesTool,
-  setToolEnabled,
+  removePlugin,
+  searchPlugins,
+  sendConfirmationResponse,
+  setAllBrowserToolsEnabled,
   setAllToolsEnabled,
   setBrowserToolEnabled,
-  setAllBrowserToolsEnabled,
-  searchPlugins,
-  installPlugin,
-  removePlugin,
+  setToolEnabled,
   updatePlugin,
-  handleServerResponse,
-  rejectAllPending,
-  sendConfirmationResponse,
 };

@@ -484,7 +484,6 @@ chrome.runtime.onMessage.addListener((message: InternalMessage, sender, sendResp
     case 'offscreen:getUrl':
     case 'ws:state':
     case 'ws:message':
-    case 'bg:send':
     case 'bg:getConnectionState':
     case 'bg:getFullState':
     case 'bg:setToolEnabled':

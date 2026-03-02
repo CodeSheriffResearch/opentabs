@@ -1,336 +1,277 @@
 import {
   extractShortName,
-  fetchConfigState,
-  handleServerResponse,
+  getFullState,
   installPlugin,
   matchesPlugin,
   matchesTool,
-  rejectAllPending,
   removePlugin,
   searchPlugins,
+  setAllBrowserToolsEnabled,
   setAllToolsEnabled,
+  setBrowserToolEnabled,
   setToolEnabled,
   updatePlugin,
 } from './bridge.js';
-import { afterEach, beforeEach, describe, expect, vi, test } from 'vitest';
+import { beforeEach, describe, expect, test } from 'vitest';
 import type { PluginState, WireToolDef } from './bridge.js';
 
 /** Captured sendMessage calls. Each entry has the message object passed to sendMessage. */
 let sendMessageCalls: Array<{ message: unknown }> = [];
 
-/**
- * When set, chrome.runtime.sendMessage will reject with this error on the next call.
- * Cleared after each call.
- */
-let nextSendError: { message: string } | null = null;
+/** Response to return from the next chrome.runtime.sendMessage callback */
+let mockResponse: unknown = undefined;
+
+/** When set, chrome.runtime.lastError will return this error */
+let mockLastError: { message: string } | undefined = undefined;
 
 beforeEach(() => {
   sendMessageCalls = [];
-  nextSendError = null;
+  mockResponse = undefined;
+  mockLastError = undefined;
 
   (globalThis as Record<string, unknown>).chrome = {
     runtime: {
-      sendMessage: (message: unknown) => {
+      get lastError() {
+        return mockLastError;
+      },
+      sendMessage: (message: unknown, callback?: (response: unknown) => void) => {
         sendMessageCalls.push({ message });
-
-        if (nextSendError) {
-          const err = new Error(nextSendError.message);
-          nextSendError = null;
-          return Promise.reject(err);
+        if (callback) {
+          callback(mockResponse);
         }
-
         return Promise.resolve();
       },
     },
   };
 });
 
-/** Extract the JSON-RPC id from the most recent sendMessage call */
-const getLastRequestId = (): string => {
-  const last = sendMessageCalls.at(-1);
-  if (!last) throw new Error('No sendMessage calls captured');
-  const data = (last.message as { data: { id: string } }).data;
-  return data.id;
-};
+// --- getFullState ---
 
-/**
- * Reject all pending requests and suppress the unhandled rejections.
- * Used at the end of tests that create pending requests without resolving them.
- */
-const cleanupPending = (...promises: Promise<unknown>[]): void => {
-  rejectAllPending();
-  for (const p of promises) {
-    p.catch(() => {});
-  }
-};
+describe('getFullState', () => {
+  test('sends bg:getFullState and resolves with response', async () => {
+    mockResponse = {
+      connected: true,
+      plugins: [{ name: 'slack' }],
+      failedPlugins: [],
+      browserTools: [],
+      serverVersion: '1.0.0',
+    };
 
-/** Assert that a promise rejects with an error containing the given message */
-const expectRejection = async (promise: Promise<unknown>, message: string): Promise<void> => {
-  try {
-    await promise;
-    throw new Error('Expected promise to reject');
-  } catch (err) {
-    expect(err).toBeInstanceOf(Error);
-    expect((err as Error).message).toContain(message);
-  }
-};
-
-describe('handleServerResponse', () => {
-  test('returns true and resolves promise for matching response id', async () => {
-    const promise = fetchConfigState();
-    const id = getLastRequestId();
-
-    const payload = { plugins: ['stub-plugin'], failedPlugins: [] };
-    const handled = handleServerResponse({ id, result: payload });
-
-    expect(handled).toBe(true);
-    const result = (await promise) as unknown as Record<string, unknown>;
-    expect(result.plugins).toEqual(payload.plugins);
+    const result = await getFullState();
+    expect(result.connected).toBe(true);
+    expect(result.plugins).toEqual([{ name: 'slack' }]);
+    expect(result.serverVersion).toBe('1.0.0');
+    expect(sendMessageCalls).toHaveLength(1);
+    expect(sendMessageCalls[0]?.message).toEqual({ type: 'bg:getFullState' });
   });
 
-  test('returns false for messages with a method field (notifications)', () => {
-    const handled = handleServerResponse({ method: 'plugins.changed', params: {} });
-    expect(handled).toBe(false);
+  test('includes disconnectReason when disconnected', async () => {
+    mockResponse = {
+      connected: false,
+      disconnectReason: 'connection_refused',
+      plugins: [],
+      failedPlugins: [],
+      browserTools: [],
+    };
+
+    const result = await getFullState();
+    expect(result.connected).toBe(false);
+    expect(result.disconnectReason).toBe('connection_refused');
   });
 
-  test('returns false for messages with both id and method (request-shaped)', async () => {
-    const promise = fetchConfigState();
-    const id = getLastRequestId();
+  test('rejects when chrome.runtime.lastError is set', async () => {
+    mockLastError = { message: 'Extension context invalidated.' };
 
-    const handled = handleServerResponse({ id, method: 'some.method', result: {} });
-    expect(handled).toBe(false);
-
-    handleServerResponse({ id, result: { plugins: [], failedPlugins: [] } });
-    await promise;
-  });
-
-  test('returns false for unknown ids', () => {
-    const handled = handleServerResponse({ id: 'nonexistent-id', result: {} });
-    expect(handled).toBe(false);
-  });
-
-  test('returns false for undefined id', () => {
-    const handled = handleServerResponse({ result: {} });
-    expect(handled).toBe(false);
-  });
-
-  test('returns false for null id', () => {
-    const handled = handleServerResponse({ id: null, result: {} });
-    expect(handled).toBe(false);
-  });
-
-  test('handles numeric id by converting to string', async () => {
-    const promise = fetchConfigState();
-    const id = getLastRequestId();
-
-    // Pending map keys are string UUIDs, so a numeric id won't match
-    const handled = handleServerResponse({ id: 42, result: {} });
-    expect(handled).toBe(false);
-
-    handleServerResponse({ id, result: { plugins: [], failedPlugins: [] } });
-    await promise;
-  });
-
-  test('rejects promise for server error responses', async () => {
-    const promise = fetchConfigState();
-    const id = getLastRequestId();
-
-    handleServerResponse({ id, error: { message: 'Plugin not found' } });
-
-    await expectRejection(promise, 'Plugin not found');
-  });
-
-  test('rejects with generic message for error without message field', async () => {
-    const promise = fetchConfigState();
-    const id = getLastRequestId();
-
-    handleServerResponse({ id, error: {} });
-
-    await expectRejection(promise, 'Unknown server error');
-  });
-
-  test('resolves multiple concurrent requests independently', async () => {
-    const p1 = setToolEnabled('slack', 'send-message', true);
-    const id1 = getLastRequestId();
-
-    const p2 = setToolEnabled('slack', 'list-channels', false);
-    const id2 = getLastRequestId();
-
-    // Resolve in reverse order
-    handleServerResponse({ id: id2, result: { ok: true, tool: 'list-channels' } });
-    handleServerResponse({ id: id1, result: { ok: true, tool: 'send-message' } });
-
-    const r1 = await p1;
-    const r2 = await p2;
-    expect(r1).toEqual({ ok: true, tool: 'send-message' });
-    expect(r2).toEqual({ ok: true, tool: 'list-channels' });
+    await expect(getFullState()).rejects.toThrow('Extension context invalidated.');
   });
 });
 
-describe('rejectAllPending', () => {
-  test('rejects all inflight requests with Server disconnected', async () => {
-    const p1 = fetchConfigState();
-    const p2 = setToolEnabled('slack', 'send-message', true);
+// --- setToolEnabled ---
 
-    rejectAllPending();
+describe('setToolEnabled', () => {
+  test('sends bg:setToolEnabled with correct params', async () => {
+    mockResponse = { ok: true };
 
-    await expectRejection(p1, 'Server disconnected');
-    await expectRejection(p2, 'Server disconnected');
-  });
-
-  test('clears pending request timers (no timeout after reject)', async () => {
-    const promise = fetchConfigState();
-    rejectAllPending();
-
-    await expectRejection(promise, 'Server disconnected');
-
-    // After rejectAllPending, handleServerResponse with the same id returns false
-    // (the entry was removed from the map)
-    const id = getLastRequestId();
-    const handled = handleServerResponse({ id, result: {} });
-    expect(handled).toBe(false);
-  });
-
-  test('is a no-op when no requests are pending', () => {
-    rejectAllPending();
-  });
-});
-
-describe('sendRequest error handling', () => {
-  test('rejects when sendMessage rejects', async () => {
-    nextSendError = { message: 'Extension context invalidated.' };
-
-    const promise = fetchConfigState();
-
-    await expectRejection(promise, 'Extension context invalidated.');
-  });
-
-  test('sends correct JSON-RPC message format', () => {
-    const promise = setToolEnabled('slack', 'send-message', true);
+    await setToolEnabled('slack', 'send-message', true);
 
     expect(sendMessageCalls).toHaveLength(1);
-    const entry = sendMessageCalls.at(0);
-    if (!entry) throw new Error('Expected sendMessage call');
-    const msg = entry.message as { type: string; data: Record<string, unknown> };
+    expect(sendMessageCalls[0]?.message).toEqual({
+      type: 'bg:setToolEnabled',
+      plugin: 'slack',
+      tool: 'send-message',
+      enabled: true,
+    });
+  });
 
-    expect(msg.type).toBe('bg:send');
-    expect(msg.data.jsonrpc).toBe('2.0');
-    expect(msg.data.method).toBe('config.setToolEnabled');
-    expect(msg.data.params).toEqual({ plugin: 'slack', tool: 'send-message', enabled: true });
-    expect(typeof msg.data.id).toBe('string');
+  test('rejects when response contains error field', async () => {
+    mockResponse = { error: 'Tool not found' };
 
-    cleanupPending(promise);
+    await expect(setToolEnabled('slack', 'unknown', true)).rejects.toThrow('Tool not found');
   });
 });
+
+// --- setAllToolsEnabled ---
 
 describe('setAllToolsEnabled', () => {
-  test('sends JSON-RPC with method config.setAllToolsEnabled and correct params', () => {
-    const promise = setAllToolsEnabled('slack', true);
+  test('sends bg:setAllToolsEnabled with correct params', async () => {
+    mockResponse = { ok: true };
+
+    await setAllToolsEnabled('slack', true);
 
     expect(sendMessageCalls).toHaveLength(1);
-    const entry = sendMessageCalls.at(0);
-    if (!entry) throw new Error('Expected sendMessage call');
-    const msg = entry.message as { type: string; data: Record<string, unknown> };
-
-    expect(msg.type).toBe('bg:send');
-    expect(msg.data.jsonrpc).toBe('2.0');
-    expect(msg.data.method).toBe('config.setAllToolsEnabled');
-    expect(msg.data.params).toEqual({ plugin: 'slack', enabled: true });
-    expect(typeof msg.data.id).toBe('string');
-
-    cleanupPending(promise);
+    expect(sendMessageCalls[0]?.message).toEqual({
+      type: 'bg:setAllToolsEnabled',
+      plugin: 'slack',
+      enabled: true,
+    });
   });
 
-  test('sends enabled=false when disabling all tools', () => {
-    const promise = setAllToolsEnabled('datadog', false);
+  test('sends enabled=false when disabling all tools', async () => {
+    mockResponse = { ok: true };
 
-    const entry = sendMessageCalls.at(0);
-    if (!entry) throw new Error('Expected sendMessage call');
-    const msg = entry.message as { type: string; data: Record<string, unknown> };
+    await setAllToolsEnabled('datadog', false);
 
-    expect(msg.data.method).toBe('config.setAllToolsEnabled');
-    expect(msg.data.params).toEqual({ plugin: 'datadog', enabled: false });
-
-    cleanupPending(promise);
+    expect(sendMessageCalls[0]?.message).toMatchObject({
+      type: 'bg:setAllToolsEnabled',
+      plugin: 'datadog',
+      enabled: false,
+    });
   });
 });
 
-describe('request timeout', () => {
-  beforeEach(() => {
-    vi.useFakeTimers();
-  });
+// --- setBrowserToolEnabled ---
 
-  afterEach(() => {
-    vi.useRealTimers();
-  });
+describe('setBrowserToolEnabled', () => {
+  test('sends bg:setBrowserToolEnabled with correct params', async () => {
+    mockResponse = { ok: true };
 
-  test('rejects after REQUEST_TIMEOUT_MS with timeout error', async () => {
-    const promise = fetchConfigState();
+    await setBrowserToolEnabled('screenshot', true);
 
-    vi.advanceTimersByTime(30_000);
-
-    await expectRejection(promise, 'timed out after 30000ms');
-  });
-
-  test('cleans up pending request from internal map after timeout', async () => {
-    const promise = fetchConfigState();
-    const id = getLastRequestId();
-
-    vi.advanceTimersByTime(30_000);
-
-    await expectRejection(promise, 'timed out after 30000ms');
-
-    // After timeout, handleServerResponse with the same id returns false
-    // (the entry was removed from the pending map)
-    const handled = handleServerResponse({ id, result: {} });
-    expect(handled).toBe(false);
+    expect(sendMessageCalls).toHaveLength(1);
+    expect(sendMessageCalls[0]?.message).toEqual({
+      type: 'bg:setBrowserToolEnabled',
+      tool: 'screenshot',
+      enabled: true,
+    });
   });
 });
 
-describe('getConnectionState', () => {
-  test('resolves true when background reports connected', async () => {
-    (chrome.runtime as Record<string, unknown>).sendMessage = (
-      message: unknown,
-      callback: (response: unknown) => void,
-    ) => {
-      sendMessageCalls.push({ message });
-      (chrome.runtime as Record<string, unknown>).lastError = undefined;
-      callback({ connected: true });
+// --- setAllBrowserToolsEnabled ---
+
+describe('setAllBrowserToolsEnabled', () => {
+  test('sends bg:setAllBrowserToolsEnabled with correct params', async () => {
+    mockResponse = { ok: true };
+
+    await setAllBrowserToolsEnabled(false);
+
+    expect(sendMessageCalls).toHaveLength(1);
+    expect(sendMessageCalls[0]?.message).toEqual({
+      type: 'bg:setAllBrowserToolsEnabled',
+      enabled: false,
+    });
+  });
+});
+
+// --- searchPlugins ---
+
+describe('searchPlugins', () => {
+  test('sends bg:searchPlugins with correct params', async () => {
+    mockResponse = {
+      results: [{ name: 'slack', description: 'Slack', version: '1.0', author: 'x', isOfficial: true }],
     };
 
-    const { getConnectionState } = await import('./bridge.js');
-    const result = await getConnectionState();
-    expect(result).toEqual({ connected: true, disconnectReason: undefined });
+    const result = await searchPlugins('slack');
+
+    expect(sendMessageCalls).toHaveLength(1);
+    expect(sendMessageCalls[0]?.message).toEqual({ type: 'bg:searchPlugins', query: 'slack' });
+    expect(result.results).toHaveLength(1);
+    expect(result.results[0]?.name).toBe('slack');
   });
 
-  test('resolves disconnected when background reports disconnected', async () => {
-    (chrome.runtime as Record<string, unknown>).sendMessage = (
-      message: unknown,
-      callback: (response: unknown) => void,
-    ) => {
-      sendMessageCalls.push({ message });
-      (chrome.runtime as Record<string, unknown>).lastError = undefined;
-      callback({ connected: false, disconnectReason: 'connection_refused' });
-    };
+  test('rejects with error from background', async () => {
+    mockResponse = { error: 'Search failed' };
 
-    const { getConnectionState } = await import('./bridge.js');
-    const result = await getConnectionState();
-    expect(result).toEqual({ connected: false, disconnectReason: 'connection_refused' });
+    await expect(searchPlugins('test')).rejects.toThrow('Search failed');
+  });
+});
+
+// --- installPlugin ---
+
+describe('installPlugin', () => {
+  test('sends bg:installPlugin with correct params', async () => {
+    mockResponse = { ok: true, plugin: { name: 'slack', displayName: 'Slack', version: '1.0', toolCount: 3 } };
+
+    const result = await installPlugin('@opentabs-dev/opentabs-plugin-slack');
+
+    expect(sendMessageCalls).toHaveLength(1);
+    expect(sendMessageCalls[0]?.message).toEqual({
+      type: 'bg:installPlugin',
+      name: '@opentabs-dev/opentabs-plugin-slack',
+    });
+    expect(result.ok).toBe(true);
   });
 
-  test('resolves disconnected when chrome.runtime.lastError is set', async () => {
-    (chrome.runtime as Record<string, unknown>).sendMessage = (
-      message: unknown,
-      callback: (response: unknown) => void,
-    ) => {
-      sendMessageCalls.push({ message });
-      (chrome.runtime as Record<string, unknown>).lastError = { message: 'error' };
-      callback(undefined);
-    };
+  test('rejects on install failure', async () => {
+    mockResponse = { error: 'Package not found in registry' };
 
-    const { getConnectionState } = await import('./bridge.js');
-    const result = await getConnectionState();
-    expect(result).toEqual({ connected: false, disconnectReason: undefined });
+    await expect(installPlugin('nonexistent')).rejects.toThrow('Package not found in registry');
+  });
+});
+
+// --- removePlugin ---
+
+describe('removePlugin', () => {
+  test('sends bg:removePlugin with correct params', async () => {
+    mockResponse = { ok: true };
+
+    const result = await removePlugin('slack');
+
+    expect(sendMessageCalls).toHaveLength(1);
+    expect(sendMessageCalls[0]?.message).toEqual({ type: 'bg:removePlugin', name: 'slack' });
+    expect(result).toEqual({ ok: true });
+  });
+
+  test('rejects when plugin is not installed', async () => {
+    mockResponse = { error: 'Plugin not installed' };
+
+    await expect(removePlugin('nonexistent')).rejects.toThrow('Plugin not installed');
+  });
+});
+
+// --- updatePlugin ---
+
+describe('updatePlugin', () => {
+  test('sends bg:updatePlugin with correct params', async () => {
+    mockResponse = { ok: true, plugin: { name: 'slack', displayName: 'Slack', version: '2.0', toolCount: 5 } };
+
+    const result = await updatePlugin('slack');
+
+    expect(sendMessageCalls).toHaveLength(1);
+    expect(sendMessageCalls[0]?.message).toEqual({ type: 'bg:updatePlugin', name: 'slack' });
+    expect(result.ok).toBe(true);
+  });
+});
+
+// --- sendBgMessage error handling ---
+
+describe('sendBgMessage error handling', () => {
+  test('rejects when chrome.runtime.lastError is set', async () => {
+    mockLastError = { message: 'Extension context invalidated.' };
+
+    await expect(setToolEnabled('slack', 'send', true)).rejects.toThrow('Extension context invalidated.');
+  });
+
+  test('rejects when response contains error field', async () => {
+    mockResponse = { error: 'Server disconnected' };
+
+    await expect(setToolEnabled('slack', 'send', true)).rejects.toThrow('Server disconnected');
+  });
+
+  test('resolves normally when response has no error field', async () => {
+    mockResponse = { ok: true, extra: 'data' };
+
+    const result = await setToolEnabled('slack', 'send', true);
+    expect(result).toEqual({ ok: true, extra: 'data' });
   });
 });
 
@@ -485,131 +426,5 @@ describe('extractShortName', () => {
 
   test('only strips the opentabs-plugin- prefix, not other prefixes', () => {
     expect(extractShortName('my-plugin-slack')).toBe('my-plugin-slack');
-  });
-});
-
-// --- plugin management bridge functions ---
-
-describe('searchPlugins', () => {
-  test('sends JSON-RPC with method plugin.search and correct params', () => {
-    const promise = searchPlugins('slack');
-
-    expect(sendMessageCalls).toHaveLength(1);
-    const entry = sendMessageCalls.at(0);
-    if (!entry) throw new Error('Expected sendMessage call');
-    const msg = entry.message as { type: string; data: Record<string, unknown> };
-    expect(msg.type).toBe('bg:send');
-    expect(msg.data.method).toBe('plugin.search');
-    expect(msg.data.params).toEqual({ query: 'slack' });
-
-    cleanupPending(promise);
-  });
-
-  test('resolves with search results from server', async () => {
-    const promise = searchPlugins('slack');
-    const id = getLastRequestId();
-
-    const payload = {
-      results: [{ name: 'slack', description: 'Slack', version: '1.0', author: 'x', isOfficial: true }],
-    };
-    handleServerResponse({ id, result: payload });
-
-    const result = await promise;
-    expect(result).toEqual(payload);
-  });
-});
-
-describe('installPlugin', () => {
-  test('sends JSON-RPC with method plugin.install and correct params', () => {
-    const promise = installPlugin('@opentabs-dev/opentabs-plugin-slack');
-
-    expect(sendMessageCalls).toHaveLength(1);
-    const entry = sendMessageCalls.at(0);
-    if (!entry) throw new Error('Expected sendMessage call');
-    const msg = entry.message as { type: string; data: Record<string, unknown> };
-    expect(msg.data.method).toBe('plugin.install');
-    expect(msg.data.params).toEqual({ name: '@opentabs-dev/opentabs-plugin-slack' });
-
-    cleanupPending(promise);
-  });
-
-  test('resolves with install result from server', async () => {
-    const promise = installPlugin('slack');
-    const id = getLastRequestId();
-
-    const payload = { ok: true, plugin: { name: 'slack', displayName: 'Slack', version: '1.0', toolCount: 3 } };
-    handleServerResponse({ id, result: payload });
-
-    const result = await promise;
-    expect(result).toEqual(payload);
-  });
-
-  test('rejects with server error on install failure', async () => {
-    const promise = installPlugin('nonexistent');
-    const id = getLastRequestId();
-
-    handleServerResponse({ id, error: { message: 'Package not found in registry' } });
-
-    await expectRejection(promise, 'Package not found in registry');
-  });
-});
-
-describe('removePlugin', () => {
-  test('sends JSON-RPC with method plugin.remove and correct params', () => {
-    const promise = removePlugin('slack');
-
-    expect(sendMessageCalls).toHaveLength(1);
-    const entry = sendMessageCalls.at(0);
-    if (!entry) throw new Error('Expected sendMessage call');
-    const msg = entry.message as { type: string; data: Record<string, unknown> };
-    expect(msg.data.method).toBe('plugin.remove');
-    expect(msg.data.params).toEqual({ name: 'slack' });
-
-    cleanupPending(promise);
-  });
-
-  test('resolves with ok result from server', async () => {
-    const promise = removePlugin('slack');
-    const id = getLastRequestId();
-
-    handleServerResponse({ id, result: { ok: true } });
-
-    const result = await promise;
-    expect(result).toEqual({ ok: true });
-  });
-
-  test('rejects when plugin is not installed', async () => {
-    const promise = removePlugin('nonexistent');
-    const id = getLastRequestId();
-
-    handleServerResponse({ id, error: { message: 'Plugin not installed' } });
-
-    await expectRejection(promise, 'Plugin not installed');
-  });
-});
-
-describe('updatePlugin', () => {
-  test('sends JSON-RPC with method plugin.updateFromRegistry and correct params', () => {
-    const promise = updatePlugin('slack');
-
-    expect(sendMessageCalls).toHaveLength(1);
-    const entry = sendMessageCalls.at(0);
-    if (!entry) throw new Error('Expected sendMessage call');
-    const msg = entry.message as { type: string; data: Record<string, unknown> };
-    expect(msg.data.method).toBe('plugin.updateFromRegistry');
-    expect(msg.data.params).toEqual({ name: 'slack' });
-
-    cleanupPending(promise);
-  });
-
-  test('resolves with update result from server', async () => {
-    const promise = updatePlugin('slack');
-    const id = getLastRequestId();
-
-    const payload = { ok: true, plugin: { name: 'slack', displayName: 'Slack', version: '2.0', toolCount: 5 } };
-    handleServerResponse({ id, result: payload });
-
-    const result = await promise;
-    expect(result).toEqual(payload);
   });
 });

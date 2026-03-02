@@ -1,8 +1,5 @@
 import {
-  getConnectionState,
-  fetchConfigState,
-  handleServerResponse,
-  rejectAllPending,
+  getFullState,
   sendConfirmationResponse,
   searchPlugins,
   installPlugin,
@@ -24,10 +21,15 @@ import { BROWSER_TOOLS_CATALOG } from '@opentabs-dev/shared/browser-tools-catalo
 import { Search, X } from 'lucide-react';
 import { OverlayScrollbarsComponent } from 'overlayscrollbars-react';
 import { useState, useEffect, useRef } from 'react';
-import type { BrowserToolState, FailedPluginState, PluginSearchResult, PluginState } from './bridge.js';
+import type {
+  BrowserToolState,
+  FailedPluginState,
+  FullStateResult,
+  PluginSearchResult,
+  PluginState,
+} from './bridge.js';
 import type { DisconnectReason, InternalMessage } from '../extension-messages.js';
 import type { ConfirmationData } from './components/ConfirmationDialog.js';
-import type { TabState } from '@opentabs-dev/shared';
 
 const App = () => {
   const [connected, setConnected] = useState(false);
@@ -49,9 +51,7 @@ const App = () => {
   const [installErrors, setInstallErrors] = useState<Map<string, string>>(new Map());
   const [pluginErrors, setPluginErrors] = useState<Map<string, string>>(new Map());
 
-  const lastFetchRef = useRef(0);
   const pluginErrorTimers = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map());
-  const pendingTabStates = useRef<Map<string, TabState>>(new Map());
   const npmSearchTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   const npmSearchCounter = useRef(0);
 
@@ -69,7 +69,6 @@ const App = () => {
     setPlugins,
     setActiveTools,
     setPendingConfirmations,
-    pendingTabStates,
   });
 
   useEffect(
@@ -194,51 +193,33 @@ const App = () => {
   };
 
   useEffect(() => {
-    const loadPlugins = (): Promise<void> => {
-      const now = Date.now();
-      if (now - lastFetchRef.current < 200) return Promise.resolve();
-      lastFetchRef.current = now;
-      return fetchConfigState()
-        .then(result => {
-          let updatedPlugins = result.plugins ?? [];
-          if (pendingTabStates.current.size > 0) {
-            updatedPlugins = updatedPlugins.map(p => {
-              const buffered = pendingTabStates.current.get(p.name);
-              return buffered ? { ...p, tabState: buffered } : p;
-            });
-            pendingTabStates.current.clear();
+    /** Apply a full state snapshot from the background script to React state */
+    const applyFullState = (result: FullStateResult): void => {
+      setConnected(result.connected);
+      setDisconnectReason(result.disconnectReason);
+      setPlugins(result.plugins);
+      setFailedPlugins(result.failedPlugins);
+      setBrowserTools(prev =>
+        prev.map(t => {
+          const serverTool = result.browserTools.find(s => s.name === t.name);
+          return serverTool ? { ...t, enabled: serverTool.enabled } : t;
+        }),
+      );
+      setServerVersion(result.serverVersion);
+      setActiveTools(prev => {
+        const next = new Set<string>();
+        for (const key of prev) {
+          if (key.startsWith('browser:') || result.plugins.some(p => key.startsWith(p.name + ':'))) {
+            next.add(key);
           }
-          setPlugins(updatedPlugins);
-          setFailedPlugins(result.failedPlugins ?? []);
-          setBrowserTools(prev =>
-            prev.map(t => {
-              const serverTool = result.browserTools?.find(s => s.name === t.name);
-              return serverTool ? { ...t, enabled: serverTool.enabled } : t;
-            }),
-          );
-          setServerVersion(result.serverVersion);
-          setActiveTools(prev => {
-            const next = new Set<string>();
-            for (const key of prev) {
-              if (key.startsWith('browser:') || updatedPlugins.some(p => key.startsWith(p.name + ':'))) {
-                next.add(key);
-              }
-            }
-            return next;
-          });
-        })
-        .catch(() => {
-          // Server may not be ready yet
-        });
+        }
+        return next;
+      });
     };
 
-    void getConnectionState()
-      .then(async result => {
-        setConnected(result.connected);
-        setDisconnectReason(result.disconnectReason);
-        if (result.connected) {
-          await loadPlugins();
-        }
+    void getFullState()
+      .then(result => {
+        applyFullState(result);
         setLoading(false);
       })
       .catch(() => {
@@ -271,8 +252,9 @@ const App = () => {
         setConnected(isConnected);
         setDisconnectReason(isConnected ? undefined : message.data.disconnectReason);
         if (isConnected) {
-          // Keep stale plugin list visible while fresh data loads (prevents flash of empty state)
-          void loadPlugins();
+          void getFullState()
+            .then(applyFullState)
+            .catch(() => {});
         } else {
           setPlugins([]);
           setFailedPlugins([]);
@@ -284,7 +266,6 @@ const App = () => {
           clearTimeout(npmSearchTimer.current);
           setNpmResults([]);
           setNpmSearching(false);
-          rejectAllPending();
         }
         sendResponse({ ok: true });
         return true;
@@ -293,13 +274,10 @@ const App = () => {
       if (message.type === 'sp:serverMessage') {
         const data = message.data;
 
-        if (handleServerResponse(data)) {
-          sendResponse({ ok: true });
-          return true;
-        }
-
         if (data.method === 'plugins.changed') {
-          void loadPlugins();
+          void getFullState()
+            .then(applyFullState)
+            .catch(() => {});
           sendResponse({ ok: true });
           return true;
         }
@@ -307,14 +285,6 @@ const App = () => {
         handleNotification(data);
         sendResponse({ ok: true });
         return true;
-      }
-
-      if (message.type === 'ws:message') {
-        const wsData = message.data as Record<string, unknown> | undefined;
-        if (wsData?.method === 'sync.full') {
-          void loadPlugins();
-        }
-        return false;
       }
 
       return false;

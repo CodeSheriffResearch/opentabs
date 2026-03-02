@@ -11,7 +11,6 @@ interface UseServerNotificationsParams {
   setPlugins: React.Dispatch<React.SetStateAction<PluginState[]>>;
   setActiveTools: React.Dispatch<React.SetStateAction<Set<string>>>;
   setPendingConfirmations: React.Dispatch<React.SetStateAction<ConfirmationData[]>>;
-  pendingTabStates: React.RefObject<Map<string, TabState>>;
 }
 
 interface UseServerNotificationsResult {
@@ -28,7 +27,6 @@ const useServerNotifications = ({
   setPlugins,
   setActiveTools,
   setPendingConfirmations,
-  pendingTabStates,
 }: UseServerNotificationsParams): UseServerNotificationsResult => {
   const timeoutIds = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map());
   const invocationTimeoutIds = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map());
@@ -93,13 +91,7 @@ const useServerNotifications = ({
       ) {
         const pluginName = params.plugin;
         const newState = params.state as TabState;
-        setPlugins(prev => {
-          if (prev.length === 0) {
-            pendingTabStates.current.set(pluginName, newState);
-            return prev;
-          }
-          return prev.map(p => (p.name === pluginName ? { ...p, tabState: newState } : p));
-        });
+        setPlugins(prev => prev.map(p => (p.name === pluginName ? { ...p, tabState: newState } : p)));
       }
     }
 

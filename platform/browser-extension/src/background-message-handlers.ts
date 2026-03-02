@@ -109,12 +109,6 @@ const handleWsMessage: MessageHandler = (message, sendResponse) => {
   sendResponse({ ok: true });
 };
 
-/** Handle bg:send — send a JSON-RPC message to the MCP server */
-const handleBgSend: MessageHandler = (message, sendResponse) => {
-  sendToServer(message.data);
-  sendResponse({ ok: true });
-};
-
 /** Handle bg:getConnectionState — query WebSocket connection state */
 const handleBgGetConnectionState: MessageHandler = (_message, sendResponse) => {
   sendResponse({
@@ -470,7 +464,6 @@ const backgroundHandlers = new Map<InternalMessage['type'], MessageHandler>([
   ['offscreen:getUrl', handleOffscreenGetUrl],
   ['ws:state', handleWsState],
   ['ws:message', handleWsMessage],
-  ['bg:send', handleBgSend],
   ['bg:getConnectionState', handleBgGetConnectionState],
   ['bg:getFullState', handleBgGetFullState],
   ['bg:setToolEnabled', handleBgSetToolEnabled],
@@ -494,7 +487,6 @@ const EXTENSION_ONLY_TYPES: ReadonlySet<InternalMessage['type']> = new Set([
   'offscreen:getUrl',
   'ws:state',
   'ws:message',
-  'bg:send',
   'bg:getConnectionState',
   'bg:getFullState',
   'bg:setToolEnabled',
@@ -547,7 +539,6 @@ export {
   handleBgInstallPlugin,
   handleBgRemovePlugin,
   handleBgSearchPlugins,
-  handleBgSend,
   handleBgSetAllBrowserToolsEnabled,
   handleBgSetAllToolsEnabled,
   handleBgSetBrowserToolEnabled,
