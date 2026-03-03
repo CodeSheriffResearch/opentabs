@@ -6,6 +6,7 @@ import {
   matchesTool,
   removePlugin,
   searchPlugins,
+  sendConfirmationResponse,
   setAllBrowserToolsEnabled,
   setAllToolsEnabled,
   setBrowserToolEnabled,
@@ -426,5 +427,59 @@ describe('extractShortName', () => {
 
   test('only strips the opentabs-plugin- prefix, not other prefixes', () => {
     expect(extractShortName('my-plugin-slack')).toBe('my-plugin-slack');
+  });
+});
+
+// --- sendConfirmationResponse ---
+
+describe('sendConfirmationResponse', () => {
+  test('sends sp:confirmationResponse with correct type and data', () => {
+    sendConfirmationResponse('conf-123', 'allow_once');
+
+    expect(sendMessageCalls).toHaveLength(1);
+    expect(sendMessageCalls[0]?.message).toEqual({
+      type: 'sp:confirmationResponse',
+      data: { id: 'conf-123', decision: 'allow_once' },
+    });
+  });
+
+  test('includes scope in data when provided', () => {
+    sendConfirmationResponse('conf-456', 'allow_always', 'tool_domain');
+
+    expect(sendMessageCalls).toHaveLength(1);
+    expect(sendMessageCalls[0]?.message).toEqual({
+      type: 'sp:confirmationResponse',
+      data: { id: 'conf-456', decision: 'allow_always', scope: 'tool_domain' },
+    });
+  });
+
+  test('omits scope from data when not provided', () => {
+    sendConfirmationResponse('conf-789', 'deny');
+
+    const message = sendMessageCalls[0]?.message as Record<string, unknown>;
+    const data = message.data as Record<string, unknown>;
+    expect(Object.prototype.hasOwnProperty.call(data, 'scope')).toBe(false);
+  });
+
+  test('handles chrome.runtime.sendMessage rejection gracefully', () => {
+    // Override sendMessage to return a rejected promise
+    (globalThis as Record<string, unknown>).chrome = {
+      runtime: {
+        get lastError() {
+          return mockLastError;
+        },
+        sendMessage: (message: unknown, callback?: (response: unknown) => void) => {
+          sendMessageCalls.push({ message });
+          if (callback) {
+            callback(mockResponse);
+          }
+          return Promise.reject(new Error('Extension context invalidated'));
+        },
+      },
+    };
+
+    // Should not throw — the rejection is caught internally
+    expect(() => sendConfirmationResponse('conf-fail', 'deny')).not.toThrow();
+    expect(sendMessageCalls).toHaveLength(1);
   });
 });

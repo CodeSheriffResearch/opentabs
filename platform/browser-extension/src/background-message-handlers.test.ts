@@ -157,6 +157,7 @@ const {
   handleBgInstallPlugin,
   handleBgRemovePlugin,
   handleBgUpdatePlugin,
+  initBackgroundMessageHandlers,
 } = await import('./background-message-handlers.js');
 
 // ---------------------------------------------------------------------------
@@ -1282,5 +1283,63 @@ describe('handleWsMessage', () => {
     handleWsMessage({ data: { jsonrpc: '2.0', method: 'bad.method' } }, sendResponse);
 
     expect(sendResponse).toHaveBeenCalledWith({ ok: true });
+  });
+});
+
+// ---------------------------------------------------------------------------
+// EXTENSION_ONLY_TYPES security guard
+// ---------------------------------------------------------------------------
+
+describe('EXTENSION_ONLY_TYPES security guard', () => {
+  type Listener = (message: unknown, sender: unknown, sendResponse: (r: unknown) => void) => unknown;
+
+  /** Install a chrome.runtime.onMessage mock that captures registered listeners */
+  const installListenerCapture = (): Listener[] => {
+    const listeners: Listener[] = [];
+    const chromeGlobal = (globalThis as unknown as { chrome: Record<string, unknown> }).chrome;
+    chromeGlobal.runtime = {
+      ...(chromeGlobal.runtime as Record<string, unknown>),
+      onMessage: {
+        addListener: (fn: Listener) => {
+          listeners.push(fn);
+        },
+      },
+    };
+    return listeners;
+  };
+
+  test('rejects extension-only messages from non-extension senders', () => {
+    const listeners = installListenerCapture();
+    initBackgroundMessageHandlers();
+
+    expect(listeners).toHaveLength(1);
+    const listener = listeners[0] as Listener;
+    const sendResponse = vi.fn();
+
+    // Sender.id differs from chrome.runtime.id — simulates a malicious extension
+    const result = listener(
+      { type: 'bg:setToolEnabled' },
+      { id: 'malicious-extension-id', url: 'https://evil.com' },
+      sendResponse,
+    );
+
+    // Should return false (reject) and NOT call sendResponse
+    expect(result).toBe(false);
+    expect(sendResponse).not.toHaveBeenCalled();
+  });
+
+  test('accepts extension-only messages from the extension itself', () => {
+    const listeners = installListenerCapture();
+    initBackgroundMessageHandlers();
+
+    expect(listeners).toHaveLength(1);
+    const listener = listeners[0] as Listener;
+    const sendResponse = vi.fn();
+
+    // Sender.id matches chrome.runtime.id — trusted extension context
+    const result = listener({ type: 'bg:getFullState' }, { id: 'test-extension-id' }, sendResponse);
+
+    // Should return true (accepted and handled asynchronously)
+    expect(result).toBe(true);
   });
 });

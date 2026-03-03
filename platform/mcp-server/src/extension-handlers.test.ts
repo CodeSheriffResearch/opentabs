@@ -1,5 +1,6 @@
 import {
   handleConfigGetState,
+  handleConfigSetAllBrowserToolsEnabled,
   handleConfigSetBrowserToolEnabled,
   handleConfigSetToolEnabled,
   handleConfigSetAllToolsEnabled,
@@ -855,6 +856,118 @@ describe('handleConfigSetBrowserToolEnabled', () => {
     handleConfigSetBrowserToolEnabled(state, { tool: 'browser_list_tabs', enabled: true }, 'req-6', noopCallbacks);
 
     expect(state.browserToolPolicy.browser_list_tabs).toBe(true);
+  });
+});
+
+describe('handleConfigSetAllBrowserToolsEnabled', () => {
+  const createMockWs = (): { ws: { send: (msg: string) => void; close: () => void }; messages: string[] } => {
+    const messages: string[] = [];
+    return { ws: { send: msg => messages.push(msg), close: () => {} }, messages };
+  };
+
+  test('valid toggle disables all browser tools and sends plugins.changed with full payload', () => {
+    const state = createState();
+    const { ws, messages } = createMockWs();
+    state.extensionWs = ws;
+    state.cachedBrowserTools = [
+      { name: 'browser_list_tabs', description: 'List tabs', inputSchema: {}, tool: null as never },
+      { name: 'browser_screenshot', description: 'Screenshot', inputSchema: {}, tool: null as never },
+    ];
+
+    handleConfigSetAllBrowserToolsEnabled(state, { enabled: false }, 'req-1', noopCallbacks);
+
+    expect(state.browserToolPolicy.browser_list_tabs).toBe(false);
+    expect(state.browserToolPolicy.browser_screenshot).toBe(false);
+    // First message is plugins.changed notification, second is the result
+    expect(messages).toHaveLength(2);
+    const notification = JSON.parse(messages[0] as string) as {
+      method: string;
+      params: { plugins: unknown[]; failedPlugins: unknown[]; browserTools: unknown[]; serverVersion: string };
+    };
+    expect(notification.method).toBe('plugins.changed');
+    expect(Array.isArray(notification.params.plugins)).toBe(true);
+    expect(Array.isArray(notification.params.failedPlugins)).toBe(true);
+    expect(Array.isArray(notification.params.browserTools)).toBe(true);
+    expect(typeof notification.params.serverVersion).toBe('string');
+    // Both tools should be disabled in browserTools
+    const listTabsTool = notification.params.browserTools.find(
+      (t: unknown) => (t as { name: string }).name === 'browser_list_tabs',
+    ) as { enabled: boolean } | undefined;
+    const screenshotTool = notification.params.browserTools.find(
+      (t: unknown) => (t as { name: string }).name === 'browser_screenshot',
+    ) as { enabled: boolean } | undefined;
+    expect(listTabsTool?.enabled).toBe(false);
+    expect(screenshotTool?.enabled).toBe(false);
+    const response = JSON.parse(messages[1] as string) as { result: { ok: boolean }; id: string };
+    expect(response.result).toEqual({ ok: true });
+    expect(response.id).toBe('req-1');
+  });
+
+  test('valid toggle enables all browser tools', () => {
+    const state = createState();
+    const { ws } = createMockWs();
+    state.extensionWs = ws;
+    state.cachedBrowserTools = [
+      { name: 'browser_list_tabs', description: 'List tabs', inputSchema: {}, tool: null as never },
+      { name: 'browser_screenshot', description: 'Screenshot', inputSchema: {}, tool: null as never },
+    ];
+    state.browserToolPolicy = { browser_list_tabs: false, browser_screenshot: false };
+
+    handleConfigSetAllBrowserToolsEnabled(state, { enabled: true }, 'req-2', noopCallbacks);
+
+    expect(state.browserToolPolicy.browser_list_tabs).toBe(true);
+    expect(state.browserToolPolicy.browser_screenshot).toBe(true);
+  });
+
+  test('calls onToolConfigChanged and onBrowserToolPolicyPersist', () => {
+    const state = createState();
+    const { ws } = createMockWs();
+    state.extensionWs = ws;
+    state.cachedBrowserTools = [
+      { name: 'browser_list_tabs', description: 'List tabs', inputSchema: {}, tool: null as never },
+    ];
+    let configChanged = false;
+    let policyPersisted = false;
+    const callbacks: McpCallbacks = {
+      ...noopCallbacks,
+      onToolConfigChanged: () => {
+        configChanged = true;
+      },
+      onBrowserToolPolicyPersist: () => {
+        policyPersisted = true;
+      },
+    };
+
+    handleConfigSetAllBrowserToolsEnabled(state, { enabled: false }, 'req-3', callbacks);
+
+    expect(configChanged).toBe(true);
+    expect(policyPersisted).toBe(true);
+  });
+
+  test('missing params returns error', () => {
+    const state = createState();
+    const { ws, messages } = createMockWs();
+    state.extensionWs = ws;
+
+    handleConfigSetAllBrowserToolsEnabled(state, undefined, 'req-4', noopCallbacks);
+
+    expect(messages).toHaveLength(1);
+    const response = JSON.parse(messages[0] as string) as { error: { code: number; message: string } };
+    expect(response.error.code).toBe(-32602);
+    expect(response.error.message).toBe('Missing params');
+  });
+
+  test('invalid param types return error', () => {
+    const state = createState();
+    const { ws, messages } = createMockWs();
+    state.extensionWs = ws;
+
+    handleConfigSetAllBrowserToolsEnabled(state, { enabled: 'yes' }, 'req-5', noopCallbacks);
+
+    expect(messages).toHaveLength(1);
+    const response = JSON.parse(messages[0] as string) as { error: { code: number; message: string } };
+    expect(response.error.code).toBe(-32602);
+    expect(response.error.message).toContain('expected enabled (boolean)');
   });
 });
 
