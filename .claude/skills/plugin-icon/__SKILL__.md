@@ -55,6 +55,29 @@ Get the brand SVG from the service's official brand assets page. Prefer:
 - A **single-color** version (works best at small sizes)
 - The **dark/black** variant (the side panel has a light background)
 
+**Watch out for fake SVGs**: Some brand asset downloads are rasterized PNGs embedded inside an SVG wrapper (using `<image>` with a base64 `data:image/png` href). These fail validation because `<image>` elements are forbidden. Always inspect the SVG source — a real vector SVG contains `<path>`, `<circle>`, `<rect>`, etc., not `<image>`.
+
+#### Fallback: Simple Icons
+
+If the official brand assets don't provide a usable vector SVG (or only provide rasterized versions), use the **Simple Icons** project as a fallback. It has high-quality vector SVGs for thousands of brands, all with square `24x24` viewBoxes:
+
+```
+https://raw.githubusercontent.com/simple-icons/simple-icons/develop/icons/<name>.svg
+```
+
+Use WebFetch to download the SVG directly:
+```
+WebFetch("https://raw.githubusercontent.com/simple-icons/simple-icons/develop/icons/<name>.svg", format: "text")
+```
+
+The returned SVG needs minor cleanup:
+- Remove `role="img"` from the `<svg>` element
+- Remove the `<title>` element
+- Add `fill="black"` to the `<path>` (Simple Icons paths have no fill, defaulting to black in most renderers, but explicit is better)
+- The viewBox is already square (`0 0 24 24`), so no adjustment needed
+
+Simple Icons are licensed under CC0 (public domain dedication).
+
 ### Step 2: Prepare the SVG
 
 Common issues to fix:
@@ -164,10 +187,10 @@ If validation fails, the build reports specific errors (e.g., "SVG viewBox must 
 
 ## Reference: Existing Plugin Icons
 
-| Plugin | Has Icon | Notes |
-|---|---|---|
-| `plugins/slack/icon.svg` | Yes | Multi-color (4 brand colors), auto-generated inactive |
-| `plugins/discord/icon.svg` | Yes | Single-color (#5865F2), uses clip-path + transform |
-| `plugins/github/icon.svg` | Yes | Single-color (black), viewBox offset for square centering |
-| `plugins/e2e-test/icon.svg` | Yes | Test icon with colored shapes |
-| `plugins/notion/` | No | Falls back to letter avatar |
+| Plugin | Has Icon | Source | Notes |
+|---|---|---|---|
+| `plugins/slack/icon.svg` | Yes | Official brand assets | Multi-color (4 brand colors), auto-generated inactive |
+| `plugins/discord/icon.svg` | Yes | Official brand assets | Single-color (#5865F2), uses clip-path + transform |
+| `plugins/github/icon.svg` | Yes | Official brand assets | Single-color (black), viewBox offset for square centering |
+| `plugins/notion/icon.svg` | Yes | Simple Icons fallback | Single-color (black), already square viewBox |
+| `plugins/e2e-test/icon.svg` | Yes | Custom | Test icon with colored shapes |
