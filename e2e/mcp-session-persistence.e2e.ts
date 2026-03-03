@@ -19,6 +19,120 @@ import {
   readPluginToolNames,
 } from './fixtures.js';
 import { waitForLog, waitForExtensionConnected, waitForToolResult, parseToolResult, setupToolTest } from './helpers.js';
+import { request as httpRequest } from 'node:http';
+
+/**
+ * Open a GET /mcp SSE stream via node:http, hold it open briefly,
+ * then destroy the connection to simulate the SSE stream closing.
+ * Does not wait for a response — the proxy writes 200 headers, but
+ * node:http may not surface them before we destroy the socket.
+ */
+const openAndCloseSseStream = async (port: number, sessionId: string, secret?: string): Promise<void> => {
+  const headers: Record<string, string> = {
+    Accept: 'text/event-stream',
+    'mcp-session-id': sessionId,
+  };
+  if (secret) {
+    headers['Authorization'] = `Bearer ${secret}`;
+  }
+
+  await new Promise<void>(resolve => {
+    const req = httpRequest({ hostname: '127.0.0.1', port, path: '/mcp', method: 'GET', headers }, res => {
+      // Consume data so the socket doesn't stall
+      res.resume();
+    });
+    req.on('error', () => {
+      // ECONNRESET expected after destroy
+    });
+    req.end();
+
+    // Hold the stream open briefly so the proxy registers it, then destroy
+    setTimeout(() => {
+      req.destroy();
+      // Wait for the close event to propagate through the proxy
+      setTimeout(resolve, 500);
+    }, 500);
+  });
+};
+
+test.describe('MCP session persistence — SSE stream lifecycle', () => {
+  test('session survives after SSE GET stream closes', async () => {
+    // Regression test: the dev proxy used to delete the entire session when
+    // all SSE streams closed, causing subsequent POST requests to fail with
+    // "missing session" because the proxy no longer recognized the session ID.
+    const configDir = createTestConfigDir();
+    const server = await startMcpServer(configDir, true);
+
+    try {
+      const client = createMcpClient(server.port, server.secret);
+      await client.initialize();
+
+      // Verify tools are available
+      const expectedToolNames = readPluginToolNames();
+      const toolsBefore = await client.listTools();
+      for (const name of expectedToolNames) {
+        expect(toolsBefore.some(t => t.name === name)).toBe(true);
+      }
+
+      // Open a GET /mcp SSE stream then close it
+      const sid = client.sessionId;
+      expect(sid).toBeTruthy();
+      await openAndCloseSseStream(server.port, sid as string, server.secret);
+
+      // The session must still work — list tools via POST should succeed
+      // without the client needing to re-initialize.
+      const toolsAfter = await client.listTools();
+      for (const name of expectedToolNames) {
+        expect(toolsAfter.some(t => t.name === name)).toBe(true);
+      }
+
+      await client.close();
+    } finally {
+      await server.kill();
+      cleanupTestConfigDir(configDir);
+    }
+  });
+
+  test('session survives SSE stream close followed by hot reload', async () => {
+    // Verifies the combined scenario: SSE stream closes (e.g., network hiccup),
+    // then a hot reload occurs. The proxy must still have the session so it can
+    // re-initialize it with the new worker.
+    const configDir = createTestConfigDir();
+    const server = await startMcpServer(configDir, true);
+
+    try {
+      const client = createMcpClient(server.port, server.secret);
+      await client.initialize();
+
+      const expectedToolNames = readPluginToolNames();
+
+      // Open and close an SSE stream
+      const sid = client.sessionId;
+      expect(sid).toBeTruthy();
+      await openAndCloseSseStream(server.port, sid as string, server.secret);
+
+      // Now trigger a hot reload — the proxy must still know about the session
+      // to re-initialize it with the new worker.
+      server.logs.length = 0;
+      server.triggerHotReload();
+      await waitForLog(server, 'Hot reload complete', 15_000);
+
+      // Verify the proxy re-initialized the session
+      expect(server.logs.join('\n')).toContain('Re-initializing');
+
+      // Tools must still work
+      const tools = await client.listTools();
+      for (const name of expectedToolNames) {
+        expect(tools.some(t => t.name === name)).toBe(true);
+      }
+
+      await client.close();
+    } finally {
+      await server.kill();
+      cleanupTestConfigDir(configDir);
+    }
+  });
+});
 
 test.describe('MCP session persistence across hot reload', () => {
   test('MCP client retains tool access after a single hot reload without re-initialization', async () => {

@@ -517,10 +517,13 @@ const handleMcpGet = (req: IncomingMessage, res: ServerResponse, port: number): 
 
   res.on('close', () => {
     session.sseStreams.delete(res);
-    // If the client disconnected and there are no more SSE streams, clean up
-    if (session.sseStreams.size === 0) {
-      cleanupSession(session.proxySessionId);
-    }
+    // Do NOT clean up the session when the SSE stream closes. The MCP client
+    // (e.g., OpenCode) still holds the proxy session ID and can re-establish
+    // an SSE stream with a new GET /mcp. Premature session cleanup causes the
+    // proxy to forget the session mapping, making subsequent POSTs from the
+    // client fall through as "unknown session" — the worker rejects them and
+    // the client's tool list becomes stale. Sessions are cleaned up only via
+    // explicit DELETE /mcp or when the proxy restarts.
   });
 
   // Connect the upstream SSE stream from the current worker

@@ -1025,6 +1025,8 @@ interface McpClient {
   close: () => Promise<void>;
   /** Reset the session so the next initialize() creates a fresh session. */
   resetSession: () => void;
+  /** Current session ID assigned by the server (null before initialize). */
+  readonly sessionId: string | null;
 }
 
 /**
@@ -1167,6 +1169,10 @@ const createMcpClient = (port: number, secret?: string): McpClient => {
   // fixture parser scans all functions in fixture files and misinterprets
   // shorthand method syntax as fixture definitions, causing parse errors.
   const client: McpClient = {
+    get sessionId() {
+      return sessionId;
+    },
+
     resetSession: () => {
       sessionId = null;
     },
