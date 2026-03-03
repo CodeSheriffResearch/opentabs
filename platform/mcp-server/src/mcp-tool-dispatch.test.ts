@@ -576,6 +576,45 @@ describe('handleBrowserToolCall', () => {
       }),
     );
   });
+
+  test('sendInvocationStart and sendInvocationEnd are called', async () => {
+    vi.mocked(isBrowserToolEnabled).mockReturnValue(true);
+    vi.mocked(isSessionAllowed).mockReturnValue(true);
+    const handler = vi.fn().mockResolvedValue({ ok: true });
+    const state = createMockState();
+    const bt = createMockBrowserTool({ schema: z.object({}), handler });
+    const extra = createMockExtra();
+
+    await handleBrowserToolCall(state, 'browser_test_tool', {}, bt, extra);
+
+    expect(sendInvocationStart).toHaveBeenCalledWith(state, 'browser', 'browser_test_tool');
+    expect(sendInvocationEnd).toHaveBeenCalledWith(
+      state,
+      'browser',
+      'browser_test_tool',
+      expect.any(Number) as number,
+      true,
+    );
+  });
+
+  test('sendInvocationEnd reports success=false on error', async () => {
+    vi.mocked(isBrowserToolEnabled).mockReturnValue(true);
+    vi.mocked(isSessionAllowed).mockReturnValue(true);
+    const handler = vi.fn().mockRejectedValue(new Error('tool failed'));
+    const state = createMockState();
+    const bt = createMockBrowserTool({ schema: z.object({}), handler });
+    const extra = createMockExtra();
+
+    await handleBrowserToolCall(state, 'browser_test_tool', {}, bt, extra);
+
+    expect(sendInvocationEnd).toHaveBeenCalledWith(
+      state,
+      'browser',
+      'browser_test_tool',
+      expect.any(Number) as number,
+      false,
+    );
+  });
 });
 
 // ---------------------------------------------------------------------------

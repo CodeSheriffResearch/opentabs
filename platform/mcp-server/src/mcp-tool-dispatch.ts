@@ -272,6 +272,8 @@ const handleBrowserToolCall = async (
     }
   }
 
+  // Send invocation start notification to extension (for side panel activity indicator)
+  sendInvocationStart(state, 'browser', toolName);
   const btStartTs = Date.now();
   let btSuccess = true;
   let btErrorInfo: AuditEntry['error'] | undefined;
@@ -290,12 +292,14 @@ const handleBrowserToolCall = async (
       isError: true,
     };
   } finally {
+    const btDurationMs = Date.now() - btStartTs;
+    sendInvocationEnd(state, 'browser', toolName, btDurationMs, btSuccess);
     appendAuditEntry(state, {
       timestamp: new Date(btStartTs).toISOString(),
       tool: toolName,
       plugin: 'browser',
       success: btSuccess,
-      durationMs: Date.now() - btStartTs,
+      durationMs: btDurationMs,
       error: btErrorInfo,
     });
   }
