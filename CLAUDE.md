@@ -114,14 +114,14 @@ npm run check:everything # Everything: root checks + E2E + docs + plugins
 npm run check:docs      # Docs checks (delegates to docs/package.json check script)
 npm run check:plugins   # Plugin checks: type-check + lint + format:check (all plugins)
 npm run type-check      # TypeScript check (tsc --build, incremental verification)
-npm run lint            # ESLint check
-npm run lint:fix        # ESLint auto-fix
-npm run format          # Prettier format
-npm run format:check    # Prettier check
+npm run lint            # Biome lint check
+npm run lint:fix        # Biome lint auto-fix
+npm run format          # Biome format
+npm run format:check    # Biome format check
 npm run knip            # Unused code detection
 
 # Docs (from root)
-npm run lint:docs       # ESLint docs
+npm run lint:docs       # Biome lint docs
 npm run type-check:docs # TypeScript check docs
 
 # Test
@@ -334,7 +334,7 @@ Every `.ts`/`.tsx` file in the repository must be covered by a tsconfig that `ts
 
 - **Test files must be type-checked.** Each package has a `tsconfig.test.json` that includes `src/**/*.test.ts`.
 - **Build scripts must be type-checked.** Standalone scripts (e.g., `build-*.ts`) that live outside `src/` have their own tsconfig.
-- **Root config files must be type-checked.** Files like `eslint.config.ts`, `knip.ts`, and `playwright.config.ts` are covered by `tsconfig.configs.json`.
+- **Root config files must be type-checked.** Files like `knip.ts` and `playwright.config.ts` are covered by `tsconfig.configs.json`.
 - **Never exclude files from type-checking to avoid fixing type errors.** If a file has type errors, fix the errors.
 - **When adding a new `.ts` file**, verify it is covered by an existing tsconfig.
 
@@ -359,16 +359,16 @@ For full repository verification including docs and plugins, use `npm run check:
 - Do not rationalize failures ("that's a known issue", "the build is the real type-check", "this was broken before I started"). If it fails, it is your problem. Fix it or explain to the user why you cannot.
 - Do not skip a check because a different check covers "the same thing". Each command tests something distinct. Run all of them.
 
-### ESLint
+### Biome
 
-- **NEVER use `eslint-disable` comments** in source code. Always fix the underlying issue.
-- **NEVER add file-specific rule overrides in eslint.config.ts** to suppress lint errors. Always fix the source code instead.
+- **NEVER use `biome-ignore` comments** in source code to suppress lint errors. Always fix the underlying issue.
+- **NEVER add file-specific rule overrides in biome.json** to suppress lint errors. Always fix the source code instead.
 - If a rule violation occurs, investigate and fix the root cause.
 - If a dependency uses deprecated APIs, update the code to use the recommended alternative.
 
 ### Code Style
 
-- Follow all configured ESLint rules.
+- Follow all configured Biome lint rules.
 
 ### Runtime Compatibility
 

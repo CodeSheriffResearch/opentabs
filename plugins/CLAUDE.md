@@ -8,10 +8,10 @@ Plugins in `plugins/` are **fully standalone projects** — exactly as if create
 
 Each plugin:
 
-- Has its own `package.json`, `tsconfig.json`, `.prettierrc`, and `.gitignore`
+- Has its own `package.json`, `tsconfig.json`, `biome.json`, and `.gitignore`
 - Depends on published `@opentabs-dev/*` npm packages (not `file:` or `workspace:` links)
 - Has its own `node_modules/` and `package-lock.json`
-- Is **excluded** from root `eslint`, `prettier`, `knip`, and `tsc --build`
+- Is **excluded** from root `biome`, `knip`, and `tsc --build`
 - Must build and type-check independently: `cd plugins/<name> && npm run build`
 
 The root tooling (`npm run build`, `npm run lint`, etc.) does NOT cover plugins. When changing platform packages that plugins depend on (`shared`, `plugin-sdk`, `plugin-tools`), publish new versions to npm and update plugin dependencies.

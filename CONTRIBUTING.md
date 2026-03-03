@@ -100,8 +100,8 @@ npm run check:everything   # everything above + E2E tests + docs checks + plugin
 | `npm run build:docs`       | Build docs site                                                   |
 | `npm run build:plugins`    | Build all plugins (install + build each)                          |
 | `npm run type-check`       | Incremental TypeScript compilation (tsc --build)                  |
-| `npm run lint`             | ESLint                                                            |
-| `npm run format:check`     | Prettier formatting                                               |
+| `npm run lint`             | Biome lint                                                        |
+| `npm run format:check`     | Biome format check                                                |
 | `npm run knip`             | Unused exports and dependencies                                   |
 | `npm run test`             | Unit tests (Vitest)                                               |
 | `npm run test:e2e`         | E2E tests (builds e2e-test plugin + Playwright)                   |
@@ -125,7 +125,7 @@ The project uses [Husky](https://typicode.github.io/husky/) for git hooks:
 **Pre-commit** (runs on every commit):
 
 - Rejects any accidentally staged ralph state files (`.ralph/prd.json`, `.ralph/progress.txt`)
-- Runs `lint-staged`: Prettier and ESLint auto-fix on staged `.ts`, `.tsx`, and `.json` files; Prettier on `.md` files
+- Runs `lint-staged`: Biome check (lint + format) on staged `.ts`, `.tsx`, and `.json` files; Biome format on `.md` files
 
 **Pre-push** (runs before every push):
 
@@ -204,7 +204,7 @@ OpenTabs spans four processes — each has its own debugging surface:
 Key rules (see [CLAUDE.md](CLAUDE.md) for the full list):
 
 - **Node.js APIs** — use `node:fs/promises`, `node:child_process`, `node:crypto`, `process.env`, `process.argv`
-- **No `eslint-disable` comments** — fix the underlying issue
+- **No `biome-ignore` comments** — fix the underlying issue
 - **No TODO/FIXME/HACK comments** — fix it now or don't commit
 - **Delete unused code** — dead code is noise
 - **Every `.ts` file must be covered by a tsconfig** that `tsc --build` reaches

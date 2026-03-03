@@ -17,9 +17,9 @@ The OpenTabs documentation site is built with Next.js 16, content-collections fo
 ```bash
 npm run build         # next build (static export)
 npm run type-check    # tsc --noEmit
-npm run lint          # eslint
+npm run lint          # biome lint
 npm run knip          # unused code detection
-npm run format:check  # prettier check
+npm run format:check  # biome format check
 npm run check         # All checks (build + type-check + lint + knip + format:check)
 ```
 
@@ -30,7 +30,7 @@ From the repo root, these convenience aliases are available:
 ```bash
 npm run dev:docs        # next dev (docs dev server)
 npm run build:docs      # next build
-npm run lint:docs       # eslint
+npm run lint:docs       # biome lint
 npm run type-check:docs # tsc --noEmit
 npm run check:docs      # All docs checks from root
 ```

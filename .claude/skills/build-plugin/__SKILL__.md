@@ -66,7 +66,7 @@ The scaffolded `package.json` needs adjustments to match the established pattern
 - **Dependency versions**: Match `@opentabs-dev/plugin-sdk` and `@opentabs-dev/plugin-tools` versions to what Slack uses
 - **Dev script**: Use `tsc --watch --preserveWatchOutput & opentabs-plugin build --watch` (shell background, no concurrently)
 - **Remove**: `concurrently` from devDependencies if present
-- **Dev dependencies**: Match versions of eslint, prettier, typescript, typescript-eslint, zod, jiti to what Slack uses
+- **Dev dependencies**: Match versions of @biomejs/biome, typescript, zod to what Slack uses
 
 ---
 
@@ -449,8 +449,8 @@ Build produces:
 ### Fix Lint/Format Issues
 
 ```bash
-npm run lint:fix     # auto-fix ESLint/prettier issues
-npm run format       # format all files
+npm run lint:fix     # auto-fix Biome lint issues
+npm run format       # format all files with Biome
 ```
 
 ### Full Check Suite
@@ -613,6 +613,6 @@ When using browser tools during testing (like `browser_navigate_tab`, `browser_e
 5. **API responses may return arrays** — when the generic type expects `Record<string, unknown>` but the endpoint returns an array, use `Array.isArray(data) ? (data as T[]).map(...) : []`
 6. **Parse error response bodies before HTTP status** — web apps reuse 403 for both auth and permission errors. The error code in the body distinguishes them.
 7. **Icons must be valid Lucide names** — TypeScript catches invalid ones at build time
-8. **Prettier formatting** — always run `npm run format` after writing code; the project's config may differ from your defaults
+8. **Biome formatting** — always run `npm run format` after writing code; the project's config may differ from your defaults
 9. **The `opentabs` field in `package.json`** is how the platform discovers plugin metadata — `displayName`, `description`, and `urlPatterns` must be there
 10. **Browser tools require human approval** — `browser_navigate_tab`, `browser_execute_script`, etc. show a confirmation dialog that times out in 30 seconds
