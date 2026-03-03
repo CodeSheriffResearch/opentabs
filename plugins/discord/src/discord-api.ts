@@ -51,8 +51,11 @@ const getPersistedToken = (): string | null => {
 
 const setPersistedToken = (token: string): void => {
   try {
-    const ns = ((globalThis as Record<string, unknown>).__openTabs ??= {}) as Record<string, unknown>;
-    const cache = (ns.tokenCache ??= {}) as Record<string, string | undefined>;
+    const g = globalThis as Record<string, unknown>;
+    if (!g.__openTabs) g.__openTabs = {};
+    const ns = g.__openTabs as Record<string, unknown>;
+    if (!ns.tokenCache) ns.tokenCache = {};
+    const cache = ns.tokenCache as Record<string, string | undefined>;
     cache.discord = token;
   } catch {
     // globalThis access failed — nothing to persist

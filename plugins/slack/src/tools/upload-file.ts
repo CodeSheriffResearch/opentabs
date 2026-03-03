@@ -89,7 +89,7 @@ export const uploadFile = defineTool({
       throw ToolError.validation('Upload URL must use HTTPS');
     }
     const SLACK_DOMAINS = ['slack.com', 'slack-edge.com'];
-    if (!SLACK_DOMAINS.some(d => uploadUrl.hostname === d || uploadUrl.hostname.endsWith('.' + d))) {
+    if (!SLACK_DOMAINS.some(d => uploadUrl.hostname === d || uploadUrl.hostname.endsWith(`.${d}`))) {
       throw ToolError.validation('Upload URL domain is not a trusted Slack domain');
     }
 
