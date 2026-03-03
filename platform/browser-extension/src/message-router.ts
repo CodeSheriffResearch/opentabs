@@ -189,18 +189,22 @@ const validatePluginPayload = (raw: unknown): ValidatedPluginPayload | null => {
             typeof t === 'object' &&
             t !== null &&
             typeof (t as Record<string, unknown>).name === 'string' &&
-            typeof (t as Record<string, unknown>).description === 'string' &&
-            typeof (t as Record<string, unknown>).enabled === 'boolean',
+            typeof (t as Record<string, unknown>).description === 'string',
         )
-        .map(
-          (t): WireToolDef => ({
+        .map((t): WireToolDef => {
+          if (typeof t.enabled !== 'boolean') {
+            console.warn(
+              `[opentabs] Tool "${t.name as string}" in plugin "${obj.name as string}" is missing the "enabled" field — defaulting to enabled=true. This is a server-side bug.`,
+            );
+          }
+          return {
             name: t.name as string,
             displayName: typeof t.displayName === 'string' ? t.displayName : (t.name as string),
             description: t.description as string,
             icon: typeof t.icon === 'string' ? t.icon : 'wrench',
-            enabled: t.enabled as boolean,
-          }),
-        )
+            enabled: typeof t.enabled === 'boolean' ? t.enabled : true,
+          };
+        })
     : [];
 
   return {

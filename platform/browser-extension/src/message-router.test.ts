@@ -540,7 +540,8 @@ describe('validatePluginPayload', () => {
       expect(result.tools).toHaveLength(1);
     });
 
-    test('filters out tools missing enabled flag', () => {
+    test('defaults enabled=true for tools missing the enabled field and logs a warning', () => {
+      const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
       const result = expectValid({
         ...validPayload(),
         tools: [
@@ -548,10 +549,14 @@ describe('validatePluginPayload', () => {
           { name: 'valid', displayName: 'Valid', description: 'Has enabled', icon: 'wrench', enabled: false },
         ],
       });
-      expect(result.tools).toHaveLength(1);
-      const enabledTool = result.tools[0];
-      expect(enabledTool).toBeDefined();
-      expect((enabledTool as NonNullable<typeof enabledTool>).name).toBe('valid');
+      expect(result.tools).toHaveLength(2);
+      const noEnabledTool = result.tools[0];
+      expect(noEnabledTool).toBeDefined();
+      expect((noEnabledTool as NonNullable<typeof noEnabledTool>).name).toBe('no-enabled');
+      expect((noEnabledTool as NonNullable<typeof noEnabledTool>).enabled).toBe(true);
+      expect(warnSpy).toHaveBeenCalledOnce();
+      expect(warnSpy.mock.calls[0]?.[0]).toContain('no-enabled');
+      warnSpy.mockRestore();
     });
 
     test('filters out non-object tool entries', () => {
