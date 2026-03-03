@@ -913,7 +913,7 @@ const launchExtensionContext = async (
         ? ['--no-sandbox', '--disable-gpu', '--disable-dev-shm-usage', '--disable-software-rasterizer']
         : []),
     ],
-    timeout: 30_000,
+    timeout: 60_000,
   });
 
   return { context, cleanupDir: path.dirname(extensionDir), extensionDir, mcpPort };
