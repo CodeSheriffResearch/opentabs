@@ -211,6 +211,8 @@ const handleBgGetFullState: MessageHandler = (_message, sendResponse) => {
         urlPatterns: meta.urlPatterns,
         iconSvg: meta.iconSvg,
         iconInactiveSvg: meta.iconInactiveSvg,
+        iconDarkSvg: meta.iconDarkSvg,
+        iconDarkInactiveSvg: meta.iconDarkInactiveSvg,
         tools,
         tabState,
         source: serverPlugin?.source ?? 'local',
@@ -451,7 +453,11 @@ const handleBgSetToolsEnabled: MessageHandler = (message, sendResponse) => {
   addPendingPluginAllToolsUpdate(plugin, toolNames, enabled);
   updateServerStateCache({ plugins: updatedPlugins });
 
-  sendServerRequest('config.setToolsEnabled', { plugin, tools: toolNames, enabled })
+  sendServerRequest('config.setToolsEnabled', {
+    plugin,
+    tools: toolNames,
+    enabled,
+  })
     .then((result: unknown) => {
       removePendingPluginAllToolsUpdate(plugin, toolNames);
       sendResponse(result);
@@ -521,7 +527,10 @@ const handleBgSetAllBrowserToolsEnabled: MessageHandler = (message, sendResponse
   }
 
   // Optimistically update the local server state cache
-  const updatedBrowserTools = cache.browserTools.map(bt => ({ ...bt, enabled }));
+  const updatedBrowserTools = cache.browserTools.map(bt => ({
+    ...bt,
+    enabled,
+  }));
   addPendingAllBrowserToolsUpdate(toolNames, enabled);
   updateServerStateCache({ browserTools: updatedBrowserTools });
 
