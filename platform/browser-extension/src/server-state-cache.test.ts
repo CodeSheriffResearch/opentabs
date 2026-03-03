@@ -81,6 +81,19 @@ describe('get / update / clear', () => {
     clearServerStateCache();
     expect(getServerStateCache()).toEqual(EMPTY_CACHE);
   });
+
+  test('getServerStateCache returns a deep copy — mutating it does not affect the cache', () => {
+    const plugin = { name: 'test', displayName: 'Test', version: '1.0.0' } as never;
+    updateServerStateCache({ plugins: [plugin] });
+
+    const snapshot = getServerStateCache();
+    // Mutate the returned array
+    (snapshot.plugins as unknown[]).push({ name: 'injected', displayName: 'Injected', version: '0.0.1' });
+
+    // The internal cache should still contain only the original plugin
+    expect(getServerStateCache().plugins).toHaveLength(1);
+    expect(getServerStateCache().plugins[0]).toMatchObject({ name: 'test' });
+  });
 });
 
 // ---------------------------------------------------------------------------

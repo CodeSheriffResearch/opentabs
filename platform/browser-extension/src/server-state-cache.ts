@@ -59,8 +59,8 @@ const schedulePersist = (): void => {
   }, 500);
 };
 
-/** Return the current server state cache (read-only snapshot). */
-const getServerStateCache = (): Readonly<ServerStateCache> => cache;
+/** Return a deep copy of the current server state cache. */
+const getServerStateCache = (): ServerStateCache => structuredClone(cache);
 
 /**
  * Merge a partial update into the server state cache. Only the provided
