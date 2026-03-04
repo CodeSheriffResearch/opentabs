@@ -516,13 +516,13 @@ test.describe('Side panel — plugin-level permission select', () => {
 // ---------------------------------------------------------------------------
 
 test.describe('Side panel — skipPermissions mode and group headers', () => {
-  test('skipPermissions disables all Select components and no Switch components exist', async () => {
+  test('skipPermissions shows banner and keeps permission selects interactive', async () => {
     const absPluginPath = path.resolve(E2E_TEST_PLUGIN_DIR);
 
     const configDir = fs.mkdtempSync(path.join(os.tmpdir(), 'opentabs-e2e-sp-skip-'));
     writeTestConfig(configDir, { localPlugins: [absPluginPath], plugins: { 'e2e-test': { permission: 'auto' } } });
 
-    // Enable skipPermissions so all selects should be disabled
+    // Enable skipPermissions — selects should remain interactive (not disabled)
     const server = await startMcpServer(configDir, true, undefined, { OPENTABS_SKIP_PERMISSIONS: '1' });
     const { context, cleanupDir, extensionDir } = await launchExtensionContext(server.port, server.secret);
     setupAdapterSymlink(configDir, extensionDir);
@@ -537,18 +537,19 @@ test.describe('Side panel — skipPermissions mode and group headers', () => {
         timeout: 30_000,
       });
 
-      // Wait for the "PERMISSIONS BYPASSED" banner to confirm skipPermissions propagated
-      await expect(sidePanelPage.getByText('PERMISSIONS BYPASSED')).toBeVisible({ timeout: 15_000 });
+      // Wait for the approval-bypassed banner to confirm skipPermissions propagated
+      await expect(sidePanelPage.getByText('Approval prompts bypassed')).toBeVisible({ timeout: 15_000 });
+      await expect(sidePanelPage.getByText('--dangerously-skip-permissions')).toBeVisible();
 
-      // Verify the plugin-level select trigger is visible but disabled
+      // Verify the plugin-level select trigger is visible and ENABLED (not disabled)
       const pluginTrigger = sidePanelPage.locator('[aria-label="Permission for e2e-test plugin"]');
       await expect(pluginTrigger).toBeVisible({ timeout: 5_000 });
-      await expect(pluginTrigger).toBeDisabled();
+      await expect(pluginTrigger).toBeEnabled();
 
-      // Verify the browser tools select trigger is visible but disabled
+      // Verify the browser tools select trigger is visible and ENABLED
       const browserTrigger = sidePanelPage.locator('[aria-label="Permission for browser tools"]');
       await expect(browserTrigger).toBeVisible({ timeout: 5_000 });
-      await expect(browserTrigger).toBeDisabled();
+      await expect(browserTrigger).toBeEnabled();
 
       // Expand the plugin card to reveal tool rows
       const pluginCard = sidePanelPage.locator('button[aria-expanded]').filter({ hasText: 'E2E Test' });
@@ -557,10 +558,10 @@ test.describe('Side panel — skipPermissions mode and group headers', () => {
       // Wait for tool rows to be visible
       await expect(sidePanelPage.getByText('Echo', { exact: true })).toBeVisible({ timeout: 5_000 });
 
-      // Verify tool-level select triggers are disabled
+      // Verify tool-level select triggers are ENABLED
       const echoTrigger = sidePanelPage.locator('[aria-label="Permission for echo tool"]');
       await expect(echoTrigger).toBeVisible({ timeout: 5_000 });
-      await expect(echoTrigger).toBeDisabled();
+      await expect(echoTrigger).toBeEnabled();
 
       // Verify no Switch components exist anywhere in the side panel
       // (group headers are plain text dividers, not interactive switches)

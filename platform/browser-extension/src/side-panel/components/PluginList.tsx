@@ -86,7 +86,6 @@ const PluginList = ({
   onRemove,
   removingPlugins,
   pluginErrors,
-  skipPermissions,
 }: {
   plugins: PluginState[];
   failedPlugins: FailedPluginState[];
@@ -97,7 +96,6 @@ const PluginList = ({
   onRemove?: (pluginName: string) => void;
   removingPlugins?: Set<string>;
   pluginErrors?: Map<string, string>;
-  skipPermissions?: boolean;
 }) => {
   const filterLower = toolFilter.toLowerCase();
 
@@ -177,7 +175,6 @@ const PluginList = ({
       onRemove={onRemove ? () => onRemove(plugin.name) : undefined}
       removingPlugin={removingPlugins?.has(plugin.name)}
       actionError={pluginErrors?.get(plugin.name) ?? null}
-      skipPermissions={skipPermissions}
       transitionClass={resolveTransitionClass(plugin.name, isReadyGroup)}
     />
   );

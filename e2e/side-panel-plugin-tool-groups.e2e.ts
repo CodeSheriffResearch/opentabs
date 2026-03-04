@@ -114,14 +114,13 @@ test.describe('Side panel — plugin tool groups', () => {
     }
   });
 
-  test('group headers contain a Switch toggle for bulk permission control', async () => {
-    // The PluginCard group header includes a Switch element for toggling
-    // all tools in the group between 'auto' and 'off'. This test verifies
-    // the Switch is present (preventing regressions that remove it).
+  test('group headers are plain text dividers', async () => {
+    // Group headers are non-interactive text labels (uppercase, tracking-wider)
+    // displayed inside a bg-muted/20 container. There are no Switch toggles.
     const absPluginPath = path.resolve(E2E_TEST_PLUGIN_DIR);
     const tools = buildToolsMap();
 
-    const configDir = fs.mkdtempSync(path.join(os.tmpdir(), 'opentabs-e2e-sp-plugin-groups-switch-'));
+    const configDir = fs.mkdtempSync(path.join(os.tmpdir(), 'opentabs-e2e-sp-plugin-groups-headers-'));
     writeTestConfig(configDir, { localPlugins: [absPluginPath], tools });
 
     const server = await startMcpServer(configDir, true);
@@ -145,26 +144,14 @@ test.describe('Side panel — plugin tool groups', () => {
       const groupHeaders = pluginItem.locator('span.uppercase.tracking-wider');
       await expect(groupHeaders.first()).toBeVisible({ timeout: 5_000 });
 
-      // Each group header's parent container should contain a Switch (button[role="switch"]).
-      // The group header container is the div that has the bg-muted/20 styling.
+      // Group headers live inside bg-muted/20 containers
       const groupHeaderContainers = pluginItem.locator('div.bg-muted\\/20');
       const containerCount = await groupHeaderContainers.count();
       expect(containerCount).toBeGreaterThanOrEqual(2);
 
-      // Verify each group header container has a switch button
-      for (let i = 0; i < containerCount; i++) {
-        const container = groupHeaderContainers.nth(i);
-        const switchButton = container.locator('button[role="switch"]');
-        await expect(switchButton).toBeVisible({ timeout: 5_000 });
-      }
-
-      // Verify specific group switch labels
-      await expect(pluginItem.locator('button[role="switch"][aria-label="Toggle all Basic tools"]')).toBeVisible({
-        timeout: 5_000,
-      });
-      await expect(pluginItem.locator('button[role="switch"][aria-label="Toggle all Data tools"]')).toBeVisible({
-        timeout: 5_000,
-      });
+      // No Switch components exist — group headers are non-interactive dividers
+      const switches = pluginItem.locator('[role="switch"]');
+      await expect(switches).toHaveCount(0);
 
       await sidePanelPage.close();
     } finally {

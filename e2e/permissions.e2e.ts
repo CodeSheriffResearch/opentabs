@@ -6,7 +6,7 @@
  *   - Tool with permission 'ask': confirmation dialog appears, allow/deny flows
  *   - Tool with permission 'ask' + Always Allow: permission persists to 'auto'
  *   - Tool with permission 'auto': executes immediately without dialog
- *   - skipPermissions=true: all tools execute immediately
+ *   - skipPermissions=true: ask→auto (executes), off stays off
  *   - Plugin-level permission: setting plugin to 'auto' makes all tools auto
  *   - Per-tool override: tool-level permission overrides plugin default
  *
@@ -160,9 +160,16 @@ const getBadgeText = (sw: Worker): Promise<string> => sw.evaluate(() => chrome.a
 // ---------------------------------------------------------------------------
 
 test.describe('Permission: off', () => {
-  test('tool with permission off returns disabled error', async ({ mcpClient }) => {
-    // All tools default to 'off' (no plugins config). Calling any browser tool
-    // should return a "currently disabled" error without needing the extension.
+  test('tool with permission off returns disabled error', async ({ mcpServer, mcpClient }) => {
+    // Set browser tools to 'off' and trigger config rediscovery
+    const config = readTestConfig(mcpServer.configDir);
+    config.plugins = { ...config.plugins, browser: { permission: 'off' } };
+    writeTestConfig(mcpServer.configDir, config);
+
+    mcpServer.logs.length = 0;
+    mcpServer.triggerHotReload();
+    await waitForLog(mcpServer, 'Hot reload complete', 20_000);
+
     const result = await mcpClient.callTool('browser_list_tabs', {});
     expect(result.isError).toBe(true);
     expect(result.content).toContain('currently disabled');
@@ -343,14 +350,18 @@ test.describe('Confirmation dialog — Always Allow', () => {
 });
 
 // ---------------------------------------------------------------------------
-// Tests — skipPermissions bypasses all
+// Tests — skipPermissions converts ask to auto but respects off
 // ---------------------------------------------------------------------------
 
 test.describe('skipPermissions bypass', () => {
-  test('skipPermissions=true makes all tools execute immediately regardless of config', async () => {
+  test('skipPermissions=true converts ask to auto (tool executes without prompt)', async () => {
     const configDir = createTestConfigDir();
     try {
-      // All tools default to 'off' (empty plugins config)
+      // Set browser permission to 'ask' — skipPermissions converts ask→auto
+      const config = readTestConfig(configDir);
+      config.plugins = { ...config.plugins, browser: { permission: 'ask' } };
+      writeTestConfig(configDir, config);
+
       const server = await startMcpServer(configDir, true, undefined, {
         OPENTABS_SKIP_PERMISSIONS: '1',
       });
@@ -369,10 +380,53 @@ test.describe('skipPermissions bypass', () => {
           const client = createMcpClient(server.port, server.secret);
           await client.initialize();
           try {
-            // With skipPermissions, even tools with no config (default 'off')
-            // should execute immediately
+            // With skipPermissions, ask→auto so the tool executes without prompt
             const result = await client.callTool('browser_list_tabs', {});
             expect(result.isError).toBe(false);
+          } finally {
+            await client.close();
+          }
+        } finally {
+          await context.close();
+          try {
+            fs.rmSync(cleanupDir, { recursive: true, force: true });
+          } catch {
+            // best-effort
+          }
+        }
+      } finally {
+        await server.kill();
+      }
+    } finally {
+      cleanupTestConfigDir(configDir);
+    }
+  });
+
+  test('skipPermissions=true with off permission still returns disabled error', async () => {
+    const configDir = createTestConfigDir();
+    try {
+      // Set browser permission to 'off' — skipPermissions does NOT override off
+      const config = readTestConfig(configDir);
+      config.plugins = { ...config.plugins, browser: { permission: 'off' } };
+      writeTestConfig(configDir, config);
+
+      const server = await startMcpServer(configDir, true, undefined, {
+        OPENTABS_SKIP_PERMISSIONS: '1',
+      });
+      try {
+        const { context, cleanupDir, extensionDir } = await launchExtensionContext(server.port, server.secret);
+        setupAdapterSymlink(configDir, extensionDir);
+
+        try {
+          await waitForExtensionConnected(server);
+          await waitForLog(server, 'tab.syncAll received');
+
+          const client = createMcpClient(server.port, server.secret);
+          await client.initialize();
+          try {
+            const result = await client.callTool('browser_list_tabs', {});
+            expect(result.isError).toBe(true);
+            expect(result.content).toContain('currently disabled');
           } finally {
             await client.close();
           }

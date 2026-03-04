@@ -347,12 +347,12 @@ const App = () => {
       <div className="flex h-screen flex-col overflow-hidden text-foreground">
         {connected && <ConfirmationDialog confirmations={pendingConfirmations} onRespond={handleConfirmationRespond} />}
         {skipPermissions && (
-          <Alert variant="solid" status="warning" className="mx-4 mt-2">
-            <Alert.Title>PERMISSIONS BYPASSED</Alert.Title>
-            <Alert.Description>
-              All tools execute without approval.
-              <span className="mt-1 block font-mono text-xs">--dangerously-skip-permissions</span>
-            </Alert.Description>
+          <Alert status="warning" className="mx-4 mt-2 px-3 py-2">
+            <div className="font-head text-xs uppercase">Approval prompts bypassed</div>
+            <div className="mt-0.5 text-[11px] leading-tight">
+              Ask-mode tools execute without confirmation. Disabled tools remain off.
+            </div>
+            <div className="mt-1 font-mono text-[10px] opacity-70">--dangerously-skip-permissions</div>
           </Alert>
         )}
         {showSearchBar && (
@@ -411,7 +411,6 @@ const App = () => {
                 removingPlugins={removingPlugins}
                 pluginErrors={pluginErrors}
                 serverVersion={serverVersion}
-                skipPermissions={skipPermissions}
               />
             ) : hasContent ? (
               <>
@@ -424,7 +423,6 @@ const App = () => {
                       serverVersion={serverVersion}
                       browserPermission={browserPermission}
                       onBrowserPermissionChange={setBrowserPermission}
-                      skipPermissions={skipPermissions}
                     />
                   </Accordion>
                 )}
@@ -438,7 +436,6 @@ const App = () => {
                   onRemove={handleRemove}
                   removingPlugins={removingPlugins}
                   pluginErrors={pluginErrors}
-                  skipPermissions={skipPermissions}
                 />
               </>
             ) : null}

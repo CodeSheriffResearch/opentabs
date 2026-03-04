@@ -857,12 +857,12 @@ const SkipPermissionsBannerDemo = () => {
   const [browserTools, setBrowserTools] = useState(mockBrowserTools);
   return (
     <SidePanelShell>
-      <Alert variant="solid" status="warning" className="mx-4 mt-2">
-        <Alert.Title>PERMISSIONS BYPASSED</Alert.Title>
-        <Alert.Description>
-          All tools execute without approval.
-          <span className="mt-1 block font-mono text-xs">--dangerously-skip-permissions</span>
-        </Alert.Description>
+      <Alert status="warning" className="mx-4 mt-2 px-3 py-2">
+        <div className="font-head text-xs uppercase">Approval prompts bypassed</div>
+        <div className="mt-0.5 text-[11px] leading-tight">
+          Ask-mode tools execute without confirmation. Disabled tools remain off.
+        </div>
+        <div className="mt-1 font-mono text-[10px] opacity-70">--dangerously-skip-permissions</div>
       </Alert>
       <Accordion type="multiple" className="mt-2 mb-2 space-y-2">
         <BrowserToolsCard
@@ -870,17 +870,9 @@ const SkipPermissionsBannerDemo = () => {
           activeTools={new Set()}
           onToolsChange={updater => setBrowserTools(updater)}
           serverVersion="0.0.42"
-          skipPermissions={true}
         />
       </Accordion>
-      <PluginList
-        plugins={plugins}
-        failedPlugins={[]}
-        activeTools={new Set()}
-        setPlugins={setPlugins}
-        toolFilter=""
-        skipPermissions={true}
-      />
+      <PluginList plugins={plugins} failedPlugins={[]} activeTools={new Set()} setPlugins={setPlugins} toolFilter="" />
     </SidePanelShell>
   );
 };

@@ -308,7 +308,6 @@ const SkipPermissionsDemo = () => {
       activeTools={new Set()}
       onToolsChange={updater => setTools(updater)}
       browserPermission="auto"
-      skipPermissions
     />
   );
 };

@@ -26,7 +26,6 @@ const PluginCard = ({
   updatingPlugin,
   removingPlugin,
   actionError,
-  skipPermissions,
   transitionClass,
 }: {
   plugin: PluginState;
@@ -38,7 +37,6 @@ const PluginCard = ({
   updatingPlugin?: boolean;
   removingPlugin?: boolean;
   actionError?: string | null;
-  skipPermissions?: boolean;
   transitionClass?: string;
 }) => {
   const [toggleError, setToggleError] = useState<string | null>(null);
@@ -184,7 +182,7 @@ const PluginCard = ({
           <PermissionSelect
             value={plugin.permission}
             onValueChange={handlePluginPermissionChange}
-            disabled={skipPermissions ?? false}
+            disabled={false}
             ariaLabel={`Permission for ${plugin.name} plugin`}
           />
         </div>
@@ -223,7 +221,6 @@ const PluginCard = ({
                     icon={tool.icon}
                     permission={tool.permission}
                     active={activeTools.has(`${plugin.name}:${tool.name}`)}
-                    disabled={skipPermissions}
                     onPermissionChange={handleToolPermissionChange}
                   />
                 ))}
@@ -239,7 +236,6 @@ const PluginCard = ({
                 icon={tool.icon}
                 permission={tool.permission}
                 active={activeTools.has(`${plugin.name}:${tool.name}`)}
-                disabled={skipPermissions}
                 onPermissionChange={handleToolPermissionChange}
               />
             ))}

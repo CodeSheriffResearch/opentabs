@@ -555,7 +555,7 @@ const SkipPermissionsDemo = () => {
   const [plugins, setPlugins] = useState([mockPlugin()]);
   const plugin = plugins[0];
   if (!plugin) return null;
-  return <PluginCard plugin={plugin} activeTools={new Set()} setPlugins={setPlugins} skipPermissions />;
+  return <PluginCard plugin={plugin} activeTools={new Set()} setPlugins={setPlugins} />;
 };
 
 const SkipPermissions: Story = {

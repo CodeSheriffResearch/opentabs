@@ -196,9 +196,7 @@ interface OpentabsConfig {
   /**
    * Legacy tool enable/disable map (prefixed tool names → boolean).
    * Ignored by the server — kept for backward compatibility with tests
-   * that haven't been migrated yet. All E2E tests run with
-   * OPENTABS_SKIP_PERMISSIONS=1, so the plugins map is irrelevant for
-   * most tests. Remove this field once all tests are migrated.
+   * that haven't been migrated yet.
    */
   tools?: Record<string, boolean>;
 }
@@ -236,7 +234,10 @@ const createTestConfigDir = (): string => {
 
   const config: OpentabsConfig = {
     localPlugins: [absPluginPath],
-    plugins: {},
+    plugins: {
+      'e2e-test': { permission: 'auto' },
+      browser: { permission: 'auto' },
+    },
   };
 
   const configPath = path.join(configDir, 'config.json');
@@ -274,9 +275,23 @@ const readTestConfig = (configDir: string): OpentabsConfig => {
 
 /**
  * Write a new config.json to an isolated test config directory.
+ *
+ * When `plugins` is not provided, auto-generates `permission: 'auto'`
+ * entries for all localPlugins (by directory basename) plus browser tools.
+ * This ensures tests work correctly with skipPermissions's semantics
+ * where 'off' (the default) is respected even when skipPermissions is true.
  */
 const writeTestConfig = (configDir: string, config: OpentabsConfig): void => {
-  fs.writeFileSync(path.join(configDir, 'config.json'), `${JSON.stringify(config, null, 2)}\n`, 'utf-8');
+  const effective = { ...config };
+  if (!effective.plugins) {
+    const plugins: Record<string, PluginPermissionConfig> = { browser: { permission: 'auto' } };
+    for (const pluginPath of effective.localPlugins) {
+      const name = path.basename(pluginPath);
+      plugins[name] = { permission: 'auto' };
+    }
+    effective.plugins = plugins;
+  }
+  fs.writeFileSync(path.join(configDir, 'config.json'), `${JSON.stringify(effective, null, 2)}\n`, 'utf-8');
 };
 
 /** Minimal plugin manifest tool definition */

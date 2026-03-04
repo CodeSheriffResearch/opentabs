@@ -52,7 +52,6 @@ const BrowserToolsCard = ({
   serverVersion,
   browserPermission = 'off',
   onBrowserPermissionChange,
-  skipPermissions,
 }: {
   tools: BrowserToolState[];
   activeTools: Set<string>;
@@ -61,7 +60,6 @@ const BrowserToolsCard = ({
   serverVersion?: string;
   browserPermission?: ToolPermission;
   onBrowserPermissionChange?: (permission: ToolPermission) => void;
-  skipPermissions?: boolean;
 }) => {
   const [toggleError, setToggleError] = useState<string | null>(null);
   const errorTimerRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
@@ -165,7 +163,7 @@ const BrowserToolsCard = ({
           <PermissionSelect
             value={browserPermission}
             onValueChange={handleBrowserPermissionChange}
-            disabled={skipPermissions ?? false}
+            disabled={false}
             ariaLabel="Permission for browser tools"
           />
         </div>
@@ -199,7 +197,6 @@ const BrowserToolsCard = ({
                     icon={tool.icon ?? 'globe'}
                     permission={tool.permission}
                     active={activeTools.has(`browser:${tool.name}`)}
-                    disabled={skipPermissions}
                     onPermissionChange={handleToolPermissionChange}
                   />
                 ))}
@@ -215,7 +212,6 @@ const BrowserToolsCard = ({
                 icon={tool.icon ?? 'globe'}
                 permission={tool.permission}
                 active={activeTools.has(`browser:${tool.name}`)}
-                disabled={skipPermissions}
                 onPermissionChange={handleToolPermissionChange}
               />
             ))}

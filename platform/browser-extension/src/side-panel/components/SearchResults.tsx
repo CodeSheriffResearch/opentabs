@@ -25,7 +25,6 @@ interface SearchResultsProps {
   removingPlugins?: Set<string>;
   pluginErrors?: Map<string, string>;
   serverVersion?: string;
-  skipPermissions?: boolean;
 }
 
 const SectionHeader = ({ children }: { children: ReactNode }) => (
@@ -56,7 +55,6 @@ const SearchResults = ({
   removingPlugins,
   pluginErrors,
   serverVersion,
-  skipPermissions,
 }: SearchResultsProps) => {
   const filterLower = toolFilter.toLowerCase();
 
@@ -96,7 +94,6 @@ const SearchResults = ({
                 onToolsChange={setBrowserTools}
                 toolFilter={toolFilter}
                 serverVersion={serverVersion}
-                skipPermissions={skipPermissions}
               />
             </Accordion>
           )}
@@ -110,7 +107,6 @@ const SearchResults = ({
             onRemove={onRemove}
             removingPlugins={removingPlugins}
             pluginErrors={pluginErrors}
-            skipPermissions={skipPermissions}
           />
         </div>
       )}
