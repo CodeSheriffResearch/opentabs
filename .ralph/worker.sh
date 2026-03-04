@@ -377,6 +377,27 @@ You are an autonomous coding agent running in a git worktree. The safety net ver
     fi
 
     rm -f "$ITER_RESULT_FILE"
+
+    # Push new commits to remote after each iteration so work is never lost.
+    # The branch is unique to this worker — no conflicts possible.
+    local branch_name
+    branch_name=$(git -C "$WORKTREE_DIR" rev-parse --abbrev-ref HEAD 2>/dev/null)
+    local unpushed
+    unpushed=$(git -C "$WORKTREE_DIR" rev-list --count "origin/main..$branch_name" 2>/dev/null || echo "0")
+    local remote_exists
+    remote_exists=$(git -C "$WORKTREE_DIR" ls-remote --heads origin "$branch_name" 2>/dev/null | wc -l | tr -d ' ')
+    # Only count unpushed relative to remote branch if it exists
+    if [ "$remote_exists" -gt 0 ]; then
+      unpushed=$(git -C "$WORKTREE_DIR" rev-list --count "origin/$branch_name..$branch_name" 2>/dev/null || echo "$unpushed")
+    fi
+    if [ "$unpushed" -gt 0 ]; then
+      if git -C "$WORKTREE_DIR" push origin "$branch_name" --quiet 2>/dev/null; then
+        wlog "Pushed $unpushed commit(s) to origin/$branch_name"
+      else
+        wlog "WARNING: Failed to push commits (will retry next iteration)"
+      fi
+    fi
+
     sleep 2
   done
 

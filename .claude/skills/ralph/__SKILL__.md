@@ -95,7 +95,7 @@ prd-YYYY-MM-DD-HHMMSS-objective~done.json      — completed, pending archive
 archived to archive/                            — final resting place
 ```
 
-Multiple PRDs can be `~running` simultaneously (one per worker). This skill writes with `~draft` (no timestamp). At publish time, `producer.sh` renames the file with a real timestamp, commits, and pushes to the remote. This ensures correct ordering — the timestamp reflects when the PRD was actually ready, not when writing started.
+Multiple PRDs can be `~running` simultaneously (one per worker). This skill writes with `~draft` (no timestamp). At publish time, `producer.sh` renames the file with a real timestamp and a 6-character content hash, commits, and pushes to the remote. The timestamp ensures correct ordering, the hash ensures unique branch names even for PRDs with the same slug.
 
 ---
 
