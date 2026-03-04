@@ -656,9 +656,8 @@ describe('handlePluginToolCall', () => {
     expect(sendConfirmationRequest).not.toHaveBeenCalled();
   });
 
-  test('skipPermissions=true overrides off to auto (tool executes)', async () => {
-    // getToolPermission already returns 'auto' when skipPermissions is true,
-    // so we mock it accordingly
+  test('skipPermissions=true converts ask to auto (tool executes without prompt)', async () => {
+    // getToolPermission converts 'ask' → 'auto' when skipPermissions is true
     vi.mocked(getToolPermission).mockReturnValue('auto');
     vi.mocked(dispatchToExtension).mockResolvedValue({ output: {} });
     const state = createMockState({ skipPermissions: true });
@@ -679,6 +678,30 @@ describe('handlePluginToolCall', () => {
 
     expect(result.isError).toBeUndefined();
     expect(sendConfirmationRequest).not.toHaveBeenCalled();
+  });
+
+  test('skipPermissions=true with tool permission off returns disabled error', async () => {
+    // skipPermissions only converts 'ask' → 'auto'; 'off' stays 'off'
+    vi.mocked(getToolPermission).mockReturnValue('off');
+    const state = createMockState({ skipPermissions: true });
+    const lookup = createMockLookup();
+    const extra = createMockExtra();
+    const callbacks = createMockCallbacks();
+
+    const result = await handlePluginToolCall(
+      state,
+      'testplugin_test_action',
+      {},
+      'testplugin',
+      'test_action',
+      lookup,
+      extra,
+      callbacks,
+    );
+
+    expect(result.isError).toBe(true);
+    expect(result.content[0]?.text).toContain('currently disabled');
+    expect(result.content[0]?.text).toContain('enable it in the OpenTabs side panel');
   });
 
   test('schema compilation failure (validate is null) returns error', async () => {
