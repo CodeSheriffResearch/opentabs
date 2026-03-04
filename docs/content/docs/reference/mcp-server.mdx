@@ -1,7 +1,7 @@
 ---
 title: MCP Server
 description: HTTP endpoints, WebSocket protocol, authentication, MCP capabilities, and client configuration for the OpenTabs server.
-lastUpdated: 2026-03-02
+lastUpdated: 2026-03-03
 ---
 
 ## HTTP Endpoints
@@ -164,7 +164,7 @@ Pass `Authorization: Bearer <secret>` to get the full payload:
   "toolCount": 59,
   "browserToolCount": 40,
   "pluginToolCount": 19,
-  "browserToolNames": ["browser_navigate", "browser_click", "browser_screenshot"],
+  "browserToolNames": ["browser_navigate_tab", "browser_click_element", "browser_screenshot_tab"],
   "disabledBrowserTools": ["browser_execute_script"],
   "confirmationBypassed": false,
   "uptime": 3600,
@@ -475,6 +475,21 @@ Admin endpoints (`/reload`, `/extension/reload`) are rate-limited to 10 requests
       <Table.Cell className="font-medium">`config.setAllToolsEnabled`</Table.Cell>
       <Table.Cell>Request</Table.Cell>
       <Table.Cell>Enable or disable all tools in a plugin at once (plugin name + enabled boolean).</Table.Cell>
+    </Table.Row>
+    <Table.Row>
+      <Table.Cell className="font-medium">`config.setToolsEnabled`</Table.Cell>
+      <Table.Cell>Request</Table.Cell>
+      <Table.Cell>Batch enable/disable multiple tools at once.</Table.Cell>
+    </Table.Row>
+    <Table.Row>
+      <Table.Cell className="font-medium">`config.setBrowserToolEnabled`</Table.Cell>
+      <Table.Cell>Request</Table.Cell>
+      <Table.Cell>Enable or disable a single browser tool.</Table.Cell>
+    </Table.Row>
+    <Table.Row>
+      <Table.Cell className="font-medium">`config.setAllBrowserToolsEnabled`</Table.Cell>
+      <Table.Cell>Request</Table.Cell>
+      <Table.Cell>Enable or disable all browser tools at once.</Table.Cell>
     </Table.Row>
     <Table.Row>
       <Table.Cell className="font-medium">`plugin.search`</Table.Cell>
