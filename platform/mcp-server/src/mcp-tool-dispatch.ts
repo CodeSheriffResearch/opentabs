@@ -6,6 +6,7 @@
  * mcp-setup.ts delegates to these functions after resolving the tool name.
  */
 
+import { readFile } from 'node:fs/promises';
 import type { PluginPermissionConfig } from '@opentabs-dev/shared';
 import { toErrorMessage } from '@opentabs-dev/shared';
 import type { ZodError } from 'zod';
@@ -20,7 +21,7 @@ import {
 import { log } from './logger.js';
 import { sanitizeErrorMessage } from './sanitize-error.js';
 import type { AuditEntry, CachedBrowserTool, ServerState, ToolLookupEntry } from './state.js';
-import { appendAuditEntry, getToolPermission } from './state.js';
+import { appendAuditEntry, generateReviewToken, getToolPermission } from './state.js';
 
 /** Maximum concurrent tool dispatches per plugin to prevent tab performance degradation */
 const MAX_CONCURRENT_DISPATCHES_PER_PLUGIN = 5;
@@ -454,5 +455,152 @@ const handlePluginToolCall = async (
   }
 };
 
+/** Review guidance text included in plugin_inspect responses */
+const REVIEW_GUIDANCE = `Review this plugin adapter code and report your findings to the user. Be thorough and honest.
+
+## What to check
+
+### 1. Code readability
+- Is the code minified, obfuscated, or bundled into unreadable single-line blocks?
+- The official build tool (opentabs-plugin build) produces unminified, readable JavaScript with original variable names and formatting.
+- Minified or obfuscated code is a significant red flag — it means the author bypassed the standard build process or is intentionally hiding the implementation.
+- Look for intentionally misleading variable names or code structures designed to obscure intent.
+
+### 2. Data exfiltration
+- Does the code make network requests to ANY external domains? Look for: fetch(), XMLHttpRequest, navigator.sendBeacon(), WebSocket connections, new Image() with src (pixel tracking), dynamic script/iframe injection that loads external URLs.
+- Plugin adapters should ONLY interact with the page DOM of the target web application. Any outbound requests to third-party domains are suspicious.
+- Check for encoded/obfuscated URLs (base64, string concatenation to build URLs, hex-encoded strings).
+- Look for data being serialized and sent anywhere — JSON.stringify of DOM content, form data collection, or page scraping beyond what the plugin's stated tools require.
+
+### 3. Credential and sensitive data access
+- Does the code access: document.cookie, localStorage, sessionStorage, indexedDB, Web Crypto API keys, password input fields, authentication tokens, session identifiers, or OAuth tokens?
+- Does it read or modify HTTP-only cookie attributes?
+- Does it access the Clipboard API (navigator.clipboard)?
+- Does it intercept or modify form submissions?
+- These APIs are not needed for normal plugin tool operation.
+
+### 4. Code execution vectors
+- Does the code use: eval(), new Function(), setTimeout/setInterval with string arguments, dynamic script injection (createElement('script')), document.write(), innerHTML with unsanitized content, import() with dynamic URLs?
+- These can be used to execute arbitrary code at runtime, potentially loading malicious payloads after the initial review.
+
+### 5. DOM manipulation beyond stated purpose
+- Does the code's DOM interaction match the plugin's stated purpose?
+- A Slack plugin should read/write Slack-specific DOM elements (message inputs, channel lists, etc.) — not access unrelated page content.
+- Look for broad DOM queries (document.querySelectorAll('*'), document.body.innerHTML) that scrape entire page content rather than targeted element access.
+- Does it attach global event listeners (keydown, input, submit, beforeunload) that could monitor user activity beyond the plugin's scope?
+
+### 6. Destructive actions
+- Even if the code only interacts with the target web service, does it perform any potentially destructive actions?
+- Look for: mass deletion patterns (delete all, remove all, clear all), bulk modification of user data, account settings changes, permission escalation, automated posting/messaging without clear user intent, subscription or billing modifications.
+- Check if the tool implementations match their declared names and descriptions — a tool named 'list_messages' should not be deleting or modifying messages.
+
+### 7. Persistence and stealth
+- Does the code set up any persistence mechanisms? Look for: Service Worker registration, browser extension message passing to unknown targets, periodic timers that run after the tool completes, mutation observers or intersection observers that trigger background behavior, web worker creation.
+- Does the code attempt to hide its activity by suppressing console output, catching and silencing errors, or modifying browser DevTools behavior?
+
+### 8. Scope escalation
+- Does the code attempt to access cross-origin resources or iframes?
+- Does it modify the page's Content Security Policy?
+- Does it interact with browser APIs beyond DOM manipulation (geolocation, camera, microphone, notifications, Bluetooth)?
+- Does it attempt to interact with other browser tabs or windows?
+
+## How to report
+Provide a clear, honest summary to the user:
+1. Overall assessment: safe / suspicious / dangerous
+2. What the code does (in plain language)
+3. Any concerns or red flags found
+4. Your recommendation: enable or keep disabled
+
+Do not downplay concerns. If anything is suspicious, say so clearly.`;
+
+/**
+ * Handle the plugin_inspect platform tool.
+ * Returns the plugin's adapter IIFE source code, metadata, and a review token.
+ */
+const handlePluginInspect = async (state: ServerState, args: Record<string, unknown>): Promise<ToolCallResult> => {
+  const pluginName = args.plugin;
+  if (typeof pluginName !== 'string' || pluginName.length === 0) {
+    return {
+      content: [{ type: 'text' as const, text: 'Invalid arguments: "plugin" must be a non-empty string.' }],
+      isError: true,
+    };
+  }
+
+  const plugin = state.registry.plugins.get(pluginName);
+  if (!plugin) {
+    const available = [...state.registry.plugins.keys()].join(', ') || '(none)';
+    return {
+      content: [
+        {
+          type: 'text' as const,
+          text: `Plugin "${pluginName}" not found. Available plugins: ${available}`,
+        },
+      ],
+      isError: true,
+    };
+  }
+
+  // The adapter IIFE is loaded into memory during plugin discovery
+  const adapterSource = plugin.iife;
+  if (!adapterSource || adapterSource.length === 0) {
+    return {
+      content: [
+        {
+          type: 'text' as const,
+          text: `Plugin "${pluginName}" has no adapter IIFE file. The plugin may not have been built correctly.`,
+        },
+      ],
+      isError: true,
+    };
+  }
+
+  // Read author from package.json if sourcePath is available
+  let author: string | undefined;
+  if (plugin.sourcePath) {
+    try {
+      const pkgJson = JSON.parse(await readFile(`${plugin.sourcePath}/package.json`, 'utf-8')) as Record<
+        string,
+        unknown
+      >;
+      if (typeof pkgJson.author === 'string') {
+        author = pkgJson.author;
+      } else if (typeof pkgJson.author === 'object' && pkgJson.author !== null) {
+        const authorObj = pkgJson.author as Record<string, unknown>;
+        author = typeof authorObj.name === 'string' ? authorObj.name : undefined;
+      }
+    } catch {
+      // package.json read failure is non-fatal — author will be undefined
+    }
+  }
+
+  const lineCount = adapterSource.split('\n').length;
+  const byteSize = Buffer.byteLength(adapterSource, 'utf-8');
+  const reviewToken = generateReviewToken(state, pluginName, plugin.version);
+
+  const response = {
+    plugin: pluginName,
+    version: plugin.version,
+    ...(author ? { author } : {}),
+    ...(plugin.npmPackageName ? { npmPackage: plugin.npmPackageName } : {}),
+    lineCount,
+    byteSize,
+    reviewToken,
+    reviewGuidance: REVIEW_GUIDANCE,
+    adapterSource,
+  };
+
+  return {
+    content: [{ type: 'text' as const, text: JSON.stringify(response, null, 2) }],
+  };
+};
+
 export type { ToolCallResult, RequestHandlerExtra, DispatchCallbacks };
-export { sanitizeOutput, formatStructuredError, formatZodError, handleBrowserToolCall, handlePluginToolCall };
+export {
+  sanitizeOutput,
+  formatStructuredError,
+  formatZodError,
+  handleBrowserToolCall,
+  handlePluginToolCall,
+  handlePluginInspect,
+  REVIEW_GUIDANCE,
+};

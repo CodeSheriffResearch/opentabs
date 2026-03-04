@@ -6,6 +6,7 @@ import type { McpServerInstance, RequestHandlerExtra } from './mcp-setup.js';
 import {
   checkToolCallable,
   getAllToolsList,
+  PLATFORM_TOOL_NAMES,
   rebuildCachedBrowserTools,
   registerMcpHandlers,
   sanitizeOutput,
@@ -266,7 +267,7 @@ describe('registerMcpHandlers — tools/list includes all tools regardless of pe
     expect(toolNames).toContain('slack_send_message');
     expect(toolNames).toContain('slack_read_messages');
     expect(toolNames).toContain('slack_list_channels');
-    expect(toolNames).toHaveLength(3);
+    expect(toolNames).toHaveLength(3 + PLATFORM_TOOL_NAMES.size);
   });
 
   test('tools/list reflects permission changes dynamically', () => {
@@ -314,7 +315,7 @@ describe('getAllToolsList — all tools always listed', () => {
     expect(names).toContain('slack_send_message');
     expect(names).toContain('slack_read_messages');
     expect(names).toContain('browser_list_tabs');
-    expect(tools).toHaveLength(3);
+    expect(tools).toHaveLength(3 + PLATFORM_TOOL_NAMES.size);
   });
 
   test('tools with permission off are listed with [Disabled] prefix', () => {
@@ -323,9 +324,10 @@ describe('getAllToolsList — all tools always listed', () => {
     // No permission config — defaults to 'off'
 
     const tools = getAllToolsList(state);
+    const pluginTools = tools.filter(t => !PLATFORM_TOOL_NAMES.has(t.name));
 
-    expect(tools).toHaveLength(1);
-    expect(tools[0]?.description).toBe('[Disabled] send_message description');
+    expect(pluginTools).toHaveLength(1);
+    expect(pluginTools[0]?.description).toBe('[Disabled] send_message description');
   });
 
   test('tools with permission ask are listed with [Requires approval] prefix', () => {
@@ -334,9 +336,10 @@ describe('getAllToolsList — all tools always listed', () => {
     state.pluginPermissions = { slack: { permission: 'ask' } };
 
     const tools = getAllToolsList(state);
+    const pluginTools = tools.filter(t => !PLATFORM_TOOL_NAMES.has(t.name));
 
-    expect(tools).toHaveLength(1);
-    expect(tools[0]?.description).toBe('[Requires approval] send_message description');
+    expect(pluginTools).toHaveLength(1);
+    expect(pluginTools[0]?.description).toBe('[Requires approval] send_message description');
   });
 
   test('tools with permission auto have no description prefix', () => {
@@ -345,9 +348,10 @@ describe('getAllToolsList — all tools always listed', () => {
     state.pluginPermissions = { slack: { permission: 'auto' } };
 
     const tools = getAllToolsList(state);
+    const pluginTools = tools.filter(t => !PLATFORM_TOOL_NAMES.has(t.name));
 
-    expect(tools).toHaveLength(1);
-    expect(tools[0]?.description).toBe('send_message description');
+    expect(pluginTools).toHaveLength(1);
+    expect(pluginTools[0]?.description).toBe('send_message description');
   });
 
   test('browser tools get description prefixes based on their permission', () => {
@@ -379,8 +383,9 @@ describe('getAllToolsList — all tools always listed', () => {
     state.pluginPermissions = { browser: { permission: 'off' } };
 
     const tools = getAllToolsList(state);
-    expect(tools).toHaveLength(2);
-    for (const tool of tools) {
+    const browserTools = tools.filter(t => t.name.startsWith('browser_'));
+    expect(browserTools).toHaveLength(2);
+    for (const tool of browserTools) {
       expect(tool.description).toMatch(/^\[Disabled\] /);
     }
   });
@@ -407,7 +412,7 @@ describe('getAllToolsList — all tools always listed', () => {
     expect(byName.github_create_issue).toBe('[Disabled] create_issue description');
     expect(byName.github_list_prs).toBe('list_prs description');
     expect(byName.browser_list_tabs).toBe('List tabs');
-    expect(tools).toHaveLength(5);
+    expect(tools).toHaveLength(5 + PLATFORM_TOOL_NAMES.size);
   });
 
   test('skipPermissions=true makes all tools auto (no prefixes)', () => {
@@ -421,13 +426,13 @@ describe('getAllToolsList — all tools always listed', () => {
 
     const tools = getAllToolsList(state);
 
-    expect(tools).toHaveLength(2);
+    expect(tools).toHaveLength(2 + PLATFORM_TOOL_NAMES.size);
     for (const tool of tools) {
       expect(tool.description).not.toMatch(/^\[/);
     }
   });
 
-  test('empty plugins map returns only browser tools', () => {
+  test('empty plugins map returns only browser tools and platform tools', () => {
     const state = createState();
     state.browserTools = [
       createBrowserTool('browser_list_tabs', 'List tabs'),
@@ -441,7 +446,7 @@ describe('getAllToolsList — all tools always listed', () => {
 
     expect(names).toContain('browser_list_tabs');
     expect(names).toContain('browser_open_tab');
-    expect(tools).toHaveLength(2);
+    expect(tools).toHaveLength(2 + PLATFORM_TOOL_NAMES.size);
   });
 });
 
@@ -452,8 +457,9 @@ describe('getAllToolsList — tool entry shape', () => {
     state.pluginPermissions = { slack: { permission: 'auto' } };
 
     const tools = getAllToolsList(state);
+    const pluginTools = tools.filter(t => !PLATFORM_TOOL_NAMES.has(t.name));
 
-    expect(tools).toHaveLength(1);
+    expect(pluginTools).toHaveLength(1);
     expect(tools[0]).toMatchObject({
       name: 'slack_send_message',
       description: 'send_message description',
@@ -468,13 +474,15 @@ describe('getAllToolsList — tool entry shape', () => {
     state.pluginPermissions = { browser: { permission: 'auto' } };
 
     const tools = getAllToolsList(state);
+    const browserTools = tools.filter(t => t.name.startsWith('browser_'));
 
-    expect(tools).toHaveLength(1);
-    expect(tools[0]).toMatchObject({
+    expect(browserTools).toHaveLength(1);
+    const listTabsTool = tools.find(t => t.name === 'browser_list_tabs');
+    expect(listTabsTool).toMatchObject({
       name: 'browser_list_tabs',
       description: 'List all open tabs',
     });
-    expect(typeof tools[0]?.inputSchema).toBe('object');
+    expect(typeof listTabsTool?.inputSchema).toBe('object');
   });
 });
 
@@ -485,9 +493,10 @@ describe('getAllToolsList — tabId schema injection', () => {
     state.pluginPermissions = { slack: { permission: 'auto' } };
 
     const tools = getAllToolsList(state);
+    const slackTool = tools.find(t => t.name === 'slack_send_message');
 
-    expect(tools).toHaveLength(1);
-    const schema = tools[0]?.inputSchema as Record<string, unknown>;
+    expect(slackTool).toBeDefined();
+    const schema = slackTool?.inputSchema as Record<string, unknown>;
     const properties = schema.properties as Record<string, unknown>;
     expect(properties.tabId).toBeDefined();
     const tabIdDef = properties.tabId as { type: string; description: string };
@@ -571,9 +580,10 @@ describe('getAllToolsList — tabId schema injection', () => {
     state.pluginPermissions = { browser: { permission: 'auto' } };
 
     const tools = getAllToolsList(state);
+    const browserTool = tools.find(t => t.name === 'browser_list_tabs');
 
-    expect(tools).toHaveLength(1);
-    const schema = tools[0]?.inputSchema as Record<string, unknown>;
+    expect(browserTool).toBeDefined();
+    const schema = browserTool?.inputSchema as Record<string, unknown>;
     const properties = schema.properties as Record<string, unknown> | undefined;
     if (properties) {
       expect(properties.tabId).toBeUndefined();
@@ -586,9 +596,10 @@ describe('getAllToolsList — tabId schema injection', () => {
     state.pluginPermissions = { slack: { permission: 'auto' } };
 
     const tools = getAllToolsList(state);
+    const pluginTools = tools.filter(t => t.name.startsWith('slack_'));
 
-    expect(tools).toHaveLength(2);
-    for (const tool of tools) {
+    expect(pluginTools).toHaveLength(2);
+    for (const tool of pluginTools) {
       const properties = tool.inputSchema.properties as Record<string, unknown>;
       expect(properties.tabId).toBeDefined();
       const tabIdDef = properties.tabId as { type: string; description: string };
@@ -784,6 +795,44 @@ const getHandler = (handlers: Map<unknown, RequestHandler>, schema: unknown): Re
   if (!handler) throw new Error(`Handler not registered for schema`);
   return handler;
 };
+
+describe('getAllToolsList — platform tools', () => {
+  test('plugin_inspect is included in tools list', () => {
+    const state = createState();
+
+    const tools = getAllToolsList(state);
+    const inspectTool = tools.find(t => t.name === 'plugin_inspect');
+
+    expect(inspectTool).toBeDefined();
+    expect(inspectTool?.description).toContain('security review');
+    expect(inspectTool?.inputSchema).toHaveProperty('properties');
+  });
+
+  test('plugin_inspect has no permission prefix', () => {
+    const state = createState();
+    // Even with no permissions set, platform tools should have no prefix
+    state.pluginPermissions = {};
+
+    const tools = getAllToolsList(state);
+    const inspectTool = tools.find(t => t.name === 'plugin_inspect');
+
+    expect(inspectTool?.description).not.toMatch(/^\[/);
+  });
+
+  test('plugin_inspect does not have tabId injected', () => {
+    const state = createState();
+
+    const tools = getAllToolsList(state);
+    const inspectTool = tools.find(t => t.name === 'plugin_inspect');
+
+    const properties = inspectTool?.inputSchema.properties as Record<string, unknown> | undefined;
+    expect(properties?.tabId).toBeUndefined();
+  });
+
+  test('PLATFORM_TOOL_NAMES contains plugin_inspect', () => {
+    expect(PLATFORM_TOOL_NAMES.has('plugin_inspect')).toBe(true);
+  });
+});
 
 describe('registerMcpHandlers — generic dispatch error sanitization', () => {
   test('file paths in generic dispatch errors are sanitized to [PATH]', async () => {

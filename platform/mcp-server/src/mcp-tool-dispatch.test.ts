@@ -13,11 +13,13 @@ import {
   formatStructuredError,
   formatZodError,
   handleBrowserToolCall,
+  handlePluginInspect,
   handlePluginToolCall,
+  REVIEW_GUIDANCE,
   sanitizeOutput,
 } from './mcp-tool-dispatch.js';
-import type { CachedBrowserTool, ServerState, ToolLookupEntry } from './state.js';
-import { appendAuditEntry, getToolPermission } from './state.js';
+import type { CachedBrowserTool, RegisteredPlugin, ServerState, ToolLookupEntry } from './state.js';
+import { appendAuditEntry, generateReviewToken, getToolPermission } from './state.js';
 
 describe('sanitizeOutput', () => {
   describe('primitives passthrough', () => {
@@ -208,6 +210,7 @@ vi.mock('./extension-protocol.js', () => ({
 vi.mock('./state.js', () => ({
   getToolPermission: vi.fn(),
   appendAuditEntry: vi.fn(),
+  generateReviewToken: vi.fn().mockReturnValue('mock-review-token-uuid'),
 }));
 
 vi.mock('./config.js', () => ({
@@ -1439,5 +1442,138 @@ describe('handlePluginToolCall', () => {
     // The caller's args object must not be modified — tabId should still be present
     expect(originalArgs).toHaveProperty('tabId', 42);
     expect(originalArgs).toHaveProperty('channel', '#general');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// handlePluginInspect tests
+// ---------------------------------------------------------------------------
+
+/** Create a minimal RegisteredPlugin for testing */
+const createTestPlugin = (overrides: Partial<RegisteredPlugin> = {}): RegisteredPlugin => ({
+  name: 'test-plugin',
+  version: '1.2.3',
+  displayName: 'Test Plugin',
+  urlPatterns: ['https://test.example.com/*'],
+  iife: '(function(){\n  console.log("adapter");\n})()',
+  tools: [],
+  source: 'local' as const,
+  npmPackageName: 'opentabs-plugin-test',
+  ...overrides,
+});
+
+/** Create a mock state with a plugin registry */
+const createStateWithPlugins = (plugins: RegisteredPlugin[]): ServerState => {
+  const pluginMap = new Map(plugins.map(p => [p.name, p]));
+  return {
+    ...createMockState(),
+    registry: {
+      plugins: pluginMap,
+      toolLookup: new Map(),
+      failures: [],
+    },
+  } as unknown as ServerState;
+};
+
+describe('handlePluginInspect', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  test('returns source code, metadata, and review token for valid plugin', async () => {
+    const plugin = createTestPlugin();
+    const state = createStateWithPlugins([plugin]);
+
+    const result = await handlePluginInspect(state, { plugin: 'test-plugin' });
+
+    expect(result.isError).toBeUndefined();
+    const parsed = JSON.parse(result.content[0]?.text ?? '') as Record<string, unknown>;
+    expect(parsed.plugin).toBe('test-plugin');
+    expect(parsed.version).toBe('1.2.3');
+    expect(parsed.npmPackage).toBe('opentabs-plugin-test');
+    expect(parsed.adapterSource).toBe(plugin.iife);
+    expect(parsed.lineCount).toBe(3);
+    expect(parsed.byteSize).toBeGreaterThan(0);
+    expect(parsed.reviewToken).toBe('mock-review-token-uuid');
+    expect(parsed.reviewGuidance).toBe(REVIEW_GUIDANCE);
+  });
+
+  test('returns error for unknown plugin', async () => {
+    const state = createStateWithPlugins([createTestPlugin()]);
+
+    const result = await handlePluginInspect(state, { plugin: 'nonexistent' });
+
+    expect(result.isError).toBe(true);
+    expect(result.content[0]?.text).toContain('not found');
+    expect(result.content[0]?.text).toContain('test-plugin');
+  });
+
+  test('returns error for missing plugin name', async () => {
+    const state = createStateWithPlugins([]);
+
+    const result = await handlePluginInspect(state, {});
+
+    expect(result.isError).toBe(true);
+    expect(result.content[0]?.text).toContain('non-empty string');
+  });
+
+  test('returns error for empty plugin name', async () => {
+    const state = createStateWithPlugins([]);
+
+    const result = await handlePluginInspect(state, { plugin: '' });
+
+    expect(result.isError).toBe(true);
+    expect(result.content[0]?.text).toContain('non-empty string');
+  });
+
+  test('generates review token via generateReviewToken', async () => {
+    const plugin = createTestPlugin();
+    const state = createStateWithPlugins([plugin]);
+
+    await handlePluginInspect(state, { plugin: 'test-plugin' });
+
+    expect(generateReviewToken).toHaveBeenCalledWith(state, 'test-plugin', '1.2.3');
+  });
+
+  test('review guidance text is included', async () => {
+    const plugin = createTestPlugin();
+    const state = createStateWithPlugins([plugin]);
+
+    const result = await handlePluginInspect(state, { plugin: 'test-plugin' });
+
+    const parsed = JSON.parse(result.content[0]?.text ?? '') as Record<string, unknown>;
+    expect(typeof parsed.reviewGuidance).toBe('string');
+    expect(parsed.reviewGuidance as string).toContain('Data exfiltration');
+    expect(parsed.reviewGuidance as string).toContain('Code execution vectors');
+  });
+
+  test('returns error when plugin has empty IIFE', async () => {
+    const plugin = createTestPlugin({ iife: '' });
+    const state = createStateWithPlugins([plugin]);
+
+    const result = await handlePluginInspect(state, { plugin: 'test-plugin' });
+
+    expect(result.isError).toBe(true);
+    expect(result.content[0]?.text).toContain('no adapter IIFE');
+  });
+
+  test('omits npmPackage when not set', async () => {
+    const plugin = createTestPlugin({ npmPackageName: undefined });
+    const state = createStateWithPlugins([plugin]);
+
+    const result = await handlePluginInspect(state, { plugin: 'test-plugin' });
+
+    const parsed = JSON.parse(result.content[0]?.text ?? '') as Record<string, unknown>;
+    expect(parsed.npmPackage).toBeUndefined();
+  });
+
+  test('omits author when sourcePath is not set', async () => {
+    const plugin = createTestPlugin({ sourcePath: undefined });
+    const state = createStateWithPlugins([plugin]);
+
+    const result = await handlePluginInspect(state, { plugin: 'test-plugin' });
+
+    const parsed = JSON.parse(result.content[0]?.text ?? '') as Record<string, unknown>;
+    expect(parsed.author).toBeUndefined();
   });
 });
