@@ -393,6 +393,8 @@ You are an autonomous coding agent running in a git worktree. The safety net ver
     if [ "$unpushed" -gt 0 ]; then
       if git -C "$WORKTREE_DIR" push origin "$branch_name" --quiet 2>/dev/null; then
         wlog "Pushed $unpushed commit(s) to origin/$branch_name"
+      elif git -C "$WORKTREE_DIR" push origin "$branch_name" --force-with-lease --quiet 2>/dev/null; then
+        wlog "Force-pushed $unpushed commit(s) to origin/$branch_name (non-fast-forward resolved)"
       else
         wlog "WARNING: Failed to push commits (will retry next iteration)"
       fi
