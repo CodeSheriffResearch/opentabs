@@ -7,4 +7,13 @@ if git diff --cached --name-only | grep -qE '\.ralph/(prd\.json|progress\.txt)$'
   exit 1
 fi
 
+# Auto-stage dirty package-lock.json files whose sibling package.json is staged.
+# Prevents lockfile drift from npm install / build side effects.
+for pkg in $(git diff --cached --name-only | grep 'package\.json$'); do
+  lockfile="$(dirname "$pkg")/package-lock.json"
+  if [ -f "$lockfile" ] && git diff --name-only -- "$lockfile" | grep -q .; then
+    git add "$lockfile"
+  fi
+done
+
 npx lint-staged --allow-empty

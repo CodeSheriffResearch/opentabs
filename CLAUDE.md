@@ -317,6 +317,10 @@ git push
 
 If `git push` is rejected because the remote has new commits, `git pull` and then `git push` again.
 
+### Lockfile Auto-Staging
+
+The pre-commit hook auto-stages any dirty `package-lock.json` file whose sibling `package.json` is being committed. This prevents lockfile drift caused by `npm install` or build side effects. You do not need to manually `git add` lockfiles — the hook handles it.
+
 ### lint-staged Stash Hazard
 
 The pre-commit hook runs lint-staged, which stashes all unstaged working directory changes before linting and pops them after. If the stash pop fails (e.g., because the commit modified files that overlap with unstaged changes — common during version bumps or lock file updates), **unstaged edits to unrelated files are silently lost** in a dangling stash. The commit succeeds but the working directory reverts to the committed state.
