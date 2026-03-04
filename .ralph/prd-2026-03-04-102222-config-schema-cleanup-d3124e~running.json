@@ -69,7 +69,7 @@
         "npm run test passes"
       ],
       "priority": 3,
-      "passes": false,
+      "passes": true,
       "e2eCheckpoint": false,
       "model": "sonnet",
       "notes": "Mechanical rename.\n\nplatform/mcp-server/src/reload.ts:\n- Line 221: `{ ...config.plugins }` → `{ ...config.permissions }`\n- Line 241: `Object.keys(config.plugins).length` → `Object.keys(config.permissions).length`\n\nplatform/mcp-server/src/reload.test.ts:\n- All test config JSON that writes '\"plugins\": { ... }' → '\"permissions\": { ... }' (around lines 169-171, 176, 202, 225, 231)\n\nplatform/mcp-server/src/http-routes.test.ts:\n- Line 450: `expect(body).not.toHaveProperty('plugins')` — check context; if this asserts the HTTP response doesn't leak config, it may need updating to check 'permissions' instead, or both.\n\nstate.pluginPermissions stays unchanged — do NOT rename it."
