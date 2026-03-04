@@ -1,5 +1,5 @@
 import { graphql } from '../linear-api.js';
-import { defineTool } from '@opentabs-dev/plugin-sdk';
+import { ToolError, defineTool } from '@opentabs-dev/plugin-sdk';
 import { z } from 'zod';
 import { issueSchema, mapIssue } from './schemas.js';
 
@@ -68,6 +68,8 @@ export const createIssue = defineTool({
       }`,
       { input },
     );
+
+    if (!data.issueCreate?.issue) throw ToolError.internal('Issue creation failed — no issue returned');
 
     return { issue: mapIssue(data.issueCreate.issue as Parameters<typeof mapIssue>[0]) };
   },

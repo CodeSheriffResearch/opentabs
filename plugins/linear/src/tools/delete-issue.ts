@@ -1,5 +1,5 @@
 import { graphql } from '../linear-api.js';
-import { defineTool } from '@opentabs-dev/plugin-sdk';
+import { ToolError, defineTool } from '@opentabs-dev/plugin-sdk';
 import { z } from 'zod';
 
 export const deleteIssue = defineTool({
@@ -25,6 +25,8 @@ export const deleteIssue = defineTool({
       }`,
       { id: params.issue_id },
     );
+
+    if (!data.issueDelete) throw ToolError.internal('Issue deletion failed — no response');
 
     return { success: data.issueDelete.success };
   },

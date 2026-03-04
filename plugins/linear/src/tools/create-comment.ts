@@ -1,5 +1,5 @@
 import { graphql } from '../linear-api.js';
-import { defineTool } from '@opentabs-dev/plugin-sdk';
+import { ToolError, defineTool } from '@opentabs-dev/plugin-sdk';
 import { z } from 'zod';
 import { commentSchema, mapComment } from './schemas.js';
 
@@ -34,6 +34,8 @@ export const createComment = defineTool({
       }`,
       { input: { issueId: params.issue_id, body: params.body } },
     );
+
+    if (!data.commentCreate?.comment) throw ToolError.internal('Comment creation failed — no comment returned');
 
     return { comment: mapComment(data.commentCreate.comment as Parameters<typeof mapComment>[0]) };
   },

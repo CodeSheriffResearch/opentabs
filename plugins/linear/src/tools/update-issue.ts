@@ -1,5 +1,5 @@
 import { graphql } from '../linear-api.js';
-import { defineTool } from '@opentabs-dev/plugin-sdk';
+import { ToolError, defineTool } from '@opentabs-dev/plugin-sdk';
 import { z } from 'zod';
 import { issueSchema, mapIssue } from './schemas.js';
 
@@ -65,6 +65,8 @@ export const updateIssue = defineTool({
       }`,
       { id: params.issue_id, input },
     );
+
+    if (!data.issueUpdate?.issue) throw ToolError.internal('Issue update failed — no issue returned');
 
     return { issue: mapIssue(data.issueUpdate.issue as Parameters<typeof mapIssue>[0]) };
   },
