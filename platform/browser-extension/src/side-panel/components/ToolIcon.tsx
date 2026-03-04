@@ -33,8 +33,15 @@ const ToolIcon = ({ icon, className = '', enabled = true, active = false }: Tool
   return (
     <div
       className={cn(
-        'relative flex h-6 w-6 shrink-0 items-center justify-center rounded border-2 transition-colors',
-        enabled ? 'border-border bg-primary' : 'border-border/40 bg-muted/40',
+        'flex h-6 w-6 shrink-0 items-center justify-center rounded border-2 transition-colors',
+        enabled
+          ? [
+              'bg-primary',
+              active && 'animate-activity-border-flash',
+              fadingOut && !active && 'animate-activity-border-fade-out',
+              !active && !fadingOut && 'border-border',
+            ]
+          : 'border-border/40 bg-muted/40',
         className,
       )}>
       {icon ? (
@@ -47,16 +54,6 @@ const ToolIcon = ({ icon, className = '', enabled = true, active = false }: Tool
         </Suspense>
       ) : (
         <FallbackIcon enabled={enabled} />
-      )}
-      {(active || fadingOut) && (
-        <div
-          className={cn(
-            'absolute rounded-full border-2 border-card bg-success',
-            active && 'animate-activity-flash',
-            fadingOut && !active && 'animate-activity-fade-out',
-          )}
-          style={{ width: 8, height: 8, bottom: -4, right: -4 }}
-        />
       )}
     </div>
   );
