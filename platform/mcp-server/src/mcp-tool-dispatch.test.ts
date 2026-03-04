@@ -1,12 +1,6 @@
 import { beforeEach, describe, expect, test, vi } from 'vitest';
 import { z } from 'zod';
-import {
-  dispatchToExtension,
-  isDispatchError,
-  sendConfirmationRequest,
-  sendInvocationEnd,
-  sendInvocationStart,
-} from './extension-protocol.js';
+import { dispatchToExtension, isDispatchError, sendInvocationEnd, sendInvocationStart } from './extension-protocol.js';
 import type { RequestHandlerExtra } from './mcp-tool-dispatch.js';
 import {
   formatStructuredError,
@@ -14,9 +8,7 @@ import {
   handleBrowserToolCall,
   handlePluginToolCall,
   sanitizeOutput,
-  truncateParamsPreview,
 } from './mcp-tool-dispatch.js';
-import { evaluatePermission } from './permissions.js';
 import type { CachedBrowserTool, ServerState, ToolLookupEntry } from './state.js';
 import { appendAuditEntry, getToolPermission } from './state.js';
 
@@ -194,32 +186,6 @@ describe('formatZodError', () => {
   });
 });
 
-describe('truncateParamsPreview', () => {
-  test('short args passthrough without truncation', () => {
-    const args = { key: 'value' };
-    const json = JSON.stringify(args, null, 2);
-    expect(json.length).toBeLessThanOrEqual(200);
-    expect(truncateParamsPreview(args)).toBe(json);
-  });
-
-  test('truncates at 200 characters and appends ellipsis', () => {
-    const args = { data: 'x'.repeat(300) };
-    const result = truncateParamsPreview(args);
-    const json = JSON.stringify(args, null, 2);
-    expect(result).toBe(`${json.slice(0, 200)}…`);
-  });
-
-  test('does not truncate when json is exactly 200 chars', () => {
-    const prefix = '{\n  "data": "';
-    const suffix = '"\n}';
-    const valueLen = 200 - prefix.length - suffix.length;
-    const args = { data: 'x'.repeat(valueLen) };
-    const json = JSON.stringify(args, null, 2);
-    expect(json).toHaveLength(200);
-    expect(truncateParamsPreview(args)).toBe(json);
-  });
-});
-
 // ---------------------------------------------------------------------------
 // Mocks for handler tests (handleBrowserToolCall, handlePluginToolCall)
 // ---------------------------------------------------------------------------
@@ -229,11 +195,6 @@ vi.mock('./extension-protocol.js', () => ({
   isDispatchError: vi.fn(),
   sendInvocationStart: vi.fn(),
   sendInvocationEnd: vi.fn(),
-  sendConfirmationRequest: vi.fn(),
-}));
-
-vi.mock('./permissions.js', () => ({
-  evaluatePermission: vi.fn(),
 }));
 
 vi.mock('./state.js', () => ({
@@ -257,12 +218,6 @@ const createMockState = (overrides: Partial<ServerState> = {}): ServerState =>
     auditLog: [],
     skipPermissions: false,
     pluginPermissions: {},
-    permissions: {
-      trustedDomains: ['localhost'],
-      sensitiveDomains: [],
-      toolPolicy: {},
-      domainToolPolicy: {},
-    },
     pendingConfirmations: new Map(),
     ...overrides,
   }) as unknown as ServerState;
@@ -334,116 +289,8 @@ describe('handleBrowserToolCall', () => {
     expect(result.content[0]?.text).toContain('Invalid arguments');
   });
 
-  test('permission denied returns isError with PERMISSION_DENIED', async () => {
-    vi.mocked(getToolPermission).mockReturnValue('auto');
-    vi.mocked(evaluatePermission).mockReturnValue('deny');
-    const state = createMockState();
-    const bt = createMockBrowserTool({ schema: z.object({}) });
-    const extra = createMockExtra();
-
-    const result = await handleBrowserToolCall(state, 'browser_test_tool', {}, bt, extra);
-
-    expect(result.isError).toBe(true);
-    expect(result.content[0]?.text).toContain('PERMISSION_DENIED');
-  });
-
-  test('permission denied includes domain in message when domain is present', async () => {
-    vi.mocked(getToolPermission).mockReturnValue('auto');
-    vi.mocked(evaluatePermission).mockReturnValue('deny');
-    const state = createMockState();
-    const bt = createMockBrowserTool({ schema: z.object({ url: z.string().optional() }) });
-    const extra = createMockExtra();
-
-    const result = await handleBrowserToolCall(
-      state,
-      'browser_test_tool',
-      { url: 'https://example.com/page' },
-      bt,
-      extra,
-    );
-
-    expect(result.isError).toBe(true);
-    expect(result.content[0]?.text).toContain('example.com');
-  });
-
-  test('permission allow skips confirmation and executes handler', async () => {
-    vi.mocked(getToolPermission).mockReturnValue('auto');
-    vi.mocked(evaluatePermission).mockReturnValue('allow');
-    const handler = vi.fn().mockResolvedValue({ data: 'hello' });
-    const state = createMockState();
-    const bt = createMockBrowserTool({ schema: z.object({}), handler });
-    const extra = createMockExtra();
-
-    const result = await handleBrowserToolCall(state, 'browser_test_tool', {}, bt, extra);
-
-    expect(result.isError).toBeUndefined();
-    expect(result.content[0]?.text).toContain('"data"');
-    expect(result.content[0]?.text).toContain('"hello"');
-    expect(sendConfirmationRequest).not.toHaveBeenCalled();
-  });
-
-  test('permission ask with deny decision returns PERMISSION_DENIED', async () => {
-    vi.mocked(getToolPermission).mockReturnValue('auto');
-    vi.mocked(evaluatePermission).mockReturnValue('ask');
-    vi.mocked(sendConfirmationRequest).mockResolvedValue('deny');
-    const state = createMockState();
-    const bt = createMockBrowserTool({ schema: z.object({}) });
-    const extra = createMockExtra();
-
-    const result = await handleBrowserToolCall(state, 'browser_test_tool', {}, bt, extra);
-
-    expect(result.isError).toBe(true);
-    expect(result.content[0]?.text).toContain('PERMISSION_DENIED');
-    expect(result.content[0]?.text).toContain('user denied');
-  });
-
-  test('permission ask with allow decision executes handler', async () => {
-    vi.mocked(getToolPermission).mockReturnValue('auto');
-    vi.mocked(evaluatePermission).mockReturnValue('ask');
-    vi.mocked(sendConfirmationRequest).mockResolvedValue('allow');
-    const handler = vi.fn().mockResolvedValue({ dispatched: true });
-    const state = createMockState();
-    const bt = createMockBrowserTool({ schema: z.object({}), handler });
-    const extra = createMockExtra();
-
-    const result = await handleBrowserToolCall(state, 'browser_test_tool', {}, bt, extra);
-
-    expect(result.isError).toBeUndefined();
-    expect(handler).toHaveBeenCalled();
-  });
-
-  test('confirmation timeout returns CONFIRMATION_TIMEOUT', async () => {
-    vi.mocked(getToolPermission).mockReturnValue('auto');
-    vi.mocked(evaluatePermission).mockReturnValue('ask');
-    vi.mocked(sendConfirmationRequest).mockRejectedValue(new Error('CONFIRMATION_TIMEOUT'));
-    const state = createMockState();
-    const bt = createMockBrowserTool({ schema: z.object({}) });
-    const extra = createMockExtra();
-
-    const result = await handleBrowserToolCall(state, 'browser_test_tool', {}, bt, extra);
-
-    expect(result.isError).toBe(true);
-    expect(result.content[0]?.text).toContain('CONFIRMATION_TIMEOUT');
-  });
-
-  test('confirmation error returns confirmation error message', async () => {
-    vi.mocked(getToolPermission).mockReturnValue('auto');
-    vi.mocked(evaluatePermission).mockReturnValue('ask');
-    vi.mocked(sendConfirmationRequest).mockRejectedValue(new Error('Extension not connected'));
-    const state = createMockState();
-    const bt = createMockBrowserTool({ schema: z.object({}) });
-    const extra = createMockExtra();
-
-    const result = await handleBrowserToolCall(state, 'browser_test_tool', {}, bt, extra);
-
-    expect(result.isError).toBe(true);
-    expect(result.content[0]?.text).toContain('Confirmation error');
-    expect(result.content[0]?.text).toContain('Extension not connected');
-  });
-
   test('successful execution returns sanitized output (dangerous keys stripped)', async () => {
     vi.mocked(getToolPermission).mockReturnValue('auto');
-    vi.mocked(evaluatePermission).mockReturnValue('allow');
     const handler = vi.fn().mockResolvedValue({ safe: 'value', __proto__: 'bad' });
     const state = createMockState();
     const bt = createMockBrowserTool({ schema: z.object({}), handler });
@@ -459,7 +306,7 @@ describe('handleBrowserToolCall', () => {
 
   test('handler error returns "Browser tool error:" message', async () => {
     vi.mocked(getToolPermission).mockReturnValue('auto');
-    vi.mocked(evaluatePermission).mockReturnValue('allow');
+
     const handler = vi.fn().mockRejectedValue(new Error('tab crashed'));
     const state = createMockState();
     const bt = createMockBrowserTool({ schema: z.object({}), handler });
@@ -473,7 +320,7 @@ describe('handleBrowserToolCall', () => {
 
   test('audit entry recorded on success', async () => {
     vi.mocked(getToolPermission).mockReturnValue('auto');
-    vi.mocked(evaluatePermission).mockReturnValue('allow');
+
     const handler = vi.fn().mockResolvedValue({ ok: true });
     const state = createMockState();
     const bt = createMockBrowserTool({ schema: z.object({}), handler });
@@ -493,7 +340,7 @@ describe('handleBrowserToolCall', () => {
 
   test('audit entry recorded on failure with error info', async () => {
     vi.mocked(getToolPermission).mockReturnValue('auto');
-    vi.mocked(evaluatePermission).mockReturnValue('allow');
+
     const handler = vi.fn().mockRejectedValue(new Error('boom'));
     const state = createMockState();
     const bt = createMockBrowserTool({ schema: z.object({}), handler });
@@ -511,35 +358,9 @@ describe('handleBrowserToolCall', () => {
     });
   });
 
-  test('ask permission with progressToken sends progress notification', async () => {
-    vi.mocked(getToolPermission).mockReturnValue('auto');
-    vi.mocked(evaluatePermission).mockReturnValue('ask');
-    vi.mocked(sendConfirmationRequest).mockResolvedValue('allow');
-    const handler = vi.fn().mockResolvedValue({});
-    const state = createMockState();
-    const bt = createMockBrowserTool({ schema: z.object({}), handler });
-    const sendNotification = vi.fn().mockResolvedValue(undefined);
-    const extra = createMockExtra({
-      _meta: { progressToken: 'tok-1' },
-      sendNotification,
-    });
-
-    await handleBrowserToolCall(state, 'browser_test_tool', {}, bt, extra);
-
-    expect(sendNotification).toHaveBeenCalledWith(
-      expect.objectContaining({
-        method: 'notifications/progress',
-        params: expect.objectContaining({
-          progressToken: 'tok-1',
-          message: expect.stringContaining('approval') as string,
-        }) as Record<string, unknown>,
-      }),
-    );
-  });
-
   test('sendInvocationStart and sendInvocationEnd are called', async () => {
     vi.mocked(getToolPermission).mockReturnValue('auto');
-    vi.mocked(evaluatePermission).mockReturnValue('allow');
+
     const handler = vi.fn().mockResolvedValue({ ok: true });
     const state = createMockState();
     const bt = createMockBrowserTool({ schema: z.object({}), handler });
@@ -559,7 +380,7 @@ describe('handleBrowserToolCall', () => {
 
   test('sendInvocationEnd reports success=false on error', async () => {
     vi.mocked(getToolPermission).mockReturnValue('auto');
-    vi.mocked(evaluatePermission).mockReturnValue('allow');
+
     const handler = vi.fn().mockRejectedValue(new Error('tool failed'));
     const state = createMockState();
     const bt = createMockBrowserTool({ schema: z.object({}), handler });

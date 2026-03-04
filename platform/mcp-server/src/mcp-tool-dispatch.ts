@@ -8,24 +8,14 @@
 
 import { toErrorMessage } from '@opentabs-dev/shared';
 import type { ZodError } from 'zod';
-import {
-  dispatchToExtension,
-  isDispatchError,
-  sendConfirmationRequest,
-  sendInvocationEnd,
-  sendInvocationStart,
-} from './extension-protocol.js';
+import { dispatchToExtension, isDispatchError, sendInvocationEnd, sendInvocationStart } from './extension-protocol.js';
 import { log } from './logger.js';
-import { evaluatePermission } from './permissions.js';
 import { sanitizeErrorMessage } from './sanitize-error.js';
 import type { AuditEntry, CachedBrowserTool, ServerState, ToolLookupEntry } from './state.js';
 import { appendAuditEntry, getToolPermission } from './state.js';
 
 /** Maximum concurrent tool dispatches per plugin to prevent tab performance degradation */
 const MAX_CONCURRENT_DISPATCHES_PER_PLUGIN = 5;
-
-/** Short timeout for domain resolution — fail fast if the tab is unresponsive */
-const DOMAIN_RESOLVE_TIMEOUT_MS = 5_000;
 
 /** Keys that could trigger prototype pollution in JSON deserialization */
 const DANGEROUS_KEYS = new Set(['__proto__', 'constructor', 'prototype']);
@@ -43,64 +33,6 @@ const sanitizeOutput = (obj: unknown, depth = 0): unknown => {
     if (!DANGEROUS_KEYS.has(key)) result[key] = sanitizeOutput(value, depth + 1);
   }
   return result;
-};
-
-/**
- * Extract the target domain hostname for a browser tool call.
- *
- * - Tools with a `url` param (get_cookies, set_cookie, delete_cookies, open_tab):
- *   parse the hostname from the URL
- * - Tools with a `tabId` param: dispatch browser.getTabInfo to get the tab's URL,
- *   then parse the hostname
- * - Tools with neither: return null (observe-tier tools, extension diagnostics)
- */
-const resolveToolDomain = async (
-  _toolName: string,
-  args: Record<string, unknown>,
-  state: ServerState,
-): Promise<string | null> => {
-  // URL-based tools: parse domain from the url parameter
-  const urlArg = args.url;
-  if (typeof urlArg === 'string' && urlArg !== '') {
-    try {
-      return new URL(urlArg).hostname;
-    } catch {
-      return null;
-    }
-  }
-
-  // Tab-based tools: get the tab's URL via a lightweight dispatch
-  const tabIdArg = args.tabId;
-  if (typeof tabIdArg === 'number') {
-    try {
-      const tabInfo = (await dispatchToExtension(
-        state,
-        'browser.getTabInfo',
-        { tabId: tabIdArg },
-        { timeoutMs: DOMAIN_RESOLVE_TIMEOUT_MS },
-      )) as {
-        url?: string;
-      };
-      if (typeof tabInfo.url === 'string' && tabInfo.url !== '') {
-        return new URL(tabInfo.url).hostname;
-      }
-    } catch {
-      // Tab may be closed or unreachable — domain resolution is best-effort
-    }
-    return null;
-  }
-
-  return null;
-};
-
-/**
- * Truncate tool parameters into a short preview for the confirmation dialog.
- * Shows the first ~200 characters of the JSON-stringified args.
- */
-const truncateParamsPreview = (args: Record<string, unknown>): string => {
-  const json = JSON.stringify(args, null, 2);
-  if (json.length <= 200) return json;
-  return `${json.slice(0, 200)}…`;
 };
 
 /**
@@ -169,7 +101,7 @@ const handleBrowserToolCall = async (
   toolName: string,
   args: Record<string, unknown>,
   cachedBt: CachedBrowserTool,
-  extra: RequestHandlerExtra,
+  _extra: RequestHandlerExtra,
 ): Promise<ToolCallResult> => {
   if (getToolPermission(state, 'browser', toolName) === 'off') {
     return {
@@ -185,88 +117,6 @@ const handleBrowserToolCall = async (
       content: [{ type: 'text' as const, text: formatZodError(parseResult.error) }],
       isError: true,
     };
-  }
-
-  // Permission evaluation: resolve domain, check session permissions,
-  // evaluate against policy, and hold for confirmation if needed.
-  const parsedArgs = parseResult.data;
-  const domain = await resolveToolDomain(toolName, parsedArgs, state);
-
-  // Evaluate browser tool permission via the legacy permission engine
-  const permission = evaluatePermission(toolName, domain, state);
-
-  if (permission === 'deny') {
-    return {
-      content: [
-        {
-          type: 'text' as const,
-          text: `PERMISSION_DENIED: Tool "${toolName}" is denied${domain ? ` for domain "${domain}"` : ''} by permission policy. Ask the user to update their OpenTabs permission configuration if this tool is needed.`,
-        },
-      ],
-      isError: true,
-    };
-  }
-
-  if (permission === 'ask') {
-    // Send progress notification to MCP client (if progressToken is available)
-    const progressToken = extra._meta?.progressToken;
-    if (progressToken !== undefined) {
-      extra
-        .sendNotification({
-          method: 'notifications/progress',
-          params: {
-            progressToken,
-            progress: 0,
-            total: 1,
-            message: 'Waiting for human approval in the OpenTabs side panel...',
-          },
-        })
-        .catch(() => {
-          // Fire-and-forget
-        });
-    }
-
-    try {
-      const paramsPreview = truncateParamsPreview(parsedArgs);
-      const tabIdArg = parsedArgs.tabId;
-      const decision = await sendConfirmationRequest(
-        state,
-        toolName,
-        domain,
-        typeof tabIdArg === 'number' ? tabIdArg : undefined,
-        paramsPreview,
-      );
-
-      if (decision === 'deny') {
-        return {
-          content: [
-            {
-              type: 'text' as const,
-              text: `PERMISSION_DENIED: The user denied "${toolName}"${domain ? ` on "${domain}"` : ''}. Inform the user that the operation was blocked by their decision.`,
-            },
-          ],
-          isError: true,
-        };
-      }
-      // decision is 'allow' — proceed with dispatch
-    } catch (err) {
-      const msg = toErrorMessage(err);
-      if (msg === 'CONFIRMATION_TIMEOUT') {
-        return {
-          content: [
-            {
-              type: 'text' as const,
-              text: `CONFIRMATION_TIMEOUT: Human approval for "${toolName}"${domain ? ` on "${domain}"` : ''} timed out after 30 seconds. The user did not respond in the OpenTabs side panel. Ask the user to try again.`,
-            },
-          ],
-          isError: true,
-        };
-      }
-      return {
-        content: [{ type: 'text' as const, text: `Confirmation error: ${msg}` }],
-        isError: true,
-      };
-    }
   }
 
   // Send invocation start notification to extension (for side panel activity indicator)
@@ -493,11 +343,4 @@ const handlePluginToolCall = async (
 };
 
 export type { ToolCallResult, RequestHandlerExtra };
-export {
-  sanitizeOutput,
-  formatStructuredError,
-  formatZodError,
-  truncateParamsPreview,
-  handleBrowserToolCall,
-  handlePluginToolCall,
-};
+export { sanitizeOutput, formatStructuredError, formatZodError, handleBrowserToolCall, handlePluginToolCall };
