@@ -82,7 +82,7 @@ describe('create-opentabs-plugin CLI', () => {
 
       const indexContent = await readFile(join(tmpDir, 'my-plugin', 'src', 'index.ts'), 'utf-8');
       expect(indexContent).toContain('class MyPluginPlugin');
-      expect(indexContent).toContain("'*://example.com/*'");
+      expect(indexContent).toContain("'*://*.example.com/*'");
       expect(indexContent).toContain('export default new MyPluginPlugin()');
     });
 
@@ -186,12 +186,19 @@ describe('create-opentabs-plugin CLI', () => {
       expect(indexContent).toContain('*://*.example.com/*');
     });
 
-    test("domain 'example.com' produces exact URL pattern '*://example.com/*'", async () => {
+    test("domain 'example.com' produces wildcard URL pattern '*://*.example.com/*'", async () => {
       runCli(['exact-test', '--domain', 'example.com'], { cwd: tmpDir, configDir });
 
       const indexContent = await readFile(join(tmpDir, 'exact-test', 'src', 'index.ts'), 'utf-8');
-      expect(indexContent).toContain('*://example.com/*');
-      expect(indexContent).not.toContain('*://*.example.com/*');
+      expect(indexContent).toContain('*://*.example.com/*');
+    });
+
+    test("domain 'localhost' produces URL pattern '*://localhost/*' (no wildcard)", async () => {
+      runCli(['local-test', '--domain', 'localhost'], { cwd: tmpDir, configDir });
+
+      const indexContent = await readFile(join(tmpDir, 'local-test', 'src', 'index.ts'), 'utf-8');
+      expect(indexContent).toContain('*://localhost/*');
+      expect(indexContent).not.toContain('*://*.localhost/*');
     });
   });
 
@@ -324,7 +331,7 @@ describe('create-opentabs-plugin CLI', () => {
       expect(pkgJson.main).toBe('dist/adapter.iife.js');
       const opentabs = pkgJson.opentabs as { urlPatterns: string[] };
       expect(Array.isArray(opentabs.urlPatterns)).toBe(true);
-      expect(opentabs.urlPatterns).toContain('*://example.com/*');
+      expect(opentabs.urlPatterns).toContain('*://*.example.com/*');
 
       // Verify dist/adapter.iife.js exists and is non-empty
       const adapterPath = join(projectDir, 'dist', 'adapter.iife.js');

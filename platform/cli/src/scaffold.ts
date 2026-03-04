@@ -586,7 +586,7 @@ const scaffoldPlugin = async (args: ScaffoldArgs): Promise<string> => {
     throw new ScaffoldError(nameError);
   }
 
-  const urlPattern = args.domain.startsWith('.') ? `*://*${args.domain}/*` : `*://${args.domain}/*`;
+  const urlPattern = args.domain.includes('.') ? `*://*.${args.domain.replace(/^\./, '')}/*` : `*://${args.domain}/*`;
   const patternError = validateUrlPattern(urlPattern);
   if (patternError) {
     throw new ScaffoldError(patternError);

@@ -86,11 +86,11 @@ describe('scaffoldPlugin', () => {
     expect(existsSync(join(projectDir, '.gitignore'))).toBe(true);
   });
 
-  test("domain 'slack.com' produces URL pattern '*://slack.com/*'", async () => {
+  test("domain 'slack.com' produces URL pattern '*://*.slack.com/*'", async () => {
     await scaffoldPlugin({ name: 'slack', domain: 'slack.com' });
 
     const indexContent = await readFile(join(tmpDir, 'slack', 'src', 'index.ts'), 'utf-8');
-    expect(indexContent).toContain('*://slack.com/*');
+    expect(indexContent).toContain('*://*.slack.com/*');
   });
 
   test("domain '.slack.com' produces URL pattern '*://*.slack.com/*'", async () => {
@@ -98,6 +98,13 @@ describe('scaffoldPlugin', () => {
 
     const indexContent = await readFile(join(tmpDir, 'wildcard', 'src', 'index.ts'), 'utf-8');
     expect(indexContent).toContain('*://*.slack.com/*');
+  });
+
+  test("domain 'localhost' produces URL pattern '*://localhost/*' (no wildcard)", async () => {
+    await scaffoldPlugin({ name: 'local', domain: 'localhost' });
+
+    const indexContent = await readFile(join(tmpDir, 'local', 'src', 'index.ts'), 'utf-8');
+    expect(indexContent).toContain('*://localhost/*');
   });
 
   test('invalid name throws ScaffoldError', async () => {
