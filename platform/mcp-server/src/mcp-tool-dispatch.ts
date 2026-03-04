@@ -7,10 +7,11 @@
  */
 
 import { readFile } from 'node:fs/promises';
-import type { PluginPermissionConfig } from '@opentabs-dev/shared';
+import type { PluginPermissionConfig, ToolPermission } from '@opentabs-dev/shared';
 import { toErrorMessage } from '@opentabs-dev/shared';
 import type { ZodError } from 'zod';
 import { savePluginPermissions } from './config.js';
+import { buildConfigStatePayload, sendToExtension } from './extension-handlers.js';
 import {
   dispatchToExtension,
   isDispatchError,
@@ -21,7 +22,13 @@ import {
 import { log } from './logger.js';
 import { sanitizeErrorMessage } from './sanitize-error.js';
 import type { AuditEntry, CachedBrowserTool, ServerState, ToolLookupEntry } from './state.js';
-import { appendAuditEntry, generateReviewToken, getToolPermission } from './state.js';
+import {
+  appendAuditEntry,
+  consumeReviewToken,
+  generateReviewToken,
+  getToolPermission,
+  validateReviewToken,
+} from './state.js';
 
 /** Maximum concurrent tool dispatches per plugin to prevent tab performance degradation */
 const MAX_CONCURRENT_DISPATCHES_PER_PLUGIN = 5;
@@ -594,6 +601,120 @@ const handlePluginInspect = async (state: ServerState, args: Record<string, unkn
   };
 };
 
+/** Valid permission values for plugin_mark_reviewed (excludes 'off') */
+const VALID_REVIEW_PERMISSIONS = new Set<string>(['ask', 'auto']);
+
+/**
+ * Handle the plugin_mark_reviewed platform tool.
+ * Validates the review token, consumes it, updates plugin permission and reviewedVersion,
+ * persists to config, and notifies both MCP clients and the extension.
+ */
+const handlePluginMarkReviewed = async (
+  state: ServerState,
+  args: Record<string, unknown>,
+  callbacks: DispatchCallbacks,
+): Promise<ToolCallResult> => {
+  const pluginName = args.plugin;
+  const version = args.version;
+  const reviewToken = args.reviewToken;
+  const permission = args.permission;
+
+  if (typeof pluginName !== 'string' || pluginName.length === 0) {
+    return {
+      content: [{ type: 'text' as const, text: 'Invalid arguments: "plugin" must be a non-empty string.' }],
+      isError: true,
+    };
+  }
+
+  if (typeof version !== 'string' || version.length === 0) {
+    return {
+      content: [{ type: 'text' as const, text: 'Invalid arguments: "version" must be a non-empty string.' }],
+      isError: true,
+    };
+  }
+
+  if (typeof reviewToken !== 'string' || reviewToken.length === 0) {
+    return {
+      content: [{ type: 'text' as const, text: 'Invalid arguments: "reviewToken" must be a non-empty string.' }],
+      isError: true,
+    };
+  }
+
+  if (typeof permission !== 'string' || !VALID_REVIEW_PERMISSIONS.has(permission)) {
+    return {
+      content: [
+        {
+          type: 'text' as const,
+          text: 'Invalid arguments: "permission" must be "ask" or "auto". Setting permission to "off" after review is not supported.',
+        },
+      ],
+      isError: true,
+    };
+  }
+
+  // Verify the plugin exists
+  const plugin = state.registry.plugins.get(pluginName);
+  if (!plugin) {
+    const available = [...state.registry.plugins.keys()].join(', ') || '(none)';
+    return {
+      content: [
+        {
+          type: 'text' as const,
+          text: `Plugin "${pluginName}" not found. Available plugins: ${available}`,
+        },
+      ],
+      isError: true,
+    };
+  }
+
+  // Validate the review token
+  if (!validateReviewToken(state, reviewToken, pluginName, version)) {
+    return {
+      content: [
+        {
+          type: 'text' as const,
+          text: 'Invalid or expired review token. You must call plugin_inspect first to get a valid review token for this plugin and version.',
+        },
+      ],
+      isError: true,
+    };
+  }
+
+  // Consume the token so it cannot be reused
+  consumeReviewToken(state, reviewToken);
+
+  // Update plugin permission and reviewedVersion
+  const existing = state.pluginPermissions[pluginName] ?? {};
+  const updatedConfig: PluginPermissionConfig = {
+    ...existing,
+    permission: permission as ToolPermission,
+    reviewedVersion: version,
+  };
+  state.pluginPermissions[pluginName] = updatedConfig;
+
+  // Persist to config.json
+  void savePluginPermissions(state, state.pluginPermissions);
+
+  // Notify MCP clients that tool list changed (description prefixes update)
+  callbacks.onToolConfigChanged();
+
+  // Notify the extension so the side panel refreshes
+  sendToExtension(state, {
+    jsonrpc: '2.0',
+    method: 'plugins.changed',
+    params: { ...buildConfigStatePayload(state) },
+  });
+
+  return {
+    content: [
+      {
+        type: 'text' as const,
+        text: `Plugin "${pluginName}" v${version} has been reviewed and permission set to "${permission}".\n\nNote: This tool should only be called after the user has explicitly confirmed they want to enable the plugin following your code review.`,
+      },
+    ],
+  };
+};
+
 export type { ToolCallResult, RequestHandlerExtra, DispatchCallbacks };
 export {
   sanitizeOutput,
@@ -602,5 +723,6 @@ export {
   handleBrowserToolCall,
   handlePluginToolCall,
   handlePluginInspect,
+  handlePluginMarkReviewed,
   REVIEW_GUIDANCE,
 };

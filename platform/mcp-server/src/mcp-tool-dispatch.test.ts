@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, test, vi } from 'vitest';
 import { z } from 'zod';
 import { savePluginPermissions } from './config.js';
+import { buildConfigStatePayload, sendToExtension } from './extension-handlers.js';
 import {
   dispatchToExtension,
   isDispatchError,
@@ -14,12 +15,19 @@ import {
   formatZodError,
   handleBrowserToolCall,
   handlePluginInspect,
+  handlePluginMarkReviewed,
   handlePluginToolCall,
   REVIEW_GUIDANCE,
   sanitizeOutput,
 } from './mcp-tool-dispatch.js';
 import type { CachedBrowserTool, RegisteredPlugin, ServerState, ToolLookupEntry } from './state.js';
-import { appendAuditEntry, generateReviewToken, getToolPermission } from './state.js';
+import {
+  appendAuditEntry,
+  consumeReviewToken,
+  generateReviewToken,
+  getToolPermission,
+  validateReviewToken,
+} from './state.js';
 
 describe('sanitizeOutput', () => {
   describe('primitives passthrough', () => {
@@ -199,6 +207,13 @@ describe('formatZodError', () => {
 // Mocks for handler tests (handleBrowserToolCall, handlePluginToolCall)
 // ---------------------------------------------------------------------------
 
+vi.mock('./extension-handlers.js', () => ({
+  sendToExtension: vi.fn(),
+  buildConfigStatePayload: vi
+    .fn()
+    .mockReturnValue({ plugins: [], failedPlugins: [], browserTools: [], serverVersion: '0.0.0' }),
+}));
+
 vi.mock('./extension-protocol.js', () => ({
   dispatchToExtension: vi.fn(),
   isDispatchError: vi.fn(),
@@ -211,6 +226,8 @@ vi.mock('./state.js', () => ({
   getToolPermission: vi.fn(),
   appendAuditEntry: vi.fn(),
   generateReviewToken: vi.fn().mockReturnValue('mock-review-token-uuid'),
+  validateReviewToken: vi.fn().mockReturnValue(true),
+  consumeReviewToken: vi.fn(),
 }));
 
 vi.mock('./config.js', () => ({
@@ -1575,5 +1592,304 @@ describe('handlePluginInspect', () => {
 
     const parsed = JSON.parse(result.content[0]?.text ?? '') as Record<string, unknown>;
     expect(parsed.author).toBeUndefined();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// handlePluginMarkReviewed tests
+// ---------------------------------------------------------------------------
+
+describe('handlePluginMarkReviewed', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.mocked(validateReviewToken).mockReturnValue(true);
+  });
+
+  test('succeeds with valid token and sets permission and reviewedVersion', async () => {
+    const plugin = createTestPlugin();
+    const state = createStateWithPlugins([plugin]);
+    state.pluginPermissions = {};
+    const callbacks = createMockCallbacks();
+
+    const result = await handlePluginMarkReviewed(
+      state,
+      { plugin: 'test-plugin', version: '1.2.3', reviewToken: 'valid-token', permission: 'auto' },
+      callbacks,
+    );
+
+    expect(result.isError).toBeUndefined();
+    expect(result.content[0]?.text).toContain('test-plugin');
+    expect(result.content[0]?.text).toContain('v1.2.3');
+    expect(result.content[0]?.text).toContain('reviewed');
+    expect(result.content[0]?.text).toContain('"auto"');
+    expect(result.content[0]?.text).toContain(
+      'Note: This tool should only be called after the user has explicitly confirmed',
+    );
+
+    // Verify permission and reviewedVersion were set
+    expect(state.pluginPermissions['test-plugin']?.permission).toBe('auto');
+    expect(state.pluginPermissions['test-plugin']?.reviewedVersion).toBe('1.2.3');
+  });
+
+  test('consumes the review token', async () => {
+    const plugin = createTestPlugin();
+    const state = createStateWithPlugins([plugin]);
+    state.pluginPermissions = {};
+    const callbacks = createMockCallbacks();
+
+    await handlePluginMarkReviewed(
+      state,
+      { plugin: 'test-plugin', version: '1.2.3', reviewToken: 'valid-token', permission: 'ask' },
+      callbacks,
+    );
+
+    expect(consumeReviewToken).toHaveBeenCalledWith(state, 'valid-token');
+  });
+
+  test('persists permissions to config', async () => {
+    const plugin = createTestPlugin();
+    const state = createStateWithPlugins([plugin]);
+    state.pluginPermissions = {};
+    const callbacks = createMockCallbacks();
+
+    await handlePluginMarkReviewed(
+      state,
+      { plugin: 'test-plugin', version: '1.2.3', reviewToken: 'valid-token', permission: 'auto' },
+      callbacks,
+    );
+
+    expect(savePluginPermissions).toHaveBeenCalledWith(state, state.pluginPermissions);
+  });
+
+  test('calls onToolConfigChanged to emit tools/list_changed', async () => {
+    const plugin = createTestPlugin();
+    const state = createStateWithPlugins([plugin]);
+    state.pluginPermissions = {};
+    const callbacks = createMockCallbacks();
+
+    await handlePluginMarkReviewed(
+      state,
+      { plugin: 'test-plugin', version: '1.2.3', reviewToken: 'valid-token', permission: 'auto' },
+      callbacks,
+    );
+
+    expect(callbacks.onToolConfigChanged).toHaveBeenCalled();
+  });
+
+  test('sends plugins.changed notification to extension', async () => {
+    const plugin = createTestPlugin();
+    const state = createStateWithPlugins([plugin]);
+    state.pluginPermissions = {};
+    const callbacks = createMockCallbacks();
+
+    await handlePluginMarkReviewed(
+      state,
+      { plugin: 'test-plugin', version: '1.2.3', reviewToken: 'valid-token', permission: 'auto' },
+      callbacks,
+    );
+
+    expect(sendToExtension).toHaveBeenCalledWith(
+      state,
+      expect.objectContaining({ method: 'plugins.changed' }) as Record<string, unknown>,
+    );
+    expect(buildConfigStatePayload).toHaveBeenCalledWith(state);
+  });
+
+  test('fails with invalid review token', async () => {
+    vi.mocked(validateReviewToken).mockReturnValue(false);
+    const plugin = createTestPlugin();
+    const state = createStateWithPlugins([plugin]);
+    state.pluginPermissions = {};
+    const callbacks = createMockCallbacks();
+
+    const result = await handlePluginMarkReviewed(
+      state,
+      { plugin: 'test-plugin', version: '1.2.3', reviewToken: 'bad-token', permission: 'auto' },
+      callbacks,
+    );
+
+    expect(result.isError).toBe(true);
+    expect(result.content[0]?.text).toContain('Invalid or expired review token');
+    expect(result.content[0]?.text).toContain('plugin_inspect');
+    expect(consumeReviewToken).not.toHaveBeenCalled();
+  });
+
+  test('fails with expired token', async () => {
+    vi.mocked(validateReviewToken).mockReturnValue(false);
+    const plugin = createTestPlugin();
+    const state = createStateWithPlugins([plugin]);
+    state.pluginPermissions = {};
+    const callbacks = createMockCallbacks();
+
+    const result = await handlePluginMarkReviewed(
+      state,
+      { plugin: 'test-plugin', version: '1.2.3', reviewToken: 'expired-token', permission: 'auto' },
+      callbacks,
+    );
+
+    expect(result.isError).toBe(true);
+    expect(result.content[0]?.text).toContain('Invalid or expired review token');
+  });
+
+  test('fails with used token', async () => {
+    vi.mocked(validateReviewToken).mockReturnValue(false);
+    const plugin = createTestPlugin();
+    const state = createStateWithPlugins([plugin]);
+    state.pluginPermissions = {};
+    const callbacks = createMockCallbacks();
+
+    const result = await handlePluginMarkReviewed(
+      state,
+      { plugin: 'test-plugin', version: '1.2.3', reviewToken: 'used-token', permission: 'auto' },
+      callbacks,
+    );
+
+    expect(result.isError).toBe(true);
+    expect(result.content[0]?.text).toContain('Invalid or expired review token');
+  });
+
+  test('fails with wrong plugin', async () => {
+    vi.mocked(validateReviewToken).mockReturnValue(false);
+    const plugin = createTestPlugin();
+    const state = createStateWithPlugins([plugin]);
+    state.pluginPermissions = {};
+    const callbacks = createMockCallbacks();
+
+    const result = await handlePluginMarkReviewed(
+      state,
+      { plugin: 'test-plugin', version: '1.2.3', reviewToken: 'wrong-plugin-token', permission: 'auto' },
+      callbacks,
+    );
+
+    expect(result.isError).toBe(true);
+    expect(result.content[0]?.text).toContain('Invalid or expired review token');
+  });
+
+  test('fails with wrong version', async () => {
+    vi.mocked(validateReviewToken).mockReturnValue(false);
+    const plugin = createTestPlugin();
+    const state = createStateWithPlugins([plugin]);
+    state.pluginPermissions = {};
+    const callbacks = createMockCallbacks();
+
+    const result = await handlePluginMarkReviewed(
+      state,
+      { plugin: 'test-plugin', version: '9.9.9', reviewToken: 'wrong-version-token', permission: 'auto' },
+      callbacks,
+    );
+
+    expect(result.isError).toBe(true);
+    expect(result.content[0]?.text).toContain('Invalid or expired review token');
+  });
+
+  test('fails for unknown plugin', async () => {
+    const state = createStateWithPlugins([createTestPlugin()]);
+    state.pluginPermissions = {};
+    const callbacks = createMockCallbacks();
+
+    const result = await handlePluginMarkReviewed(
+      state,
+      { plugin: 'nonexistent', version: '1.0.0', reviewToken: 'token', permission: 'auto' },
+      callbacks,
+    );
+
+    expect(result.isError).toBe(true);
+    expect(result.content[0]?.text).toContain('not found');
+    expect(result.content[0]?.text).toContain('test-plugin');
+  });
+
+  test('fails with permission "off"', async () => {
+    const plugin = createTestPlugin();
+    const state = createStateWithPlugins([plugin]);
+    state.pluginPermissions = {};
+    const callbacks = createMockCallbacks();
+
+    const result = await handlePluginMarkReviewed(
+      state,
+      { plugin: 'test-plugin', version: '1.2.3', reviewToken: 'valid-token', permission: 'off' },
+      callbacks,
+    );
+
+    expect(result.isError).toBe(true);
+    expect(result.content[0]?.text).toContain('"ask" or "auto"');
+  });
+
+  test('fails with missing plugin name', async () => {
+    const state = createStateWithPlugins([]);
+    const callbacks = createMockCallbacks();
+
+    const result = await handlePluginMarkReviewed(
+      state,
+      { version: '1.0.0', reviewToken: 'token', permission: 'auto' },
+      callbacks,
+    );
+
+    expect(result.isError).toBe(true);
+    expect(result.content[0]?.text).toContain('"plugin" must be a non-empty string');
+  });
+
+  test('fails with missing version', async () => {
+    const state = createStateWithPlugins([]);
+    const callbacks = createMockCallbacks();
+
+    const result = await handlePluginMarkReviewed(
+      state,
+      { plugin: 'test-plugin', reviewToken: 'token', permission: 'auto' },
+      callbacks,
+    );
+
+    expect(result.isError).toBe(true);
+    expect(result.content[0]?.text).toContain('"version" must be a non-empty string');
+  });
+
+  test('fails with missing reviewToken', async () => {
+    const state = createStateWithPlugins([]);
+    const callbacks = createMockCallbacks();
+
+    const result = await handlePluginMarkReviewed(
+      state,
+      { plugin: 'test-plugin', version: '1.0.0', permission: 'auto' },
+      callbacks,
+    );
+
+    expect(result.isError).toBe(true);
+    expect(result.content[0]?.text).toContain('"reviewToken" must be a non-empty string');
+  });
+
+  test('sets permission to "ask" when requested', async () => {
+    const plugin = createTestPlugin();
+    const state = createStateWithPlugins([plugin]);
+    state.pluginPermissions = {};
+    const callbacks = createMockCallbacks();
+
+    const result = await handlePluginMarkReviewed(
+      state,
+      { plugin: 'test-plugin', version: '1.2.3', reviewToken: 'valid-token', permission: 'ask' },
+      callbacks,
+    );
+
+    expect(result.isError).toBeUndefined();
+    expect(state.pluginPermissions['test-plugin']?.permission).toBe('ask');
+    expect(state.pluginPermissions['test-plugin']?.reviewedVersion).toBe('1.2.3');
+    expect(result.content[0]?.text).toContain('"ask"');
+  });
+
+  test('preserves existing per-tool permission overrides', async () => {
+    const plugin = createTestPlugin();
+    const state = createStateWithPlugins([plugin]);
+    state.pluginPermissions = {
+      'test-plugin': { permission: 'off', tools: { some_tool: 'auto' } },
+    };
+    const callbacks = createMockCallbacks();
+
+    await handlePluginMarkReviewed(
+      state,
+      { plugin: 'test-plugin', version: '1.2.3', reviewToken: 'valid-token', permission: 'auto' },
+      callbacks,
+    );
+
+    expect(state.pluginPermissions['test-plugin']?.tools?.some_tool).toBe('auto');
+    expect(state.pluginPermissions['test-plugin']?.permission).toBe('auto');
+    expect(state.pluginPermissions['test-plugin']?.reviewedVersion).toBe('1.2.3');
   });
 });

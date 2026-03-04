@@ -25,7 +25,12 @@ import { CallToolRequestSchema, ListToolsRequestSchema } from '@modelcontextprot
 import { z } from 'zod';
 import { log } from './logger.js';
 import type { DispatchCallbacks, RequestHandlerExtra } from './mcp-tool-dispatch.js';
-import { handleBrowserToolCall, handlePluginInspect, handlePluginToolCall } from './mcp-tool-dispatch.js';
+import {
+  handleBrowserToolCall,
+  handlePluginInspect,
+  handlePluginMarkReviewed,
+  handlePluginToolCall,
+} from './mcp-tool-dispatch.js';
 import type { CachedBrowserTool, ServerState, ToolLookupEntry } from './state.js';
 import { getToolPermission, prefixedToolName } from './state.js';
 import { version } from './version.js';
@@ -118,6 +123,34 @@ const PLATFORM_TOOLS: Array<{ name: string; description: string; inputSchema: Re
       required: ['plugin'],
     },
   },
+  {
+    name: 'plugin_mark_reviewed',
+    description:
+      'Mark a plugin as reviewed and set its permission. Requires a valid review token from plugin_inspect. Only call this after the user has reviewed and approved your security assessment.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        plugin: {
+          type: 'string',
+          description: 'The plugin name to mark as reviewed.',
+        },
+        version: {
+          type: 'string',
+          description: 'The plugin version that was reviewed.',
+        },
+        reviewToken: {
+          type: 'string',
+          description: 'The review token received from plugin_inspect.',
+        },
+        permission: {
+          type: 'string',
+          enum: ['ask', 'auto'],
+          description: 'The permission to set for this plugin after review.',
+        },
+      },
+      required: ['plugin', 'version', 'reviewToken', 'permission'],
+    },
+  },
 ];
 
 /** Set of platform tool names for O(1) lookup in the tools/call handler */
@@ -153,6 +186,9 @@ const registerMcpHandlers = (server: McpServerInstance, state: ServerState): voi
     // Platform tools: always available, bypass permissions, not in side panel.
     if (toolName === 'plugin_inspect') {
       return handlePluginInspect(state, args);
+    }
+    if (toolName === 'plugin_mark_reviewed') {
+      return handlePluginMarkReviewed(state, args, dispatchCallbacks);
     }
 
     // Check cached browser tools first (O(n) over small fixed set).
