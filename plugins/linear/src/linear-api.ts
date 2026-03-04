@@ -1,4 +1,4 @@
-import { ToolError } from '@opentabs-dev/plugin-sdk';
+import { ToolError, parseRetryAfterMs } from '@opentabs-dev/plugin-sdk';
 
 // Linear's GraphQL API is on a separate subdomain (client-api.linear.app) from
 // the web app (linear.app). The CORS policy returns:
@@ -189,7 +189,7 @@ export const graphql = async <T extends Record<string, unknown>>(
 
     if (response.status === 429) {
       const retryAfter = response.headers.get('Retry-After');
-      const retryMs = retryAfter ? Number(retryAfter) * 1000 : undefined;
+      const retryMs = retryAfter !== null ? parseRetryAfterMs(retryAfter) : undefined;
       throw ToolError.rateLimited(`Rate limited — ${errorBody}`, retryMs);
     }
     if (response.status === 401 || response.status === 403) {
