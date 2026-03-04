@@ -12,9 +12,9 @@ Build a production-ready OpenTabs plugin for any web application. This skill gui
 
 ### Browser Tool Permissions
 
-Plugin development requires heavy use of browser tools (`browser_execute_script`, `browser_navigate_tab`, `browser_get_tab_content`, etc.) for exploring the target web app. By default, many of these tools require human approval in the Chrome extension side panel, with a 30-second timeout that blocks the AI agent.
+Plugin development requires heavy use of browser tools (`browser_execute_script`, `browser_navigate_tab`, `browser_get_tab_content`, etc.) for exploring the target web app. By default, all tools have permission `'off'` (disabled). Tools set to `'ask'` require human approval in the Chrome extension side panel before executing.
 
-**Before starting, ask the user if they want to enable `--dangerously-skip-permissions`** to bypass all confirmation dialogs during the development session. This dramatically speeds up the exploration and testing phases.
+**Before starting, ask the user if they want to enable `skipPermissions`** to bypass all permission checks during the development session. This sets all tools to `'auto'` (execute immediately), dramatically speeding up exploration and testing.
 
 Three ways to enable it:
 
@@ -22,9 +22,14 @@ Three ways to enable it:
 2. Set the env var: `OPENTABS_SKIP_PERMISSIONS=1`
 3. Add to `~/.opentabs/config.json`: `{ "skipPermissions": true }`
 
-**Warn the user**: this disables all human-in-the-loop safety for browser tool operations. It should only be used during active plugin development sessions and disabled afterward.
+Alternatively, set specific plugins or tools to `'auto'` in `~/.opentabs/config.json`:
+```json
+{ "plugins": { "browser": { "permission": "auto" } } }
+```
 
-If the user declines, plan for confirmation timeouts when using browser tools — use read-only tools like `opentabs_plugin_list_tabs` (no confirmation needed) where possible, and batch browser tool calls to minimize the number of approvals needed.
+**Warn the user**: `skipPermissions` disables all human-in-the-loop safety for tool operations. It should only be used during active plugin development sessions and disabled afterward.
+
+If the user declines, set browser tools to `'ask'` permission and plan for manual approvals — use read-only tools like `opentabs_plugin_list_tabs` (no approval needed when set to `'auto'`) where possible, and batch browser tool calls to minimize the number of approvals needed.
 
 ---
 
@@ -721,11 +726,11 @@ After implementing all tools, test these scenarios:
 
 ### Browser Tool Confirmations
 
-When using browser tools during testing (like `browser_navigate_tab`, `browser_execute_script`), these require **human approval** in the Chrome extension side panel. The confirmation dialog times out after 30 seconds. Plan for this:
+When using browser tools during testing (like `browser_navigate_tab`, `browser_execute_script`), tools with `'ask'` permission require **human approval** in the Chrome extension side panel before executing.
 
-- Use `opentabs_plugin_list_tabs` (no confirmation needed) to check plugin state
-- Ask the user to watch the side panel when you need to call browser tools
-- If a tool times out with `CONFIRMATION_TIMEOUT`, ask the user to approve and retry
+- Use `opentabs_plugin_list_tabs` (set to `'auto'` by default with `skipPermissions`) to check plugin state
+- Ask the user to watch the side panel when you need to call tools set to `'ask'`
+- If a tool returns a "denied by the user" error, ask the user to approve and retry
 
 ---
 
@@ -740,7 +745,7 @@ When using browser tools during testing (like `browser_navigate_tab`, `browser_e
 7. **Icons must be valid Lucide names** — TypeScript catches invalid ones at build time
 8. **Biome formatting** — always run `npm run format` after writing code; the project's config may differ from your defaults
 9. **The `opentabs` field in `package.json`** is how the platform discovers plugin metadata — `displayName`, `description`, and `urlPatterns` must be there
-10. **Browser tools require human approval** — `browser_navigate_tab`, `browser_execute_script`, etc. show a confirmation dialog that times out in 30 seconds
+10. **Browser tools require approval when set to 'ask'** — `browser_navigate_tab`, `browser_execute_script`, etc. show a confirmation dialog when their permission is `'ask'`. Use `skipPermissions` or set tools to `'auto'` during development.
 11. **`browser_execute_script` bypasses page CSP** — The tool injects code via a file URL (`chrome.scripting.executeScript({ files: [...] })`), which runs as extension-origin code and is not subject to the page's Content Security Policy. This means `browser_execute_script` works on all pages, including strict-CSP sites like GitHub. The adapter IIFE uses the same file-based injection mechanism — plugin code also bypasses CSP on strict pages.
 12. **HttpOnly cookies are invisible to plugin code** — `getCookie()` uses `document.cookie`, which cannot read HttpOnly cookies. Most session cookies are HttpOnly. Always check the cookie `httpOnly` property when exploring auth (use `browser_get_cookies`). For HttpOnly cookie auth, detect auth indirectly: from `<meta>` tags the server embeds in HTML (e.g., `<meta name="user-login">`), from non-HttpOnly indicator cookies (e.g., Notion's `notion_user_id`), from page globals (`window.__APP_STATE__`), or from localStorage. The API calls still work with `credentials: 'include'` because the browser sends HttpOnly cookies automatically — you just can't read them in JS. Auth persistence still matters — persist the *user context* (user ID, workspace ID) on globalThis even when the auth token itself is in HttpOnly cookies. See the "Cookie-Based Auth Pattern" section below.
 13. **Cross-origin API + cookies: check CORS before choosing fetch strategy** — When the API is on a different subdomain (e.g., `client-api.example.com` for an `example.com` plugin), verify CORS with `curl -sI -X OPTIONS <api-url> -H "Origin: https://example.com" -H "Access-Control-Request-Method: POST"`. Three outcomes: (a) `allow-origin: https://example.com` + `allow-credentials: true` — direct `fetch()` with `credentials: 'include'` works perfectly; the browser sends HttpOnly cookies and sets correct Origin/Referer headers; this is the ideal path and works for cross-subdomain APIs (same registrable domain); (b) `allow-origin: *` — `credentials: 'include'` is rejected by the browser; use token-based auth extracted from the page instead; (c) no CORS headers — cross-origin requests are blocked; find same-origin internal endpoints. **Always use direct in-page `fetch()` for cookie-based auth** — the adapter runs in the page's MAIN world, so from the browser's perspective it is page JavaScript; `credentials: 'include'` sends cookies just like the web app's own code does.
