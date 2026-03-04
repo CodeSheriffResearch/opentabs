@@ -8,6 +8,7 @@ import { Footer } from './Footer';
 import { PluginCard } from './PluginCard';
 import { PluginList } from './PluginList';
 import { Accordion } from './retro/Accordion';
+import { Alert } from './retro/Alert';
 import { Input } from './retro/Input';
 import { SearchResults } from './SearchResults';
 
@@ -848,6 +849,45 @@ const BrowserToolsOnlyDemo = () => {
 const BrowserToolsOnly: Story = { render: () => <BrowserToolsOnlyDemo /> };
 
 // ---------------------------------------------------------------------------
+// 28: Skip-permissions banner — warning shown when --dangerously-skip-permissions is active
+// ---------------------------------------------------------------------------
+
+const SkipPermissionsBannerDemo = () => {
+  const [plugins, setPlugins] = useState([mockPlugin(), githubPlugin()]);
+  const [browserTools, setBrowserTools] = useState(mockBrowserTools);
+  return (
+    <SidePanelShell>
+      <Alert variant="solid" status="warning" className="mx-4 mt-2">
+        <Alert.Title>PERMISSIONS BYPASSED</Alert.Title>
+        <Alert.Description>
+          All tools execute without approval.
+          <span className="mt-1 block font-mono text-xs">--dangerously-skip-permissions</span>
+        </Alert.Description>
+      </Alert>
+      <Accordion type="multiple" className="mt-2 mb-2 space-y-2">
+        <BrowserToolsCard
+          tools={browserTools}
+          activeTools={new Set()}
+          onToolsChange={updater => setBrowserTools(updater)}
+          serverVersion="0.0.42"
+          skipPermissions={true}
+        />
+      </Accordion>
+      <PluginList
+        plugins={plugins}
+        failedPlugins={[]}
+        activeTools={new Set()}
+        setPlugins={setPlugins}
+        toolFilter=""
+        skipPermissions={true}
+      />
+    </SidePanelShell>
+  );
+};
+
+const SkipPermissionsBanner: Story = { render: () => <SkipPermissionsBannerDemo /> };
+
+// ---------------------------------------------------------------------------
 // Exports
 // ---------------------------------------------------------------------------
 
@@ -877,4 +917,5 @@ export {
   PluginUpdating,
   WithBrowserTools,
   BrowserToolsOnly,
+  SkipPermissionsBanner,
 };

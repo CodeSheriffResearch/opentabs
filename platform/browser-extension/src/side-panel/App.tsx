@@ -26,6 +26,7 @@ import { DisconnectedState, LoadingState } from './components/EmptyStates.js';
 import { Footer } from './components/Footer.js';
 import { PluginList } from './components/PluginList.js';
 import { Accordion } from './components/retro/Accordion.js';
+import { Alert } from './components/retro/Alert.js';
 import { Input } from './components/retro/Input.js';
 import { Tooltip } from './components/retro/Tooltip.js';
 import { SearchResults } from './components/SearchResults.js';
@@ -345,6 +346,15 @@ const App = () => {
     <Tooltip.Provider>
       <div className="flex h-screen flex-col overflow-hidden text-foreground">
         {connected && <ConfirmationDialog confirmations={pendingConfirmations} onRespond={handleConfirmationRespond} />}
+        {skipPermissions && (
+          <Alert variant="solid" status="warning" className="mx-4 mt-2">
+            <Alert.Title>PERMISSIONS BYPASSED</Alert.Title>
+            <Alert.Description>
+              All tools execute without approval.
+              <span className="mt-1 block font-mono text-xs">--dangerously-skip-permissions</span>
+            </Alert.Description>
+          </Alert>
+        )}
         {showSearchBar && (
           <div className="shrink-0 px-4 pt-4 pb-2">
             <div className="relative">
