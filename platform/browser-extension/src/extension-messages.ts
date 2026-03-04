@@ -131,6 +131,13 @@ export interface BgSetAllToolsPermissionMessage {
   permission: ToolPermission;
 }
 
+/** Side panel → Background: set a plugin's default permission */
+export interface BgSetPluginPermissionMessage {
+  type: 'bg:setPluginPermission';
+  plugin: string;
+  permission: ToolPermission;
+}
+
 /** Side panel → Background: search npm registry for plugins */
 export interface BgSearchPluginsMessage {
   type: 'bg:searchPlugins';
@@ -172,6 +179,7 @@ export type InternalMessage =
   | BgGetFullStateMessage
   | BgSetToolPermissionMessage
   | BgSetAllToolsPermissionMessage
+  | BgSetPluginPermissionMessage
   | BgSearchPluginsMessage
   | BgInstallPluginMessage
   | BgRemovePluginMessage

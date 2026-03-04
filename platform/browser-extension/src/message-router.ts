@@ -383,11 +383,17 @@ const handleSyncFull = async (params: Record<string, unknown>): Promise<void> =>
     ? (params.browserTools as ConfigStateBrowserTool[])
     : undefined;
   const rawServerVersion = typeof params.serverVersion === 'string' ? params.serverVersion : undefined;
+  const rawBrowserPermission = params.browserPermission;
+  const browserPermission =
+    rawBrowserPermission === 'off' || rawBrowserPermission === 'ask' || rawBrowserPermission === 'auto'
+      ? rawBrowserPermission
+      : undefined;
 
   updateServerStateCache({
     plugins: cachePlugins,
     ...(rawFailedPlugins ? { failedPlugins: rawFailedPlugins } : {}),
     ...(rawBrowserTools ? { browserTools: rawBrowserTools } : {}),
+    ...(browserPermission !== undefined ? { browserPermission } : {}),
     ...(rawServerVersion !== undefined ? { serverVersion: rawServerVersion } : {}),
   });
 
@@ -638,6 +644,7 @@ const handleServerMessage = (message: Record<string, unknown>): void => {
       ...(payload.plugins ? { plugins: payload.plugins } : {}),
       ...(payload.failedPlugins ? { failedPlugins: payload.failedPlugins } : {}),
       ...(payload.browserTools ? { browserTools: payload.browserTools } : {}),
+      ...(payload.browserPermission !== undefined ? { browserPermission: payload.browserPermission } : {}),
       ...(payload.serverVersion !== undefined ? { serverVersion: payload.serverVersion } : {}),
     });
   }

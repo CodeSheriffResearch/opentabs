@@ -1,3 +1,4 @@
+import type { ToolPermission } from '@opentabs-dev/shared';
 import { BROWSER_TOOLS_CATALOG } from '@opentabs-dev/shared/browser-tools-catalog';
 import { Search, X } from 'lucide-react';
 import { OverlayScrollbarsComponent } from 'overlayscrollbars-react';
@@ -39,6 +40,7 @@ const App = () => {
   const [browserTools, setBrowserTools] = useState<BrowserToolState[]>(() =>
     BROWSER_TOOLS_CATALOG.map(t => ({ ...t, permission: 'auto' as const })),
   );
+  const [browserPermission, setBrowserPermission] = useState<ToolPermission>('off');
   const [serverVersion, setServerVersion] = useState<string | undefined>(undefined);
   const [loading, setLoading] = useState(true);
   const [activeTools, setActiveTools] = useState<Set<string>>(new Set());
@@ -210,6 +212,7 @@ const App = () => {
         }
         return merged;
       });
+      setBrowserPermission(result.browserPermission ?? 'off');
       setServerVersion(result.serverVersion);
       setActiveTools(prev => {
         const next = new Set<string>();
@@ -281,6 +284,7 @@ const App = () => {
           setPlugins([]);
           setFailedPlugins([]);
           setBrowserTools(BROWSER_TOOLS_CATALOG.map(t => ({ ...t, permission: 'auto' as const })));
+          setBrowserPermission('off');
           setServerVersion(undefined);
           setActiveTools(new Set());
           setPendingConfirmations([]);
@@ -404,6 +408,8 @@ const App = () => {
                       activeTools={activeTools}
                       onToolsChange={setBrowserTools}
                       serverVersion={serverVersion}
+                      browserPermission={browserPermission}
+                      onBrowserPermissionChange={setBrowserPermission}
                     />
                   </Accordion>
                 )}

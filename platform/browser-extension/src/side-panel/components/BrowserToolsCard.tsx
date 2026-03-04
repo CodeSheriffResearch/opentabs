@@ -3,14 +3,13 @@ import * as AccordionPrimitive from '@radix-ui/react-accordion';
 import { ChevronDown } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import type { BrowserToolState } from '../bridge.js';
-import { setAllToolsPermission, setToolPermission } from '../bridge.js';
+import { setPluginPermission, setToolPermission } from '../bridge.js';
 import { ERROR_DISPLAY_DURATION_MS } from '../constants.js';
 import { BrowserToolsMenu } from './BrowserToolsMenu.js';
 import { PluginIcon } from './PluginIcon.js';
 import { Accordion } from './retro/Accordion.js';
 import { Alert } from './retro/Alert.js';
 import { Badge } from './retro/Badge.js';
-import { Switch } from './retro/Switch.js';
 import { ToolRow } from './ToolRow.js';
 
 /** Raw SVG string for the Chrome logo, rendered via PluginIcon's sanitized SVG path. */
@@ -51,12 +50,18 @@ const BrowserToolsCard = ({
   onToolsChange,
   toolFilter,
   serverVersion,
+  browserPermission = 'off',
+  onBrowserPermissionChange,
+  skipPermissions,
 }: {
   tools: BrowserToolState[];
   activeTools: Set<string>;
   onToolsChange: (updater: (tools: BrowserToolState[]) => BrowserToolState[]) => void;
   toolFilter?: string;
   serverVersion?: string;
+  browserPermission?: ToolPermission;
+  onBrowserPermissionChange?: (permission: ToolPermission) => void;
+  skipPermissions?: boolean;
 }) => {
   const [toggleError, setToggleError] = useState<string | null>(null);
   const errorTimerRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
@@ -71,20 +76,17 @@ const BrowserToolsCard = ({
     errorTimerRef.current = setTimeout(() => setToggleError(null), ERROR_DISPLAY_DURATION_MS);
   };
 
-  const allEnabled = tools.length > 0 && tools.every(t => t.permission !== 'off');
+  const preBrowserPermRef = useRef<ToolPermission>('off');
 
-  const handleToggleAll = (checked: boolean) => {
+  const handleBrowserPermissionChange = (newPermission: ToolPermission) => {
     const myVersion = ++toggleCounter.current;
-    const permission: ToolPermission = checked ? 'auto' : 'off';
-    onToolsChange(prev => {
-      preToggleRef.current = prev;
-      return prev.map(t => ({ ...t, permission }));
-    });
-    void setAllToolsPermission('browser', permission).catch(() => {
+    preBrowserPermRef.current = browserPermission;
+    onBrowserPermissionChange?.(newPermission);
+    void setPluginPermission('browser', newPermission).catch(() => {
       if (toggleCounter.current === myVersion) {
-        onToolsChange(() => preToggleRef.current);
+        onBrowserPermissionChange?.(preBrowserPermRef.current);
       }
-      showToggleError('Failed to toggle all browser tools');
+      showToggleError('Failed to update browser permission');
     });
   };
 
@@ -142,7 +144,16 @@ const BrowserToolsCard = ({
             if (e.key === 'Enter' || e.key === ' ') e.stopPropagation();
           }}
           role="presentation">
-          <Switch checked={allEnabled} onCheckedChange={handleToggleAll} aria-label="Toggle all browser tools" />
+          <select
+            value={browserPermission}
+            onChange={e => handleBrowserPermissionChange(e.target.value as ToolPermission)}
+            disabled={skipPermissions}
+            aria-label="Permission for browser tools"
+            className="rounded border-2 border-border bg-card px-1 py-0.5 font-mono text-xs focus:shadow-[2px_2px_0_0_var(--color-border)] focus:outline-none">
+            <option value="off">Off</option>
+            <option value="ask">Ask</option>
+            <option value="auto">Auto</option>
+          </select>
         </div>
       </AccordionPrimitive.Header>
 
@@ -167,6 +178,7 @@ const BrowserToolsCard = ({
             icon={tool.icon ?? 'globe'}
             permission={tool.permission}
             active={activeTools.has(`browser:${tool.name}`)}
+            disabled={skipPermissions}
             onPermissionChange={handleToolPermissionChange}
           />
         ))}

@@ -20,6 +20,7 @@ interface ServerStateCache {
   plugins: ConfigStatePlugin[];
   failedPlugins: ConfigStateFailedPlugin[];
   browserTools: ConfigStateBrowserTool[];
+  browserPermission?: ToolPermission;
   serverVersion?: string;
 }
 
@@ -30,6 +31,7 @@ const EMPTY_CACHE: ServerStateCache = {
   plugins: [],
   failedPlugins: [],
   browserTools: [],
+  browserPermission: undefined,
   serverVersion: undefined,
 };
 
@@ -43,25 +45,38 @@ let cache: ServerStateCache = { ...EMPTY_CACHE };
 // ---------------------------------------------------------------------------
 
 const pendingPluginToolUpdates = new Map<string, Map<string, ToolPermission>>();
+const pendingPluginPermissionUpdates = new Map<string, ToolPermission>();
 const pendingBrowserToolUpdates = new Map<string, ToolPermission>();
 
 /** Re-apply pending optimistic updates on top of the current cache. */
 const reapplyPendingOptimisticUpdates = (): void => {
-  if (pendingPluginToolUpdates.size > 0) {
+  if (pendingPluginToolUpdates.size > 0 || pendingPluginPermissionUpdates.size > 0) {
     cache = {
       ...cache,
       plugins: cache.plugins.map(plugin => {
+        const permOverride = pendingPluginPermissionUpdates.get(plugin.name);
         const toolOverrides = pendingPluginToolUpdates.get(plugin.name);
-        if (!toolOverrides) return plugin;
-        return {
-          ...plugin,
-          tools: plugin.tools.map(tool => {
-            const override = toolOverrides.get(tool.name);
-            return override !== undefined ? { ...tool, permission: override } : tool;
-          }),
-        };
+        if (permOverride === undefined && !toolOverrides) return plugin;
+        let updated = plugin;
+        if (permOverride !== undefined) {
+          updated = { ...updated, permission: permOverride };
+        }
+        if (toolOverrides) {
+          updated = {
+            ...updated,
+            tools: updated.tools.map(tool => {
+              const override = toolOverrides.get(tool.name);
+              return override !== undefined ? { ...tool, permission: override } : tool;
+            }),
+          };
+        }
+        return updated;
       }),
     };
+  }
+  const browserPermOverride = pendingPluginPermissionUpdates.get('browser');
+  if (browserPermOverride !== undefined) {
+    cache = { ...cache, browserPermission: browserPermOverride };
   }
   if (pendingBrowserToolUpdates.size > 0) {
     cache = {
@@ -72,6 +87,16 @@ const reapplyPendingOptimisticUpdates = (): void => {
       }),
     };
   }
+};
+
+/** Register a pending optimistic update for a plugin-level permission. */
+const addPendingPluginPermissionUpdate = (plugin: string, permission: ToolPermission): void => {
+  pendingPluginPermissionUpdates.set(plugin, permission);
+};
+
+/** Clear the pending optimistic update for a plugin-level permission. */
+const removePendingPluginPermissionUpdate = (plugin: string): void => {
+  pendingPluginPermissionUpdates.delete(plugin);
 };
 
 /** Register a pending optimistic update for a single plugin tool. */
@@ -204,6 +229,7 @@ const clearServerStateCache = (): void => {
   cache = { ...EMPTY_CACHE };
   cachesInitialized = false;
   pendingPluginToolUpdates.clear();
+  pendingPluginPermissionUpdates.clear();
   pendingBrowserToolUpdates.clear();
   if (persistTimer !== undefined) {
     clearTimeout(persistTimer);
@@ -228,6 +254,12 @@ const loadServerStateCacheFromSession = async (): Promise<void> => {
         plugins: Array.isArray(stored.plugins) ? stored.plugins : [],
         failedPlugins: Array.isArray(stored.failedPlugins) ? stored.failedPlugins : [],
         browserTools: Array.isArray(stored.browserTools) ? stored.browserTools : [],
+        browserPermission:
+          stored.browserPermission === 'off' ||
+          stored.browserPermission === 'ask' ||
+          stored.browserPermission === 'auto'
+            ? stored.browserPermission
+            : undefined,
         serverVersion: typeof stored.serverVersion === 'string' ? stored.serverVersion : undefined,
       };
     }
@@ -251,6 +283,7 @@ export {
   addPendingAllBrowserToolsUpdate,
   addPendingBrowserToolUpdate,
   addPendingPluginAllToolsUpdate,
+  addPendingPluginPermissionUpdate,
   addPendingPluginToolUpdate,
   clearServerStateCache,
   flushServerStateCacheToSession,
@@ -260,6 +293,7 @@ export {
   removePendingAllBrowserToolsUpdate,
   removePendingBrowserToolUpdate,
   removePendingPluginAllToolsUpdate,
+  removePendingPluginPermissionUpdate,
   removePendingPluginToolUpdate,
   setCachesInitialized,
   updateServerStateCache,

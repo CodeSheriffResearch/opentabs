@@ -8,12 +8,14 @@ import { getAllPluginMeta } from './plugin-storage.js';
 import { rejectAllPendingServerRequests, sendServerRequest } from './server-request.js';
 import {
   addPendingPluginAllToolsUpdate,
+  addPendingPluginPermissionUpdate,
   addPendingPluginToolUpdate,
   clearServerStateCache,
   getCachesInitialized,
   getServerStateCache,
   loadServerStateCacheFromSession,
   removePendingPluginAllToolsUpdate,
+  removePendingPluginPermissionUpdate,
   removePendingPluginToolUpdate,
   updateServerStateCache,
 } from './server-state-cache.js';
@@ -223,6 +225,7 @@ const handleBgGetFullState: MessageHandler = (_message, sendResponse) => {
       plugins,
       failedPlugins: serverCache.failedPlugins,
       browserTools: serverCache.browserTools,
+      browserPermission: serverCache.browserPermission,
       serverVersion: serverCache.serverVersion,
       pendingConfirmations: getPendingConfirmations(),
     });
@@ -405,6 +408,39 @@ const handleBgSetAllToolsPermission: MessageHandler = (message, sendResponse) =>
     });
 };
 
+/** Handle bg:setPluginPermission — set a plugin's default permission via the MCP server */
+const handleBgSetPluginPermission: MessageHandler = (message, sendResponse) => {
+  const plugin = message.plugin as string;
+  const permission = message.permission as ToolPermission;
+
+  // Capture the original plugin-level permission for surgical rollback
+  const cache = getServerStateCache();
+  const pluginEntry = cache.plugins.find(p => p.name === plugin);
+  const originalPermission = pluginEntry?.permission ?? 'off';
+
+  // Optimistically update the local server state cache
+  const updatedPlugins = cache.plugins.map(p => (p.name === plugin ? { ...p, permission } : p));
+  addPendingPluginPermissionUpdate(plugin, permission);
+  updateServerStateCache({ plugins: updatedPlugins });
+
+  sendServerRequest('config.setPluginPermission', { plugin, permission })
+    .then((result: unknown) => {
+      removePendingPluginPermissionUpdate(plugin);
+      sendResponse(result);
+    })
+    .catch((err: unknown) => {
+      removePendingPluginPermissionUpdate(plugin);
+      // Surgically revert only the target plugin's permission in the current cache,
+      // preserving any concurrent plugins.changed updates that arrived during the request.
+      const currentCache = getServerStateCache();
+      const revertedPlugins = currentCache.plugins.map(p =>
+        p.name === plugin ? { ...p, permission: originalPermission } : p,
+      );
+      updateServerStateCache({ plugins: revertedPlugins });
+      sendResponse({ error: err instanceof Error ? err.message : String(err) });
+    });
+};
+
 /** Handle bg:searchPlugins — search npm registry for plugins */
 const handleBgSearchPlugins: MessageHandler = (message, sendResponse) => {
   const query = message.query as string;
@@ -472,6 +508,7 @@ const backgroundHandlers = new Map<InternalMessage['type'], MessageHandler>([
   ['bg:getFullState', handleBgGetFullState],
   ['bg:setToolPermission', handleBgSetToolPermission],
   ['bg:setAllToolsPermission', handleBgSetAllToolsPermission],
+  ['bg:setPluginPermission', handleBgSetPluginPermission],
   ['bg:searchPlugins', handleBgSearchPlugins],
   ['bg:installPlugin', handleBgInstallPlugin],
   ['bg:removePlugin', handleBgRemovePlugin],
@@ -491,6 +528,7 @@ const EXTENSION_ONLY_TYPES: ReadonlySet<InternalMessage['type']> = new Set([
   'bg:getFullState',
   'bg:setToolPermission',
   'bg:setAllToolsPermission',
+  'bg:setPluginPermission',
   'bg:searchPlugins',
   'bg:installPlugin',
   'bg:removePlugin',
@@ -536,6 +574,7 @@ export {
   handleBgRemovePlugin,
   handleBgSearchPlugins,
   handleBgSetAllToolsPermission,
+  handleBgSetPluginPermission,
   handleBgSetToolPermission,
   handleBgUpdatePlugin,
   handleOffscreenGetUrl,

@@ -317,6 +317,8 @@ const buildConfigStatePayload = (state: ServerState): ConfigStateResult => {
       ...(ct.icon ? { icon: ct.icon } : {}),
     }));
 
+  const browserPermission = state.pluginPermissions.browser?.permission ?? 'off';
+
   return {
     plugins,
     failedPlugins: state.discoveryErrors.map(e => ({
@@ -324,6 +326,7 @@ const buildConfigStatePayload = (state: ServerState): ConfigStateResult => {
       error: e.error,
     })),
     browserTools,
+    browserPermission,
     serverVersion: version,
   };
 };

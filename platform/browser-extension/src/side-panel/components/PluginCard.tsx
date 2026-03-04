@@ -1,4 +1,4 @@
-// PluginCard needs a custom header layout (icon + name + switch outside the trigger) that the retro Accordion wrapper does not support.
+// PluginCard needs a custom header layout (icon + name + selector outside the trigger) that the retro Accordion wrapper does not support.
 
 import type { ToolPermission } from '@opentabs-dev/shared';
 import * as AccordionPrimitive from '@radix-ui/react-accordion';
@@ -6,7 +6,7 @@ import { ChevronDown } from 'lucide-react';
 import type { Dispatch, SetStateAction } from 'react';
 import { useEffect, useRef, useState } from 'react';
 import type { PluginState, WireToolDef } from '../bridge.js';
-import { matchesTool, setAllToolsPermission, setToolPermission } from '../bridge.js';
+import { matchesTool, setPluginPermission, setToolPermission } from '../bridge.js';
 import { ERROR_DISPLAY_DURATION_MS } from '../constants.js';
 import { PluginIcon } from './PluginIcon.js';
 import { PluginMenu } from './PluginMenu.js';
@@ -27,6 +27,7 @@ const PluginCard = ({
   updatingPlugin,
   removingPlugin,
   actionError,
+  skipPermissions,
 }: {
   plugin: PluginState;
   activeTools: Set<string>;
@@ -37,6 +38,7 @@ const PluginCard = ({
   updatingPlugin?: boolean;
   removingPlugin?: boolean;
   actionError?: string | null;
+  skipPermissions?: boolean;
 }) => {
   const [toggleError, setToggleError] = useState<string | null>(null);
   const errorTimerRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
@@ -56,20 +58,19 @@ const PluginCard = ({
   const updatePluginTools = (updater: (tools: WireToolDef[]) => WireToolDef[]) =>
     setPlugins(prev => prev.map(p => (p.name === plugin.name ? { ...p, tools: updater(p.tools ?? []) } : p)));
 
-  const allEnabled = pluginTools.length > 0 && pluginTools.every(t => t.permission !== 'off');
+  const prePluginPermRef = useRef<ToolPermission>('off');
 
-  const handleToggleAll = (checked: boolean) => {
+  const handlePluginPermissionChange = (newPermission: ToolPermission) => {
     const myVersion = ++toggleCounter.current;
-    const permission: ToolPermission = checked ? 'auto' : 'off';
-    updatePluginTools(prev => {
-      preToggleRef.current = prev;
-      return prev.map(t => ({ ...t, permission }));
-    });
-    void setAllToolsPermission(plugin.name, permission).catch(() => {
+    prePluginPermRef.current = plugin.permission;
+    setPlugins(prev => prev.map(p => (p.name === plugin.name ? { ...p, permission: newPermission } : p)));
+    void setPluginPermission(plugin.name, newPermission).catch(() => {
       if (toggleCounter.current === myVersion) {
-        updatePluginTools(() => preToggleRef.current);
+        setPlugins(prev =>
+          prev.map(p => (p.name === plugin.name ? { ...p, permission: prePluginPermRef.current } : p)),
+        );
       }
-      showToggleError('Failed to toggle all tools');
+      showToggleError('Failed to update plugin permission');
     });
   };
 
@@ -198,11 +199,16 @@ const PluginCard = ({
             if (e.key === 'Enter' || e.key === ' ') e.stopPropagation();
           }}
           role="presentation">
-          <Switch
-            checked={allEnabled}
-            onCheckedChange={handleToggleAll}
-            aria-label={`Toggle all tools for ${plugin.name}`}
-          />
+          <select
+            value={plugin.permission}
+            onChange={e => handlePluginPermissionChange(e.target.value as ToolPermission)}
+            disabled={skipPermissions}
+            aria-label={`Permission for ${plugin.name} plugin`}
+            className="rounded border-2 border-border bg-card px-1 py-0.5 font-mono text-xs focus:shadow-[2px_2px_0_0_var(--color-border)] focus:outline-none">
+            <option value="off">Off</option>
+            <option value="ask">Ask</option>
+            <option value="auto">Auto</option>
+          </select>
         </div>
       </AccordionPrimitive.Header>
 
@@ -233,6 +239,7 @@ const PluginCard = ({
                   <Switch
                     checked={group.tools.every(t => t.permission !== 'off')}
                     onCheckedChange={checked => handleToggleGroup(group.tools, checked)}
+                    disabled={skipPermissions}
                     aria-label={`Toggle all ${group.name} tools`}
                   />
                 </div>
@@ -245,6 +252,7 @@ const PluginCard = ({
                     icon={tool.icon}
                     permission={tool.permission}
                     active={activeTools.has(`${plugin.name}:${tool.name}`)}
+                    disabled={skipPermissions}
                     onPermissionChange={handleToolPermissionChange}
                   />
                 ))}
@@ -259,6 +267,7 @@ const PluginCard = ({
                 icon={tool.icon}
                 permission={tool.permission}
                 active={activeTools.has(`${plugin.name}:${tool.name}`)}
+                disabled={skipPermissions}
                 onPermissionChange={handleToolPermissionChange}
               />
             ))}

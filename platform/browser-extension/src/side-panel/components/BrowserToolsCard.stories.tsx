@@ -1,3 +1,4 @@
+import type { ToolPermission } from '@opentabs-dev/shared';
 import type { Meta, StoryObj } from '@storybook/react';
 import { useState } from 'react';
 import type { BrowserToolState } from '../bridge';
@@ -32,7 +33,16 @@ const DefaultDemo = () => {
   const [tools, setTools] = useState<BrowserToolState[]>(
     mockBrowserTools.map(t => ({ ...t, permission: 'auto' as const })),
   );
-  return <BrowserToolsCard tools={tools} activeTools={new Set()} onToolsChange={updater => setTools(updater)} />;
+  const [perm, setPerm] = useState<ToolPermission>('auto');
+  return (
+    <BrowserToolsCard
+      tools={tools}
+      activeTools={new Set()}
+      onToolsChange={updater => setTools(updater)}
+      browserPermission={perm}
+      onBrowserPermissionChange={setPerm}
+    />
+  );
 };
 
 const Default: Story = {
@@ -41,7 +51,16 @@ const Default: Story = {
 
 const SomeDisabledDemo = () => {
   const [tools, setTools] = useState(mockBrowserTools);
-  return <BrowserToolsCard tools={tools} activeTools={new Set()} onToolsChange={updater => setTools(updater)} />;
+  const [perm, setPerm] = useState<ToolPermission>('ask');
+  return (
+    <BrowserToolsCard
+      tools={tools}
+      activeTools={new Set()}
+      onToolsChange={updater => setTools(updater)}
+      browserPermission={perm}
+      onBrowserPermissionChange={setPerm}
+    />
+  );
 };
 
 const SomeDisabled: Story = {
@@ -52,7 +71,16 @@ const AllDisabledDemo = () => {
   const [tools, setTools] = useState<BrowserToolState[]>(
     mockBrowserTools.map(t => ({ ...t, permission: 'off' as const })),
   );
-  return <BrowserToolsCard tools={tools} activeTools={new Set()} onToolsChange={updater => setTools(updater)} />;
+  const [perm, setPerm] = useState<ToolPermission>('off');
+  return (
+    <BrowserToolsCard
+      tools={tools}
+      activeTools={new Set()}
+      onToolsChange={updater => setTools(updater)}
+      browserPermission={perm}
+      onBrowserPermissionChange={setPerm}
+    />
+  );
 };
 
 const AllDisabled: Story = {
@@ -63,11 +91,14 @@ const WithActiveToolDemo = () => {
   const [tools, setTools] = useState<BrowserToolState[]>(
     mockBrowserTools.map(t => ({ ...t, permission: 'auto' as const })),
   );
+  const [perm, setPerm] = useState<ToolPermission>('auto');
   return (
     <BrowserToolsCard
       tools={tools}
       activeTools={new Set(['browser:browser_list_tabs'])}
       onToolsChange={updater => setTools(updater)}
+      browserPermission={perm}
+      onBrowserPermissionChange={setPerm}
     />
   );
 };
@@ -80,12 +111,15 @@ const WithToolFilterDemo = () => {
   const [tools, setTools] = useState<BrowserToolState[]>(
     mockBrowserTools.map(t => ({ ...t, permission: 'auto' as const })),
   );
+  const [perm, setPerm] = useState<ToolPermission>('auto');
   return (
     <BrowserToolsCard
       tools={tools}
       activeTools={new Set()}
       onToolsChange={updater => setTools(updater)}
       toolFilter="screenshot"
+      browserPermission={perm}
+      onBrowserPermissionChange={setPerm}
     />
   );
 };
@@ -101,7 +135,16 @@ const interactiveTools: BrowserToolState[] = [
 
 const InteractiveDemo = () => {
   const [tools, setTools] = useState(interactiveTools);
-  return <BrowserToolsCard tools={tools} activeTools={new Set()} onToolsChange={updater => setTools(updater)} />;
+  const [perm, setPerm] = useState<ToolPermission>('auto');
+  return (
+    <BrowserToolsCard
+      tools={tools}
+      activeTools={new Set()}
+      onToolsChange={updater => setTools(updater)}
+      browserPermission={perm}
+      onBrowserPermissionChange={setPerm}
+    />
+  );
 };
 
 const Interactive: Story = {
@@ -112,12 +155,15 @@ const WithServerVersionDemo = () => {
   const [tools, setTools] = useState<BrowserToolState[]>(
     mockBrowserTools.map(t => ({ ...t, permission: 'auto' as const })),
   );
+  const [perm, setPerm] = useState<ToolPermission>('auto');
   return (
     <BrowserToolsCard
       tools={tools}
       activeTools={new Set()}
       onToolsChange={updater => setTools(updater)}
       serverVersion="0.0.42"
+      browserPermission={perm}
+      onBrowserPermissionChange={setPerm}
     />
   );
 };
@@ -126,5 +172,33 @@ const WithServerVersion: Story = {
   render: () => <WithServerVersionDemo />,
 };
 
+const SkipPermissionsDemo = () => {
+  const [tools, setTools] = useState<BrowserToolState[]>(
+    mockBrowserTools.map(t => ({ ...t, permission: 'auto' as const })),
+  );
+  return (
+    <BrowserToolsCard
+      tools={tools}
+      activeTools={new Set()}
+      onToolsChange={updater => setTools(updater)}
+      browserPermission="auto"
+      skipPermissions
+    />
+  );
+};
+
+const SkipPermissions: Story = {
+  render: () => <SkipPermissionsDemo />,
+};
+
 export default meta;
-export { Default, SomeDisabled, AllDisabled, WithActiveTool, WithToolFilter, Interactive, WithServerVersion };
+export {
+  Default,
+  SomeDisabled,
+  AllDisabled,
+  WithActiveTool,
+  WithToolFilter,
+  Interactive,
+  WithServerVersion,
+  SkipPermissions,
+};

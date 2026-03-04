@@ -337,6 +337,8 @@ export interface ConfigStateResult {
   plugins: ConfigStatePlugin[];
   failedPlugins: ConfigStateFailedPlugin[];
   browserTools: ConfigStateBrowserTool[];
+  /** Plugin-level default permission for the browser pseudo-plugin */
+  browserPermission?: ToolPermission;
   serverVersion?: string;
 }
 

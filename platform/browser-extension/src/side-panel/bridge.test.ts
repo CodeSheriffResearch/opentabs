@@ -10,6 +10,7 @@ import {
   searchPlugins,
   sendConfirmationResponse,
   setAllToolsPermission,
+  setPluginPermission,
   setToolPermission,
   updatePlugin,
 } from './bridge.js';
@@ -134,6 +135,35 @@ describe('setAllToolsPermission', () => {
       type: 'bg:setAllToolsPermission',
       plugin: 'datadog',
       permission: 'off',
+    });
+  });
+});
+
+// --- setPluginPermission ---
+
+describe('setPluginPermission', () => {
+  test('sends bg:setPluginPermission with correct params', async () => {
+    mockResponse = { ok: true };
+
+    await setPluginPermission('slack', 'auto');
+
+    expect(sendMessageCalls).toHaveLength(1);
+    expect(sendMessageCalls[0]?.message).toEqual({
+      type: 'bg:setPluginPermission',
+      plugin: 'slack',
+      permission: 'auto',
+    });
+  });
+
+  test('sends permission for browser pseudo-plugin', async () => {
+    mockResponse = { ok: true };
+
+    await setPluginPermission('browser', 'ask');
+
+    expect(sendMessageCalls[0]?.message).toMatchObject({
+      type: 'bg:setPluginPermission',
+      plugin: 'browser',
+      permission: 'ask',
     });
   });
 });

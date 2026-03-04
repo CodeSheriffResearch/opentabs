@@ -502,6 +502,7 @@ chrome.runtime.onMessage.addListener((message: InternalMessage, sender, sendResp
     case 'bg:getFullState':
     case 'bg:setToolPermission':
     case 'bg:setAllToolsPermission':
+    case 'bg:setPluginPermission':
     case 'bg:searchPlugins':
     case 'bg:installPlugin':
     case 'bg:removePlugin':

@@ -391,6 +391,17 @@ const MixedGroupedUngrouped: Story = {
   render: () => <MixedGroupedUngroupedDemo />,
 };
 
+const SkipPermissionsDemo = () => {
+  const [plugins, setPlugins] = useState([mockPlugin()]);
+  const plugin = plugins[0];
+  if (!plugin) return null;
+  return <PluginCard plugin={plugin} activeTools={new Set()} setPlugins={setPlugins} skipPermissions />;
+};
+
+const SkipPermissions: Story = {
+  render: () => <SkipPermissionsDemo />,
+};
+
 export default meta;
 export {
   Ready,
@@ -404,4 +415,5 @@ export {
   RemovingState,
   GroupedTools,
   MixedGroupedUngrouped,
+  SkipPermissions,
 };

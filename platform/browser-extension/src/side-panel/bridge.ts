@@ -60,6 +60,7 @@ interface FullStateResult {
   plugins: PluginState[];
   failedPlugins: FailedPluginState[];
   browserTools: BrowserToolState[];
+  browserPermission?: ToolPermission;
   serverVersion?: string;
   skipPermissions?: boolean;
   pendingConfirmations?: FullStateConfirmation[];
@@ -120,6 +121,10 @@ const setToolPermission = (plugin: string, tool: string, permission: ToolPermiss
 const setAllToolsPermission = (plugin: string, permission: ToolPermission): Promise<unknown> =>
   sendBgMessage({ type: 'bg:setAllToolsPermission', plugin, permission });
 
+/** Set a plugin's default permission */
+const setPluginPermission = (plugin: string, permission: ToolPermission): Promise<unknown> =>
+  sendBgMessage({ type: 'bg:setPluginPermission', plugin, permission });
+
 /** Search npm registry for plugins matching the given query */
 const searchPlugins = (query: string): Promise<{ results: PluginSearchResult[] }> =>
   sendBgMessage<{ results: PluginSearchResult[] }>({ type: 'bg:searchPlugins', query });
@@ -167,6 +172,7 @@ export {
   searchPlugins,
   sendConfirmationResponse,
   setAllToolsPermission,
+  setPluginPermission,
   setToolPermission,
   updatePlugin,
 };
