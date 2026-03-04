@@ -111,7 +111,7 @@ Multiple PRDs can be `~running` simultaneously (one per worker). This skill writ
 
 **Important:** Do NOT start implementing. Just create and publish the PRD file(s). Distributed workers will claim them from the remote queue.
 
-**Never ask for confirmation before publishing.** Always publish all PRDs immediately after writing and validating them. The user has already approved the task by requesting it — publishing is the final step, not a decision point.
+**Never ask for confirmation before publishing.** Always publish immediately after writing and validating. The user has already approved the task by requesting it — publishing is the final step, not a decision point. The only exception is **dependent PRDs** — these must be held as `~draft` until their dependencies land (see "Never Publish Dependent PRDs Together").
 
 ---
 
@@ -298,13 +298,15 @@ cd ~/workspace/src/opentabs-prds && ./producer.sh prd-improve-sdk-error-handling
 3. Commits to the queue repo
 4. Pushes to the remote (with retry if concurrent workers are also pushing)
 
-For multiple PRDs, pass them all at once:
+For multiple **independent** PRDs, pass them all at once:
 
 ```bash
 cd ~/workspace/src/opentabs-prds && ./producer.sh prd-sdk-fixes~draft.json prd-docs-updates~draft.json
 ```
 
 **Never hardcode a timestamp in the filename.** `producer.sh` generates it at publish time.
+
+**Only publish PRDs that can run against the current state of main.** If some PRDs depend on others landing first, only publish the independent ones now. Leave dependent PRDs as `~draft` files and tell the user when to publish them (see "Never Publish Dependent PRDs Together").
 
 ---
 
@@ -350,9 +352,22 @@ The AI decides whether to create one PRD or multiple — do not ask the user. Th
 
 **Rule of thumb:** If splitting into two PRDs would cause both workers to edit the same files, keep it as one PRD. If the groups are independent, split them so workers run in parallel.
 
+### Never Publish Dependent PRDs Together
+
+**Workers execute all published PRDs in parallel.** There is no sequencing between PRDs — once a PRD is pushed to the queue, a worker claims it immediately regardless of whether other PRDs have completed. This means:
+
+- **If PRD-B depends on PRD-A's changes being merged into main first, do NOT publish both at the same time.** PRD-B's worker will start from main (which doesn't have PRD-A's changes yet), and the build will fail or the worker will waste time working against stale code.
+- **Only publish PRDs that can run independently from the current state of main.** If later PRDs depend on earlier ones, publish only the foundational PRD. Tell the user to publish the dependent PRDs after the first one lands.
+- **Write the dependent PRDs to disk with `~draft` suffix but do NOT run `producer.sh` on them.** This preserves the work for later publishing. Tell the user which draft files are waiting and what they depend on.
+
+Example: If adding a new SDK field (PRD-A) and then using that field in all plugins (PRD-B, PRD-C, PRD-D):
+1. Publish PRD-A immediately
+2. Write PRD-B, PRD-C, PRD-D as `~draft` files
+3. Tell the user: "PRD-A is published. After it lands, publish the plugin PRDs with: `cd ~/workspace/src/opentabs-prds && ./producer.sh prd-B~draft.json prd-C~draft.json prd-D~draft.json`"
+
 ### Minimize Merge Conflicts Across PRDs
 
-When creating multiple PRDs, merge conflicts are the main risk. Ralph merges completed branches sequentially into main. If two workers touched the same files, the second merge will conflict. Ralph preserves the conflicting branch for manual resolution and moves on.
+When creating multiple independent PRDs, merge conflicts are the main risk. Ralph merges completed branches sequentially into main. If two workers touched the same files, the second merge will conflict. Ralph preserves the conflicting branch for manual resolution and moves on.
 
 **To reduce conflicts:**
 
@@ -516,7 +531,8 @@ After publishing the PRD file, tell the user:
 1. **PRD file published:** the filename, story count, and that it was pushed to the remote
 2. **Target project:** which project the PRD targets and what verification commands will be used
 3. **Auto-pickup:** distributed workers polling the queue will claim it automatically
-4. **Monitoring commands:**
+4. **Deferred PRDs** (if any): list the `~draft` files that were written but not published, explain what they depend on, and provide the exact `producer.sh` command to publish them later
+5. **Monitoring commands:**
    - **Check queue state:** `cd ~/workspace/src/opentabs-prds && git pull && ls prd-*.json` (look for `~running` suffix)
    - **Check progress:** `cd ~/workspace/src/opentabs-prds && git pull && cat progress-*.txt`
    - **Check code branches:** `git ls-remote origin 'refs/heads/ralph-*'`
@@ -536,6 +552,7 @@ PRD and progress files in a worker's local `.ralph/` directory (inside the code 
 
 ## Checklist Before Publishing
 
+- [ ] **No cross-PRD dependencies in the publish batch** — if PRD-B depends on PRD-A landing first, only publish PRD-A now; leave PRD-B as `~draft`
 - [ ] **Target project identified** — determined whether this is root monorepo, docs, or a plugin
 - [ ] PRD is in the queue repo root (e.g., `~/workspace/src/opentabs-prds/`)
 - [ ] **`workingDirectory` set** if targeting a standalone subproject (omitted for root monorepo)
