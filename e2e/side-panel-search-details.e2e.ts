@@ -118,4 +118,63 @@ test.describe('Side panel search details', () => {
       cleanupTestConfigDir(configDir);
     }
   });
+
+  test('search clear button (X) clears the search and returns to default view', async () => {
+    const absPluginPath = path.resolve(E2E_TEST_PLUGIN_DIR);
+    const configDir = fs.mkdtempSync(path.join(os.tmpdir(), 'opentabs-e2e-sp-clear-btn-'));
+    writeTestConfig(configDir, {
+      localPlugins: [absPluginPath],
+      permissions: {
+        'e2e-test': { permission: 'auto' },
+        browser: { permission: 'auto' },
+      },
+    });
+
+    const server = await startMcpServer(configDir, false);
+    const { context, cleanupDir, extensionDir } = await launchExtensionContext(server.port, server.secret);
+    setupAdapterSymlink(configDir, extensionDir);
+
+    try {
+      await waitForExtensionConnected(server);
+
+      const sidePanel = await openSidePanel(context);
+
+      // Wait for plugins to load
+      await expect(sidePanel.getByText('E2E Test')).toBeVisible({ timeout: 30_000 });
+
+      const searchInput = sidePanel.getByPlaceholder('Search plugins and tools...');
+
+      // Type a search query
+      await searchInput.fill('echo');
+
+      // The 'Installed' section header should appear (search results mode)
+      await expect(sidePanel.getByText('Installed')).toBeVisible();
+
+      // The clear button should be visible
+      const clearBtn = sidePanel.getByLabel('Clear search');
+      await expect(clearBtn).toBeVisible();
+
+      // Click the clear button
+      await clearBtn.click();
+
+      // Search bar should be empty
+      await expect(searchInput).toHaveValue('');
+
+      // Clear button should be hidden (only visible when search has text)
+      await expect(clearBtn).toBeHidden();
+
+      // Default view restored — no section headers
+      await expect(sidePanel.getByText('Installed')).toBeHidden();
+
+      // All plugins should be visible again
+      await expect(sidePanel.getByText('E2E Test')).toBeVisible();
+
+      await sidePanel.close();
+    } finally {
+      await context.close().catch(() => {});
+      await server.kill();
+      fs.rmSync(cleanupDir, { recursive: true, force: true });
+      cleanupTestConfigDir(configDir);
+    }
+  });
 });
