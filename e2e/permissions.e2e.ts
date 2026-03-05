@@ -130,11 +130,11 @@ const clickDeny = async (sidePanel: Page): Promise<void> => {
   await sidePanel.getByRole('button', { name: 'Deny' }).click();
 };
 
-/** Check the "Always allow this tool" checkbox and then click Allow. */
+/** Toggle the "Always allow this tool" switch and then click Allow. */
 const clickAllowAlways = async (sidePanel: Page): Promise<void> => {
   await waitForConfirmationDialog(sidePanel);
-  const checkbox = sidePanel.locator('input[type="checkbox"]');
-  await checkbox.check();
+  const toggle = sidePanel.getByRole('switch', { name: 'Always allow this tool' });
+  await toggle.click();
   await sidePanel.getByRole('button', { name: 'Allow' }).click();
 };
 

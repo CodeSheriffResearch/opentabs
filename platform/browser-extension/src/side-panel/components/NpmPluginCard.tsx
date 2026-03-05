@@ -23,7 +23,14 @@ const NpmPluginCard = ({ plugin, installing, error, onInstall }: NpmPluginCardPr
         <PluginIcon pluginName={plugin.name} displayName={displayName} tabState="closed" size={28} />
         <div className="flex min-w-0 flex-1 flex-col">
           <div className="flex flex-wrap items-center gap-1">
-            <span className="truncate font-head text-foreground text-sm">{displayName}</span>
+            <a
+              href={`https://www.npmjs.com/package/${plugin.name}`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="truncate font-head text-foreground text-sm hover:underline"
+              onClick={e => e.stopPropagation()}>
+              {displayName}
+            </a>
             <Badge variant="default" size="sm">
               {plugin.version}
             </Badge>
