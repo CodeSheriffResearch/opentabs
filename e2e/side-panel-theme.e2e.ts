@@ -76,4 +76,63 @@ test.describe('Side panel theme toggle', () => {
       cleanupTestConfigDir(configDir);
     }
   });
+
+  test('theme persists across side panel close and reopen', async () => {
+    // 1. Standard setup: MCP server + extension context
+    const absPluginPath = path.resolve(E2E_TEST_PLUGIN_DIR);
+    const prefixedToolNames = readPluginToolNames();
+    const tools: Record<string, boolean> = {};
+    for (const t of prefixedToolNames) {
+      tools[t] = true;
+    }
+
+    const configDir = fs.mkdtempSync(path.join(os.tmpdir(), 'opentabs-e2e-sp-theme-persist-'));
+    writeTestConfig(configDir, { localPlugins: [absPluginPath], tools });
+
+    const server = await startMcpServer(configDir, true);
+    const { context, cleanupDir, extensionDir } = await launchExtensionContext(server.port, server.secret);
+    setupAdapterSymlink(configDir, extensionDir);
+
+    try {
+      // 2. Wait for extension to connect, open side panel
+      await waitForExtensionConnected(server);
+      await waitForLog(server, 'tab.syncAll received', 15_000);
+
+      let sidePanel = await openSidePanel(context);
+
+      // 3. Switch to dark mode
+      const darkToggle = sidePanel.getByLabel('Switch to dark mode');
+      await expect(darkToggle).toBeVisible();
+      await darkToggle.click();
+      await expect(sidePanel.locator('html')).toHaveClass(/dark/);
+
+      // 4. Close side panel and wait for storage write
+      await sidePanel.close();
+      await new Promise(r => setTimeout(r, 500));
+
+      // 5. Reopen — dark mode should persist
+      sidePanel = await openSidePanel(context);
+      await expect(sidePanel.locator('html')).toHaveClass(/dark/, { timeout: 5_000 });
+      await expect(sidePanel.getByLabel('Switch to light mode')).toBeVisible();
+
+      // 6. Switch back to light mode
+      await sidePanel.getByLabel('Switch to light mode').click();
+      await expect(sidePanel.locator('html')).not.toHaveClass(/dark/);
+
+      // 7. Close and reopen — light mode should persist
+      await sidePanel.close();
+      await new Promise(r => setTimeout(r, 500));
+
+      sidePanel = await openSidePanel(context);
+      await expect(sidePanel.locator('html')).not.toHaveClass(/dark/, { timeout: 5_000 });
+      await expect(sidePanel.getByLabel('Switch to dark mode')).toBeVisible();
+
+      await sidePanel.close();
+    } finally {
+      await context.close().catch(() => {});
+      await server.kill();
+      fs.rmSync(cleanupDir, { recursive: true, force: true });
+      cleanupTestConfigDir(configDir);
+    }
+  });
 });
