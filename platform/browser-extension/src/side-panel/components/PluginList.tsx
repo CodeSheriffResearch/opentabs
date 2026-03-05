@@ -14,6 +14,8 @@ import { FailedPluginCard } from './FailedPluginCard.js';
 import { PluginCard } from './PluginCard.js';
 import { Accordion } from './retro/Accordion.js';
 
+const ACCORDION_STORAGE_KEY = 'accordionState';
+
 /**
  * React hook that tracks which plugins are currently animating after a group change.
  * Uses per-plugin timers to clear the animation class after FADE_IN_MS.
@@ -111,6 +113,31 @@ const PluginList = ({
   // Controlled accordion state — collapse cards when they change groups
   const [openReady, setOpenReady] = useState<string[]>([]);
   const [openNotReady, setOpenNotReady] = useState<string[]>([]);
+
+  // Hydrate accordion state from chrome.storage.session on mount
+  useEffect(() => {
+    chrome.storage.session.get(ACCORDION_STORAGE_KEY).then(
+      result => {
+        const stored = result[ACCORDION_STORAGE_KEY] as { openReady: string[]; openNotReady: string[] } | undefined;
+        if (stored) {
+          if (Array.isArray(stored.openReady)) setOpenReady(stored.openReady);
+          if (Array.isArray(stored.openNotReady)) setOpenNotReady(stored.openNotReady);
+        }
+      },
+      () => {
+        // Storage unavailable — keep defaults
+      },
+    );
+  }, []);
+
+  // Persist accordion state to chrome.storage.session on every change.
+  // Writes immediately (no debounce) so state is flushed before the page
+  // can close — chrome.storage.session.set() is async and cannot reliably
+  // complete during unmount/beforeunload.
+  useEffect(() => {
+    if (filterLower) return;
+    chrome.storage.session.set({ [ACCORDION_STORAGE_KEY]: { openReady, openNotReady } }).catch(() => {});
+  }, [openReady, openNotReady, filterLower]);
 
   useEffect(() => {
     if (animating.size === 0) return;
