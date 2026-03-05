@@ -657,6 +657,139 @@ test.describe('Side panel — browser tool plugin-level permission', () => {
 });
 
 // ---------------------------------------------------------------------------
+// Individual browser tool permission change
+// ---------------------------------------------------------------------------
+
+test.describe('Side panel — individual browser tool permission change', () => {
+  test('changing an individual browser tool permission is reflected in MCP tools/list and config.json with smart cleanup', async () => {
+    const absPluginPath = path.resolve(E2E_TEST_PLUGIN_DIR);
+    const pluginVersion = getPluginVersion();
+
+    const configDir = fs.mkdtempSync(path.join(os.tmpdir(), 'opentabs-e2e-sp-browser-tool-'));
+    writeTestConfig(configDir, {
+      localPlugins: [absPluginPath],
+      permissions: {
+        browser: { permission: 'auto' },
+        'e2e-test': { permission: 'auto', reviewedVersion: pluginVersion },
+      },
+    });
+
+    const server = await startMcpServer(configDir, true, undefined, { OPENTABS_DANGEROUSLY_SKIP_PERMISSIONS: '' });
+    const mcpClient = createMcpClient(server.port, server.secret);
+    const { context, cleanupDir, extensionDir } = await launchExtensionContext(server.port, server.secret);
+    setupAdapterSymlink(configDir, extensionDir);
+
+    try {
+      await waitForExtensionConnected(server);
+      await waitForLog(server, 'tab.syncAll received', 15_000);
+      await mcpClient.initialize();
+
+      // Open side panel and verify browser card is visible
+      const sidePanelPage = await openSidePanel(context);
+      const browserTrigger = sidePanelPage.locator('[aria-label="Permission for browser tools"]');
+      await expect(browserTrigger).toBeVisible({ timeout: 30_000 });
+
+      // Expand the browser card to reveal individual tool rows
+      const browserCard = sidePanelPage.locator('button[aria-expanded]').filter({ hasText: 'Browser' });
+      await browserCard.click();
+
+      // Verify browser_list_tabs tool row is visible
+      const toolTrigger = sidePanelPage.locator('[aria-label="Permission for browser_list_tabs tool"]');
+      await expect(toolTrigger).toBeVisible({ timeout: 5_000 });
+
+      // Verify initial state: Auto (inherits from browser plugin permission)
+      await expect(toolTrigger).toContainText('Auto', { timeout: 5_000 });
+
+      // Change browser_list_tabs to 'off'
+      await selectPermission(sidePanelPage, 'Permission for browser_list_tabs tool', 'Off');
+
+      // Verify the select UI reflects the change
+      await expect(toolTrigger).toContainText('Off', { timeout: 5_000 });
+
+      // Verify browser_list_tabs gets [Disabled] prefix in MCP tools/list
+      await expect
+        .poll(
+          async () => {
+            const toolList = await mcpClient.listTools();
+            const tool = toolList.find(t => t.name === 'browser_list_tabs');
+            return tool?.description?.startsWith('[Disabled]') ?? false;
+          },
+          {
+            timeout: 15_000,
+            message: 'browser_list_tabs should have [Disabled] prefix after setting to off',
+          },
+        )
+        .toBe(true);
+
+      // Verify other browser tools are NOT affected
+      const toolListAfterDisable = await mcpClient.listTools();
+      const otherBrowserTools = BROWSER_TOOL_NAMES.filter(n => n !== 'browser_list_tabs').slice(0, 3);
+      for (const bt of otherBrowserTools) {
+        const tool = toolListAfterDisable.find(t => t.name === bt);
+        expect(tool?.description?.startsWith('[Disabled]') ?? true).toBe(false);
+      }
+
+      // Verify config.json has per-tool override
+      await expect
+        .poll(
+          () => {
+            const config = readTestConfig(configDir);
+            return config.permissions?.browser?.tools?.browser_list_tabs;
+          },
+          {
+            timeout: 15_000,
+            message: 'Config should have per-tool override for browser_list_tabs',
+          },
+        )
+        .toBe('off');
+
+      // Change browser_list_tabs back to 'auto' (matching plugin default)
+      await selectPermission(sidePanelPage, 'Permission for browser_list_tabs tool', 'Auto');
+
+      // Verify the select UI reflects the change
+      await expect(toolTrigger).toContainText('Auto', { timeout: 5_000 });
+
+      // Verify browser_list_tabs loses the [Disabled] prefix
+      await expect
+        .poll(
+          async () => {
+            const toolList = await mcpClient.listTools();
+            const tool = toolList.find(t => t.name === 'browser_list_tabs');
+            return tool !== undefined && !tool.description.startsWith('[Disabled]');
+          },
+          {
+            timeout: 30_000,
+            message: 'browser_list_tabs should not have [Disabled] prefix after re-enabling',
+          },
+        )
+        .toBe(true);
+
+      // Smart cleanup: verify per-tool override was removed from config.json
+      await expect
+        .poll(
+          () => {
+            const config = readTestConfig(configDir);
+            return config.permissions?.browser?.tools;
+          },
+          {
+            timeout: 15_000,
+            message: 'Config tools map should be removed after setting browser_list_tabs back to plugin default',
+          },
+        )
+        .toBeUndefined();
+
+      await sidePanelPage.close();
+    } finally {
+      await mcpClient.close().catch(() => {});
+      await context.close().catch(() => {});
+      await server.kill();
+      fs.rmSync(cleanupDir, { recursive: true, force: true });
+      cleanupTestConfigDir(configDir);
+    }
+  });
+});
+
+// ---------------------------------------------------------------------------
 // Re-selecting the current plugin-level value clears per-tool overrides
 // ---------------------------------------------------------------------------
 
