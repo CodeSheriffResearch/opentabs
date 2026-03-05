@@ -351,6 +351,24 @@ describe('performReload', () => {
     // (reloadCore does not notify — each caller is responsible)
     expect(notifyCalled).toBe(1);
   });
+
+  test('preserves skipPermissions=true across reload', async () => {
+    state.skipPermissions = true;
+
+    await performReload(state, [createMockServer()], emptyTransports(), false);
+
+    expect(state.skipPermissions).toBe(true);
+  });
+
+  test('preserves skipPermissions=false across reload (e.g. after "Restore approvals")', async () => {
+    // Simulate: env var was set at startup (skipPermissions=true), then user clicked
+    // "Restore approvals" (skipPermissions=false). Reload should NOT re-read the env var.
+    state.skipPermissions = false;
+
+    await performReload(state, [createMockServer()], emptyTransports(), false);
+
+    expect(state.skipPermissions).toBe(false);
+  });
 });
 
 describe('performReload — concurrent reload guard', () => {

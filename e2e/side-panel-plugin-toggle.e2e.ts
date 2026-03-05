@@ -524,6 +524,67 @@ test.describe('Side panel — plugin-level permission select', () => {
 });
 
 // ---------------------------------------------------------------------------
+// Re-selecting the current plugin-level value clears per-tool overrides
+// ---------------------------------------------------------------------------
+
+test.describe('Side panel — plugin-level re-selection clears overrides', () => {
+  test('re-selecting the current plugin permission clears per-tool overrides', async () => {
+    const absPluginPath = path.resolve(E2E_TEST_PLUGIN_DIR);
+    const pluginVersion = getPluginVersion();
+
+    const configDir = fs.mkdtempSync(path.join(os.tmpdir(), 'opentabs-e2e-sp-reselect-'));
+    // Start with plugin at 'off' but a per-tool override of 'ask' for echo
+    writeTestConfig(configDir, {
+      localPlugins: [absPluginPath],
+      permissions: {
+        'e2e-test': { permission: 'off', tools: { echo: 'ask' }, reviewedVersion: pluginVersion },
+      },
+    });
+
+    const server = await startMcpServer(configDir, true, undefined, { OPENTABS_DANGEROUSLY_SKIP_PERMISSIONS: '' });
+    const mcpClient = createMcpClient(server.port, server.secret);
+    const { context, cleanupDir, extensionDir } = await launchExtensionContext(server.port, server.secret);
+    setupAdapterSymlink(configDir, extensionDir);
+
+    try {
+      await waitForExtensionConnected(server);
+      await waitForLog(server, 'tab.syncAll received', 15_000);
+      await mcpClient.initialize();
+
+      const sidePanelPage = await openSidePanel(context);
+      await expect(sidePanelPage.getByText('E2E Test')).toBeVisible({ timeout: 30_000 });
+
+      // Expand the plugin card to see tool permissions
+      const pluginCard = sidePanelPage.locator('button[aria-expanded]').filter({ hasText: 'E2E Test' });
+      await pluginCard.click();
+
+      // The echo tool should show 'Ask' (per-tool override), not 'Off' (plugin default)
+      const echoToolSelect = sidePanelPage.locator('[aria-label="Permission for echo tool"]');
+      await expect(echoToolSelect).toContainText('Ask', { timeout: 5_000 });
+
+      // Re-select 'Off' from the plugin-level dropdown (already 'Off')
+      await selectPermission(sidePanelPage, 'Permission for e2e-test plugin', 'Off');
+
+      // Wait for the echo tool to reflect the cleared override (should now be 'Off')
+      await expect(echoToolSelect).toContainText('Off', { timeout: 10_000 });
+
+      // Verify the per-tool override was removed from config.json
+      const config = readTestConfig(configDir);
+      const pluginPerms = config.permissions?.['e2e-test'];
+      expect(pluginPerms?.tools).toBeUndefined();
+
+      await sidePanelPage.close();
+    } finally {
+      await mcpClient.close().catch(() => {});
+      await context.close().catch(() => {});
+      await server.kill();
+      fs.rmSync(cleanupDir, { recursive: true, force: true });
+      cleanupTestConfigDir(configDir);
+    }
+  });
+});
+
+// ---------------------------------------------------------------------------
 // skipPermissions mode — all selects disabled, no Switch components
 // ---------------------------------------------------------------------------
 

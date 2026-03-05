@@ -507,6 +507,51 @@ test.describe('Side panel — unreviewed plugin confirmation dialog', () => {
     await sidePanel.close();
   });
 
+  test('dialog appears when enabling individual tool on unreviewed plugin', async ({
+    mcpServer,
+    extensionContext,
+    mcpClient,
+  }) => {
+    await waitForExtensionConnected(mcpServer);
+    await waitForLog(mcpServer, 'tab.syncAll received');
+
+    const sidePanel = await openSidePanel(extensionContext);
+    await expect(sidePanel.getByText('E2E Test')).toBeVisible({ timeout: 30_000 });
+
+    // Expand the plugin card to reveal tool rows
+    const pluginCard = sidePanel.locator('button[aria-expanded]').filter({ hasText: 'E2E Test' });
+    await pluginCard.click();
+
+    // Change an individual tool from 'off' to 'auto' — should trigger the dialog
+    await selectPermission(sidePanel, 'Permission for echo tool', 'Auto');
+
+    // Dialog should appear
+    await waitForUnreviewedDialog(sidePanel);
+    const dialog = sidePanel.locator('[role="dialog"]');
+    await expect(dialog.getByText('Unreviewed Plugin')).toBeVisible();
+
+    // Click "Enable Anyway"
+    await dialog.getByRole('button', { name: 'Enable Anyway' }).click();
+
+    // Dialog should close
+    await expect(sidePanel.locator('[role="dialog"]')).toBeHidden({ timeout: 5_000 });
+
+    // The tool should now be enabled — verify via MCP client
+    await waitForToolList(
+      mcpClient,
+      tools => {
+        const echo = tools.find(t => t.name === 'e2e-test_echo');
+        // Tool should not be disabled (it has a per-tool override of 'auto')
+        return echo !== undefined && !echo.description.startsWith('[Disabled]');
+      },
+      15_000,
+      300,
+      'e2e-test_echo should not have [Disabled] prefix after tool-level Enable Anyway',
+    );
+
+    await sidePanel.close();
+  });
+
   test('dialog "Cancel" does not change permission', async ({ mcpServer, extensionContext, mcpClient }) => {
     await waitForExtensionConnected(mcpServer);
     await waitForLog(mcpServer, 'tab.syncAll received');
