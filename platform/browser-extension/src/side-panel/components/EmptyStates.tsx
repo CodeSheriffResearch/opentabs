@@ -67,6 +67,11 @@ const DisconnectedState = ({ reason }: { reason?: DisconnectReason }) => {
   return <ConnectionRefusedState />;
 };
 
-const LoadingState = () => <Loader size="md" />;
+const LoadingState = () => (
+  <div className="flex flex-col items-center gap-3">
+    <Loader size="md" />
+    <span className="font-sans text-muted-foreground text-sm">Connecting...</span>
+  </div>
+);
 
 export { DisconnectedState, LoadingState };
