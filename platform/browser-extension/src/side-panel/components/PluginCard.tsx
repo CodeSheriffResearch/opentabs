@@ -2,7 +2,7 @@
 
 import type { ToolPermission } from '@opentabs-dev/shared';
 import * as AccordionPrimitive from '@radix-ui/react-accordion';
-import { ChevronDown, ShieldQuestionMark } from 'lucide-react';
+import { ChevronDown, ChevronRight, ShieldQuestionMark } from 'lucide-react';
 import type { Dispatch, SetStateAction } from 'react';
 import { useEffect, useRef, useState } from 'react';
 import type { PluginState, WireToolDef } from '../bridge.js';
@@ -142,6 +142,85 @@ const PluginCard = ({
 
   const inactive = plugin.tabState !== 'ready';
 
+  const [expandedHiddenGroups, setExpandedHiddenGroups] = useState<Set<string>>(new Set());
+
+  const toggleHiddenGroup = (groupKey: string) =>
+    setExpandedHiddenGroups(prev => {
+      const next = new Set(prev);
+      if (next.has(groupKey)) next.delete(groupKey);
+      else next.add(groupKey);
+      return next;
+    });
+
+  const HIDDEN_THRESHOLD = 3;
+
+  const renderToolList = (tools: typeof pluginTools, groupKey: string) => {
+    const enabledTools = tools.filter(t => t.permission !== 'off');
+    const hiddenTools = tools.filter(t => t.permission === 'off');
+    const shouldCollapse = hiddenTools.length >= HIDDEN_THRESHOLD;
+    const isExpanded = expandedHiddenGroups.has(groupKey);
+
+    return (
+      <>
+        {enabledTools.map(tool => (
+          <ToolRow
+            key={tool.name}
+            name={tool.name}
+            displayName={tool.displayName}
+            description={tool.description}
+            summary={tool.summary}
+            icon={tool.icon}
+            permission={tool.permission}
+            active={activeTools.has(`${plugin.name}:${tool.name}`)}
+            muted={inactive}
+            onPermissionChange={handleToolPermissionChange}
+          />
+        ))}
+        {shouldCollapse ? (
+          <>
+            <button
+              type="button"
+              onClick={() => toggleHiddenGroup(groupKey)}
+              className="flex w-full cursor-pointer items-center gap-2 border-border border-b px-3 py-1.5 text-muted-foreground text-xs last:border-b-0 hover:bg-muted/20">
+              <ChevronRight className={`h-3 w-3 transition-transform ${isExpanded ? 'rotate-90' : ''}`} />
+              <span className="font-mono">{hiddenTools.length} hidden</span>
+            </button>
+            {isExpanded &&
+              hiddenTools.map(tool => (
+                <ToolRow
+                  key={tool.name}
+                  name={tool.name}
+                  displayName={tool.displayName}
+                  description={tool.description}
+                  summary={tool.summary}
+                  icon={tool.icon}
+                  permission={tool.permission}
+                  active={activeTools.has(`${plugin.name}:${tool.name}`)}
+                  muted={inactive}
+                  onPermissionChange={handleToolPermissionChange}
+                />
+              ))}
+          </>
+        ) : (
+          hiddenTools.map(tool => (
+            <ToolRow
+              key={tool.name}
+              name={tool.name}
+              displayName={tool.displayName}
+              description={tool.description}
+              summary={tool.summary}
+              icon={tool.icon}
+              permission={tool.permission}
+              active={activeTools.has(`${plugin.name}:${tool.name}`)}
+              muted={inactive}
+              onPermissionChange={handleToolPermissionChange}
+            />
+          ))
+        )}
+      </>
+    );
+  };
+
   return (
     <Accordion.Item
       value={plugin.name}
@@ -237,36 +316,10 @@ const PluginCard = ({
                 <div className="border-border border-b border-l-2 border-l-primary bg-muted/30 px-3 py-1">
                   <span className="font-head text-muted-foreground text-xs uppercase tracking-wider">{group.name}</span>
                 </div>
-                {group.tools.map(tool => (
-                  <ToolRow
-                    key={tool.name}
-                    name={tool.name}
-                    displayName={tool.displayName}
-                    description={tool.description}
-                    summary={tool.summary}
-                    icon={tool.icon}
-                    permission={tool.permission}
-                    active={activeTools.has(`${plugin.name}:${tool.name}`)}
-                    muted={inactive}
-                    onPermissionChange={handleToolPermissionChange}
-                  />
-                ))}
+                {renderToolList(group.tools, group.name)}
               </div>
             ))
-          : visibleTools.map(tool => (
-              <ToolRow
-                key={tool.name}
-                name={tool.name}
-                displayName={tool.displayName}
-                description={tool.description}
-                summary={tool.summary}
-                icon={tool.icon}
-                permission={tool.permission}
-                active={activeTools.has(`${plugin.name}:${tool.name}`)}
-                muted={inactive}
-                onPermissionChange={handleToolPermissionChange}
-              />
-            ))}
+          : renderToolList(visibleTools, 'flat')}
       </Accordion.Content>
 
       <Dialog open={pendingChange !== null} onOpenChange={open => !open && setPendingChange(null)}>

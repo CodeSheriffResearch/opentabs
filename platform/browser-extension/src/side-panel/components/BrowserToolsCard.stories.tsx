@@ -298,6 +298,34 @@ const WithServerVersion: Story = {
   render: () => <WithServerVersionDemo />,
 };
 
+const manyDisabledTools: BrowserToolState[] = [
+  { name: 'browser_list_tabs', description: 'List all open browser tabs', permission: 'auto' },
+  { name: 'browser_open_tab', description: 'Open a new browser tab with a URL', permission: 'auto' },
+  { name: 'browser_screenshot_tab', description: 'Capture a screenshot of a tab', permission: 'off' },
+  { name: 'browser_click_element', description: 'Click an element matching a CSS selector', permission: 'off' },
+  { name: 'browser_execute_script', description: 'Execute JavaScript in a tab', permission: 'off' },
+  { name: 'browser_type_text', description: 'Type text into an input element', permission: 'off' },
+  { name: 'browser_scroll_page', description: 'Scroll the page in a direction', permission: 'off' },
+];
+
+const CollapsedHiddenToolsDemo = () => {
+  const [tools, setTools] = useState(manyDisabledTools);
+  const [perm, setPerm] = useState<ToolPermission>('auto');
+  return (
+    <BrowserToolsCard
+      tools={tools}
+      activeTools={new Set()}
+      onToolsChange={updater => setTools(updater)}
+      browserPermission={perm}
+      onBrowserPermissionChange={setPerm}
+    />
+  );
+};
+
+const CollapsedHiddenTools: Story = {
+  render: () => <CollapsedHiddenToolsDemo />,
+};
+
 const SkipPermissionsDemo = () => {
   const [tools, setTools] = useState<BrowserToolState[]>(
     mockBrowserTools.map(t => ({ ...t, permission: 'auto' as const })),
@@ -326,6 +354,7 @@ export {
   WithGroups,
   UngroupedTools,
   MixedGroupAndUngrouped,
+  CollapsedHiddenTools,
   Interactive,
   WithServerVersion,
   SkipPermissions,

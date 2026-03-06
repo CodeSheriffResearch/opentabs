@@ -567,6 +567,148 @@ const SingleGroup: Story = {
   render: () => <SingleGroupDemo />,
 };
 
+const CollapsedHiddenToolsDemo = () => {
+  const [plugins, setPlugins] = useState([
+    mockPlugin({
+      tools: [
+        {
+          name: 'send_message',
+          displayName: 'Send Message',
+          description: 'Send a message to a channel',
+          icon: 'send',
+          permission: 'auto',
+        },
+        {
+          name: 'list_channels',
+          displayName: 'List Channels',
+          description: 'List all channels',
+          icon: 'list',
+          permission: 'auto',
+        },
+        {
+          name: 'search',
+          displayName: 'Search',
+          description: 'Search messages',
+          icon: 'search',
+          permission: 'off',
+        },
+        {
+          name: 'edit_message',
+          displayName: 'Edit Message',
+          description: 'Edit a message',
+          icon: 'pencil',
+          permission: 'off',
+        },
+        {
+          name: 'delete_message',
+          displayName: 'Delete Message',
+          description: 'Delete a message',
+          icon: 'trash',
+          permission: 'off',
+        },
+        {
+          name: 'pin_message',
+          displayName: 'Pin Message',
+          description: 'Pin a message to a channel',
+          icon: 'pin',
+          permission: 'off',
+        },
+      ],
+    }),
+  ]);
+  const plugin = plugins[0];
+  if (!plugin) return null;
+  return <PluginCard plugin={plugin} activeTools={new Set()} setPlugins={setPlugins} />;
+};
+
+const CollapsedHiddenTools: Story = {
+  render: () => <CollapsedHiddenToolsDemo />,
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    const trigger = canvas.getByText('Slack');
+    await userEvent.click(trigger);
+    await expect(canvas.getByText('4 hidden')).toBeVisible();
+  },
+};
+
+const CollapsedHiddenToolsGroupedDemo = () => {
+  const [plugins, setPlugins] = useState([
+    mockPlugin({
+      tools: [
+        {
+          name: 'send_message',
+          displayName: 'Send Message',
+          description: 'Send a message',
+          icon: 'send',
+          permission: 'auto',
+          group: 'Messages',
+        },
+        {
+          name: 'read_messages',
+          displayName: 'Read Messages',
+          description: 'Read messages',
+          icon: 'message-square',
+          permission: 'auto',
+          group: 'Messages',
+        },
+        {
+          name: 'edit_message',
+          displayName: 'Edit Message',
+          description: 'Edit a message',
+          icon: 'pencil',
+          permission: 'off',
+          group: 'Messages',
+        },
+        {
+          name: 'delete_message',
+          displayName: 'Delete Message',
+          description: 'Delete a message',
+          icon: 'trash',
+          permission: 'off',
+          group: 'Messages',
+        },
+        {
+          name: 'pin_message',
+          displayName: 'Pin Message',
+          description: 'Pin a message',
+          icon: 'pin',
+          permission: 'off',
+          group: 'Messages',
+        },
+        {
+          name: 'list_channels',
+          displayName: 'List Channels',
+          description: 'List channels',
+          icon: 'list',
+          permission: 'auto',
+          group: 'Channels',
+        },
+        {
+          name: 'create_channel',
+          displayName: 'Create Channel',
+          description: 'Create a channel',
+          icon: 'plus',
+          permission: 'auto',
+          group: 'Channels',
+        },
+      ],
+    }),
+  ]);
+  const plugin = plugins[0];
+  if (!plugin) return null;
+  return <PluginCard plugin={plugin} activeTools={new Set()} setPlugins={setPlugins} />;
+};
+
+const CollapsedHiddenToolsGrouped: Story = {
+  render: () => <CollapsedHiddenToolsGroupedDemo />,
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    const trigger = canvas.getByText('Slack');
+    await userEvent.click(trigger);
+    await expect(canvas.getByText('3 hidden')).toBeVisible();
+  },
+};
+
 const SkipPermissionsDemo = () => {
   const [plugins, setPlugins] = useState([mockPlugin()]);
   const plugin = plugins[0];
@@ -664,6 +806,8 @@ export {
   WithGroups,
   NoGroups,
   SingleGroup,
+  CollapsedHiddenTools,
+  CollapsedHiddenToolsGrouped,
   SkipPermissions,
   Reviewed,
   Unreviewed,
