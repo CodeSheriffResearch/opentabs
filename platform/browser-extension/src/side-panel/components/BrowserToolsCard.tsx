@@ -1,6 +1,6 @@
 import type { ToolPermission } from '@opentabs-dev/shared';
 import * as AccordionPrimitive from '@radix-ui/react-accordion';
-import { ChevronDown, ChevronRight } from 'lucide-react';
+import { ChevronDown } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import type { BrowserToolState } from '../bridge.js';
 import { setPluginPermission, setToolPermission } from '../bridge.js';
@@ -115,81 +115,20 @@ const BrowserToolsCard = ({
 
   const toolGroups = groupTools(visibleTools);
 
-  const [expandedHiddenGroups, setExpandedHiddenGroups] = useState<Set<string>>(new Set());
-
-  const toggleHiddenGroup = (groupKey: string) =>
-    setExpandedHiddenGroups(prev => {
-      const next = new Set(prev);
-      if (next.has(groupKey)) next.delete(groupKey);
-      else next.add(groupKey);
-      return next;
-    });
-
-  const HIDDEN_THRESHOLD = 3;
-
-  const renderToolList = (toolList: typeof tools, groupKey: string) => {
-    const enabledTools = toolList.filter(t => t.permission !== 'off');
-    const hiddenTools = toolList.filter(t => t.permission === 'off');
-    const shouldCollapse = hiddenTools.length >= HIDDEN_THRESHOLD;
-    const isExpanded = expandedHiddenGroups.has(groupKey);
-
-    return (
-      <>
-        {enabledTools.map(tool => (
-          <ToolRow
-            key={tool.name}
-            name={tool.name}
-            displayName={toDisplayName(tool.name)}
-            description={tool.description}
-            summary={tool.summary}
-            icon={tool.icon ?? 'globe'}
-            permission={tool.permission}
-            active={activeTools.has(`browser:${tool.name}`)}
-            onPermissionChange={handleToolPermissionChange}
-          />
-        ))}
-        {shouldCollapse ? (
-          <>
-            <button
-              type="button"
-              onClick={() => toggleHiddenGroup(groupKey)}
-              className="flex w-full cursor-pointer items-center gap-2 border-border border-b px-3 py-1.5 text-muted-foreground text-xs last:border-b-0 hover:bg-muted/20">
-              <ChevronRight className={`h-3 w-3 transition-transform ${isExpanded ? 'rotate-90' : ''}`} />
-              <span className="font-mono">{hiddenTools.length} hidden</span>
-            </button>
-            {isExpanded &&
-              hiddenTools.map(tool => (
-                <ToolRow
-                  key={tool.name}
-                  name={tool.name}
-                  displayName={toDisplayName(tool.name)}
-                  description={tool.description}
-                  summary={tool.summary}
-                  icon={tool.icon ?? 'globe'}
-                  permission={tool.permission}
-                  active={activeTools.has(`browser:${tool.name}`)}
-                  onPermissionChange={handleToolPermissionChange}
-                />
-              ))}
-          </>
-        ) : (
-          hiddenTools.map(tool => (
-            <ToolRow
-              key={tool.name}
-              name={tool.name}
-              displayName={toDisplayName(tool.name)}
-              description={tool.description}
-              summary={tool.summary}
-              icon={tool.icon ?? 'globe'}
-              permission={tool.permission}
-              active={activeTools.has(`browser:${tool.name}`)}
-              onPermissionChange={handleToolPermissionChange}
-            />
-          ))
-        )}
-      </>
-    );
-  };
+  const renderToolList = (toolList: typeof tools) =>
+    toolList.map(tool => (
+      <ToolRow
+        key={tool.name}
+        name={tool.name}
+        displayName={toDisplayName(tool.name)}
+        description={tool.description}
+        summary={tool.summary}
+        icon={tool.icon ?? 'globe'}
+        permission={tool.permission}
+        active={activeTools.has(`browser:${tool.name}`)}
+        onPermissionChange={handleToolPermissionChange}
+      />
+    ));
 
   return (
     <Accordion.Item value="browser-tools">
@@ -238,10 +177,10 @@ const BrowserToolsCard = ({
                 <div className="border-border border-b border-l-2 border-l-primary bg-muted/30 px-3 py-1">
                   <span className="font-head text-muted-foreground text-xs uppercase tracking-wider">{group.name}</span>
                 </div>
-                {renderToolList(group.tools, group.name)}
+                {renderToolList(group.tools)}
               </div>
             ))
-          : renderToolList(visibleTools, 'flat')}
+          : renderToolList(visibleTools)}
       </Accordion.Content>
     </Accordion.Item>
   );
