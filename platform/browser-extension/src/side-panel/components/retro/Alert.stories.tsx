@@ -2,7 +2,14 @@ import type { Meta, StoryObj } from '@storybook/react';
 import { ThemeGrid } from '../storybook-helpers';
 import { Alert } from './Alert';
 
-const meta: Meta<typeof Alert> = { title: 'Retro/Alert', component: Alert };
+const meta: Meta<typeof Alert> = {
+  title: 'Retro/Alert',
+  component: Alert,
+  argTypes: {
+    variant: { control: 'select', options: ['default', 'solid'] },
+    status: { control: 'select', options: ['error', 'success', 'warning', 'info'] },
+  },
+};
 
 type Story = StoryObj<typeof Alert>;
 
@@ -72,5 +79,35 @@ const ThemePair: Story = {
   ),
 };
 
+const Solid: Story = {
+  render: () => (
+    <Alert variant="solid">
+      <Alert.Title>Solid Variant</Alert.Title>
+      <Alert.Description>This alert uses the solid variant with inverted colors.</Alert.Description>
+    </Alert>
+  ),
+};
+
+const AllVariantsAndStatuses: Story = {
+  render: () => (
+    <div className="flex w-80 flex-col gap-3">
+      <Alert variant="default">
+        <Alert.Title>Default (no status)</Alert.Title>
+        <Alert.Description>Default variant with no status applied.</Alert.Description>
+      </Alert>
+      <Alert variant="solid">
+        <Alert.Title>Solid (no status)</Alert.Title>
+        <Alert.Description>Solid variant with inverted colors.</Alert.Description>
+      </Alert>
+      {(['error', 'success', 'warning', 'info'] as const).map(status => (
+        <Alert key={status} status={status}>
+          <Alert.Title>Default + {status}</Alert.Title>
+          <Alert.Description>Default variant with {status} status.</Alert.Description>
+        </Alert>
+      ))}
+    </div>
+  ),
+};
+
 export default meta;
-export { ErrorStory, Success, Warning, Info, AllStatuses, ThemePair };
+export { ErrorStory, Success, Warning, Info, AllStatuses, ThemePair, Solid, AllVariantsAndStatuses };

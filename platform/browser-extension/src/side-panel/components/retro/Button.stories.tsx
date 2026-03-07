@@ -23,15 +23,57 @@ const Small: Story = { args: { children: 'Small', size: 'sm' } };
 const Large: Story = { args: { children: 'Large', size: 'lg' } };
 const Disabled: Story = { args: { children: 'Disabled', disabled: true } };
 
+const Icon: Story = {
+  render: () => (
+    <div className="flex gap-3">
+      {(['default', 'secondary', 'outline'] as const).map(variant => (
+        <Button key={variant} variant={variant} size="icon">
+          <svg
+            aria-hidden="true"
+            xmlns="http://www.w3.org/2000/svg"
+            width="16"
+            height="16"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2"
+            strokeLinecap="round"
+            strokeLinejoin="round">
+            <path d="M5 12h14" />
+            <path d="m12 5 7 7-7 7" />
+          </svg>
+        </Button>
+      ))}
+    </div>
+  ),
+};
+
 const AllVariants: Story = {
   render: () => (
     <div className="flex flex-col gap-4">
       {(['default', 'secondary', 'outline', 'link', 'ghost'] as const).map(variant => (
         <div key={variant} className="flex items-center gap-3">
           <span className="w-20 font-mono text-muted-foreground text-xs">{variant}</span>
-          {(['sm', 'md', 'lg'] as const).map(size => (
+          {(['sm', 'md', 'lg', 'icon'] as const).map(size => (
             <Button key={size} variant={variant} size={size}>
-              {size}
+              {size === 'icon' ? (
+                <svg
+                  aria-hidden="true"
+                  xmlns="http://www.w3.org/2000/svg"
+                  width="16"
+                  height="16"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                  strokeLinecap="round"
+                  strokeLinejoin="round">
+                  <path d="M5 12h14" />
+                  <path d="m12 5 7 7-7 7" />
+                </svg>
+              ) : (
+                size
+              )}
             </Button>
           ))}
         </div>
@@ -53,4 +95,4 @@ const ThemePair: Story = {
 };
 
 export default meta;
-export { Primary, Secondary, Outline, Link, Ghost, Small, Large, Disabled, AllVariants, ThemePair };
+export { Primary, Secondary, Outline, Link, Ghost, Small, Large, Disabled, Icon, AllVariants, ThemePair };
