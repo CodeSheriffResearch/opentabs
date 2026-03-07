@@ -198,24 +198,35 @@ const injectAdapterFile = async (
 };
 
 /**
- * Collect all unique tab IDs matching the given URL patterns.
+ * Collect all unique tab IDs matching the given URL patterns,
+ * excluding tabs whose URL matches any exclude pattern.
  * Queries each pattern independently and deduplicates by tab ID.
  */
-const queryMatchingTabIds = async (urlPatterns: string[]): Promise<number[]> => {
-  const tabIds = new Set<number>();
+const queryMatchingTabIds = async (urlPatterns: string[], excludePatterns?: string[]): Promise<number[]> => {
+  const seen = new Set<number>();
+  const ids: number[] = [];
   for (const pattern of urlPatterns) {
     try {
       const tabs = await chrome.tabs.query({ url: pattern });
       for (const tab of tabs) {
-        if (tab.id !== undefined) {
-          tabIds.add(tab.id);
+        if (tab.id !== undefined && !seen.has(tab.id)) {
+          if (
+            excludePatterns &&
+            excludePatterns.length > 0 &&
+            tab.url &&
+            urlMatchesPatterns(tab.url, excludePatterns)
+          ) {
+            continue;
+          }
+          seen.add(tab.id);
+          ids.push(tab.id);
         }
       }
     } catch (err) {
       console.warn(`[opentabs] chrome.tabs.query failed for pattern ${pattern}:`, err);
     }
   }
-  return Array.from(tabIds);
+  return ids;
 };
 
 /**
@@ -301,13 +312,14 @@ const injectPluginIntoMatchingTabs = async (
   adapterHash?: string,
   adapterFile?: string,
   skipIfHashMatches?: string,
+  excludePatterns?: string[],
 ): Promise<number[]> => {
   if (!isSafePluginName(pluginName)) {
     console.warn(`[opentabs] Skipping injection for unsafe plugin name: ${pluginName}`);
     return [];
   }
 
-  const tabIds = await queryMatchingTabIds(urlPatterns);
+  const tabIds = await queryMatchingTabIds(urlPatterns, excludePatterns);
 
   // Process all tabs in parallel: check presence + inject
   const results = await Promise.allSettled(
@@ -364,7 +376,9 @@ const injectPluginsIntoTab = async (tabId: number, tabUrl: string): Promise<void
   if (plugins.length === 0) return;
 
   // Filter to plugins whose URL patterns match this tab and have safe names
-  const matching = plugins.filter(p => isSafePluginName(p.name) && urlMatchesPatterns(tabUrl, p.urlPatterns));
+  const matching = plugins.filter(
+    p => isSafePluginName(p.name) && urlMatchesPatterns(tabUrl, p.urlPatterns, p.excludePatterns),
+  );
   if (matching.length === 0) return;
 
   // Check presence for all matching plugins in parallel
@@ -403,13 +417,17 @@ const injectPluginsIntoTab = async (tabId: number, tabUrl: string): Promise<void
  * @param pluginName - The plugin whose adapter should be removed
  * @param urlPatterns - Chrome match patterns identifying which tabs to clean up
  */
-const cleanupAdaptersInMatchingTabs = async (pluginName: string, urlPatterns: string[]): Promise<void> => {
+const cleanupAdaptersInMatchingTabs = async (
+  pluginName: string,
+  urlPatterns: string[],
+  excludePatterns?: string[],
+): Promise<void> => {
   if (!isSafePluginName(pluginName)) {
     console.warn(`[opentabs] Skipping cleanup for unsafe plugin name: ${pluginName}`);
     return;
   }
 
-  const tabIds = await queryMatchingTabIds(urlPatterns);
+  const tabIds = await queryMatchingTabIds(urlPatterns, excludePatterns);
 
   // Run cleanup scripts in parallel across all matching tabs
   await Promise.allSettled(
@@ -471,7 +489,15 @@ const reinjectStoredPlugins = async (): Promise<void> => {
 
   const results = await Promise.allSettled(
     plugins.map(plugin =>
-      injectPluginIntoMatchingTabs(plugin.name, plugin.urlPatterns, false, plugin.adapterHash, plugin.adapterFile),
+      injectPluginIntoMatchingTabs(
+        plugin.name,
+        plugin.urlPatterns,
+        false,
+        plugin.adapterHash,
+        plugin.adapterFile,
+        undefined,
+        plugin.excludePatterns,
+      ),
     ),
   );
   for (let i = 0; i < results.length; i++) {

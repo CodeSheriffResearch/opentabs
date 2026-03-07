@@ -134,7 +134,7 @@ const dispatchWithTabFallback = async (config: TabFallbackConfig): Promise<void>
     // between findAllMatchingTabs() and now.
     try {
       const currentTab = await chrome.tabs.get(tab.id);
-      if (!currentTab.url || !urlMatchesPatterns(currentTab.url, plugin.urlPatterns)) {
+      if (!currentTab.url || !urlMatchesPatterns(currentTab.url, plugin.urlPatterns, plugin.excludePatterns)) {
         firstError ??= { code: JSONRPC_NO_USABLE_TAB, message: 'Tab navigated away from matching URL' };
         continue;
       }
@@ -240,7 +240,7 @@ const dispatchToTargetedTab = async (config: TargetedDispatchConfig): Promise<vo
   }
 
   // 2. Security check: verify the tab's URL matches the plugin's URL patterns
-  if (!tab.url || !urlMatchesPatterns(tab.url, plugin.urlPatterns)) {
+  if (!tab.url || !urlMatchesPatterns(tab.url, plugin.urlPatterns, plugin.excludePatterns)) {
     sendToServer({
       jsonrpc: '2.0',
       error: {

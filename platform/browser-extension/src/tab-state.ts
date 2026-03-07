@@ -426,7 +426,7 @@ const checkTabChanged = async (changedTabId: number, changeInfo: chrome.tabs.OnU
     // have a matching tab and transitions them to 'closed'.
     const changedUrl = changeInfo.url;
     affectedPlugins = plugins.filter(p => {
-      if (urlMatchesPatterns(changedUrl, p.urlPatterns)) return true;
+      if (urlMatchesPatterns(changedUrl, p.urlPatterns, p.excludePatterns)) return true;
       const cached = lastKnownState.get(p.name);
       return cached !== undefined && getAggregateState(cached) !== 'closed';
     });
@@ -443,7 +443,7 @@ const checkTabChanged = async (changedTabId: number, changeInfo: chrome.tabs.OnU
     }
     if (!tabUrl) return;
     affectedPlugins = plugins.filter(p => {
-      if (urlMatchesPatterns(tabUrl, p.urlPatterns)) return true;
+      if (urlMatchesPatterns(tabUrl, p.urlPatterns, p.excludePatterns)) return true;
       const cached = lastKnownState.get(p.name);
       return cached !== undefined && getAggregateState(cached) !== 'closed';
     });

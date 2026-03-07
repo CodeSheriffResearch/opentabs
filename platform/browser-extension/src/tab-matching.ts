@@ -1,17 +1,29 @@
 import type { PluginMeta } from './extension-messages.js';
 
 /**
- * Checks if a URL matches any of the given Chrome match patterns.
+ * Checks if a URL matches any of the given Chrome match patterns,
+ * optionally excluding URLs that match any exclude pattern.
  *
  * @param url - The full URL to test (e.g., `https://app.slack.com/client`)
  * @param patterns - Chrome extension match patterns to test against
- * @returns `true` if the URL matches at least one pattern
+ * @param excludePatterns - Optional patterns; if the URL matches any, returns `false`
+ * @returns `true` if the URL matches at least one include pattern and no exclude pattern
  */
-export const urlMatchesPatterns = (url: string, patterns: string[]): boolean => {
+export const urlMatchesPatterns = (url: string, patterns: string[], excludePatterns?: string[]): boolean => {
+  let matched = false;
   for (const pattern of patterns) {
-    if (matchPattern(url, pattern)) return true;
+    if (matchPattern(url, pattern)) {
+      matched = true;
+      break;
+    }
   }
-  return false;
+  if (!matched) return false;
+  if (excludePatterns) {
+    for (const pattern of excludePatterns) {
+      if (matchPattern(url, pattern)) return false;
+    }
+  }
+  return true;
 };
 
 /**
@@ -124,7 +136,14 @@ export const findAllMatchingTabs = async (plugin: PluginMeta): Promise<chrome.ta
     }
   }
 
-  if (allMatches.length <= 1) return allMatches;
+  // Post-filter: remove tabs whose URL matches any exclude pattern
+  const excludePatterns = plugin.excludePatterns ?? [];
+  const filtered =
+    excludePatterns.length > 0
+      ? allMatches.filter(tab => !tab.url || !urlMatchesPatterns(tab.url, excludePatterns))
+      : allMatches;
+
+  if (filtered.length <= 1) return filtered;
 
   // Determine the focused window for ranking
   let focusedWindowId: number | undefined;
@@ -144,7 +163,7 @@ export const findAllMatchingTabs = async (plugin: PluginMeta): Promise<chrome.ta
     return 0;
   };
 
-  return allMatches.slice().sort((a, b) => rank(b) - rank(a));
+  return filtered.slice().sort((a, b) => rank(b) - rank(a));
 };
 
 /**

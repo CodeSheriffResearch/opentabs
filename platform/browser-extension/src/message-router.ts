@@ -308,7 +308,7 @@ const handleSyncFull = async (params: Record<string, unknown>): Promise<void> =>
     await Promise.allSettled(
       removedNames.map(name => {
         const meta = existingMeta[name];
-        if (meta) return cleanupAdaptersInMatchingTabs(name, meta.urlPatterns);
+        if (meta) return cleanupAdaptersInMatchingTabs(name, meta.urlPatterns, meta.excludePatterns);
         return Promise.resolve();
       }),
     );
@@ -340,6 +340,7 @@ const handleSyncFull = async (params: Record<string, unknown>): Promise<void> =>
         meta.adapterHash,
         meta.adapterFile,
         meta.adapterHash,
+        meta.excludePatterns,
       ),
     ),
   );
@@ -454,7 +455,15 @@ const handlePluginUpdate = async (params: Record<string, unknown>): Promise<void
   // Force re-injection so the new IIFE overwrites the stale adapter code
   // already present in matching tabs. Without this, injectPluginIntoMatchingTabs
   // skips tabs where the adapter is already injected, leaving old code running.
-  await injectPluginIntoMatchingTabs(meta.name, meta.urlPatterns, true, meta.adapterHash, meta.adapterFile);
+  await injectPluginIntoMatchingTabs(
+    meta.name,
+    meta.urlPatterns,
+    true,
+    meta.adapterHash,
+    meta.adapterFile,
+    undefined,
+    meta.excludePatterns,
+  );
 
   // Report updated tab state to the server after re-injection so the MCP
   // server's tabMapping reflects the new adapter's readiness immediately.
@@ -535,7 +544,7 @@ const handlePluginUninstall = async (params: Record<string, unknown>, id: string
   const pluginMeta = meta[pluginName];
   if (pluginMeta) {
     try {
-      await cleanupAdaptersInMatchingTabs(pluginName, pluginMeta.urlPatterns);
+      await cleanupAdaptersInMatchingTabs(pluginName, pluginMeta.urlPatterns, pluginMeta.excludePatterns);
     } catch (err: unknown) {
       console.warn(`[opentabs] Failed to clean up adapters for ${pluginName}:`, err);
     }

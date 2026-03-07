@@ -183,6 +183,47 @@ describe('urlMatchesPatterns', () => {
   test('empty patterns list returns false', () => {
     expect(urlMatchesPatterns('https://example.com/path', [])).toBe(false);
   });
+
+  describe('with excludePatterns', () => {
+    test('excludes URL matching an exclude pattern', () => {
+      const patterns = ['*://*.atlassian.net/*'];
+      const excludes = ['*://*.atlassian.net/wiki/*'];
+      expect(urlMatchesPatterns('https://myteam.atlassian.net/wiki/spaces', patterns, excludes)).toBe(false);
+    });
+
+    test('includes URL not matching exclude patterns', () => {
+      const patterns = ['*://*.atlassian.net/*'];
+      const excludes = ['*://*.atlassian.net/wiki/*'];
+      expect(urlMatchesPatterns('https://myteam.atlassian.net/browse/PROJ-123', patterns, excludes)).toBe(true);
+    });
+
+    test('excludePatterns undefined behaves like no excludes', () => {
+      const patterns = ['*://example.com/*'];
+      expect(urlMatchesPatterns('https://example.com/path', patterns, undefined)).toBe(true);
+    });
+
+    test('empty excludePatterns array behaves like no excludes', () => {
+      const patterns = ['*://example.com/*'];
+      expect(urlMatchesPatterns('https://example.com/path', patterns, [])).toBe(true);
+    });
+
+    test('URL not matching include patterns returns false regardless of excludes', () => {
+      const patterns = ['*://example.com/*'];
+      const excludes = ['*://other.com/*'];
+      expect(urlMatchesPatterns('https://unrelated.com/path', patterns, excludes)).toBe(false);
+    });
+
+    test('Jira/Confluence scenario: wiki URL excluded from broad Atlassian pattern', () => {
+      const jiraPatterns = ['*://*.atlassian.net/*'];
+      const jiraExcludes = ['*://*.atlassian.net/wiki/*'];
+      // Jira URL matches
+      expect(urlMatchesPatterns('https://myteam.atlassian.net/browse/PROJ-1', jiraPatterns, jiraExcludes)).toBe(true);
+      // Confluence wiki URL excluded
+      expect(urlMatchesPatterns('https://myteam.atlassian.net/wiki/spaces/TEAM', jiraPatterns, jiraExcludes)).toBe(
+        false,
+      );
+    });
+  });
 });
 
 // ---------------------------------------------------------------------------
@@ -192,18 +233,20 @@ describe('urlMatchesPatterns', () => {
 const FOCUSED_WINDOW_ID = 100;
 const OTHER_WINDOW_ID = 200;
 
-const makeTab = (id: number, opts: { active?: boolean; windowId?: number } = {}): chrome.tabs.Tab =>
+const makeTab = (id: number, opts: { active?: boolean; windowId?: number; url?: string } = {}): chrome.tabs.Tab =>
   ({
     id,
     active: opts.active ?? false,
     windowId: opts.windowId ?? OTHER_WINDOW_ID,
+    ...(opts.url !== undefined ? { url: opts.url } : {}),
   }) as chrome.tabs.Tab;
 
-const makePlugin = (urlPatterns: string[]): PluginMeta => ({
+const makePlugin = (urlPatterns: string[], excludePatterns?: string[]): PluginMeta => ({
   name: 'test-plugin',
   version: '1.0.0',
   displayName: 'Test Plugin',
   urlPatterns,
+  ...(excludePatterns ? { excludePatterns } : {}),
   permission: 'off',
   tools: [
     { name: 'test-tool', displayName: 'Test Tool', description: 'A test tool', icon: 'wrench', permission: 'auto' },
@@ -326,6 +369,50 @@ describe('findAllMatchingTabs — tab title passthrough', () => {
     const result = await findAllMatchingTabs(makePlugin(['*://example.com/*']));
     expect(result).toHaveLength(1);
     expect(result[0]?.title).toBeUndefined();
+  });
+});
+
+describe('findAllMatchingTabs — excludePatterns', () => {
+  test('filters out tabs matching exclude patterns', async () => {
+    const jiraTab = makeTab(1, { url: 'https://myteam.atlassian.net/browse/PROJ-1' });
+    const wikiTab = makeTab(2, { url: 'https://myteam.atlassian.net/wiki/spaces/TEAM' });
+
+    queryResults.set('*://*.atlassian.net/*', [jiraTab, wikiTab]);
+
+    const result = await findAllMatchingTabs(makePlugin(['*://*.atlassian.net/*'], ['*://*.atlassian.net/wiki/*']));
+    expect(result).toHaveLength(1);
+    expect(result[0]?.id).toBe(1);
+  });
+
+  test('returns all tabs when no exclude patterns are set', async () => {
+    const tab1 = makeTab(1, { url: 'https://example.com/a' });
+    const tab2 = makeTab(2, { url: 'https://example.com/b' });
+
+    queryResults.set('*://example.com/*', [tab1, tab2]);
+
+    const result = await findAllMatchingTabs(makePlugin(['*://example.com/*']));
+    expect(result).toHaveLength(2);
+  });
+
+  test('returns empty array when all tabs match exclude patterns', async () => {
+    const wikiTab1 = makeTab(1, { url: 'https://myteam.atlassian.net/wiki/a' });
+    const wikiTab2 = makeTab(2, { url: 'https://myteam.atlassian.net/wiki/b' });
+
+    queryResults.set('*://*.atlassian.net/*', [wikiTab1, wikiTab2]);
+
+    const result = await findAllMatchingTabs(makePlugin(['*://*.atlassian.net/*'], ['*://*.atlassian.net/wiki/*']));
+    expect(result).toEqual([]);
+  });
+
+  test('tabs without URL are kept (not excluded)', async () => {
+    const noUrlTab = makeTab(1);
+    const wikiTab = makeTab(2, { url: 'https://myteam.atlassian.net/wiki/spaces' });
+
+    queryResults.set('*://*.atlassian.net/*', [noUrlTab, wikiTab]);
+
+    const result = await findAllMatchingTabs(makePlugin(['*://*.atlassian.net/*'], ['*://*.atlassian.net/wiki/*']));
+    expect(result).toHaveLength(1);
+    expect(result[0]?.id).toBe(1);
   });
 });
 
