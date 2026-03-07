@@ -360,7 +360,9 @@ Fetch via MCP resources/read for detailed guidance:
 
 - \`build_plugin(url, name?)\` — Workflow for building a new plugin for a web app
 - \`troubleshoot(error?)\` — Guided debugging when tools fail or the platform misbehaves
-- \`setup_plugin(name)\` — Install, configure, review, and test a plugin from npm`;
+- \`setup_plugin(name)\` — Install, configure, review, and test a plugin from npm
+- \`plugin_icon(plugin)\` — Add or update an SVG icon for a plugin
+- \`audit_ai_docs\` — Audit and improve AI-facing documentation (instructions, resources, prompts)`;
 
 /**
  * Create a new low-level MCP Server instance with the OpenTabs server info
