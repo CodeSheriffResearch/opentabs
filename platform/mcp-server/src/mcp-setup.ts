@@ -197,6 +197,7 @@ const registerMcpHandlers = (server: McpServerInstance, state: ServerState): voi
   server.setRequestHandler(ListPromptsRequestSchema, () => ({
     prompts: PROMPTS.map(p => ({
       name: p.name,
+      ...(p.title ? { title: p.title } : {}),
       description: p.description,
       arguments: p.arguments,
     })),
@@ -437,6 +438,27 @@ const notifyToolListChanged = (server: McpServerInstance): void => {
 };
 
 /**
+ * Notify a connected MCP client that tools, prompts, and resources have all changed.
+ * Used after reload events (hot reload, config reload, file watcher changes) where
+ * the server's compiled resources and prompts may have been updated alongside tools.
+ *
+ * This is critical for the self-improvement loop: when an AI agent writes learnings
+ * back to resource/prompt source files and the server rebuilds, connected clients
+ * must be notified so they fetch the updated content on next access.
+ */
+const notifyAllListsChanged = (server: McpServerInstance): void => {
+  server.sendToolListChanged().catch((err: unknown) => {
+    log.warn('Failed to notify tool list change:', err);
+  });
+  server.sendPromptListChanged().catch((err: unknown) => {
+    log.warn('Failed to notify prompt list change:', err);
+  });
+  server.sendResourceListChanged().catch((err: unknown) => {
+    log.warn('Failed to notify resource list change:', err);
+  });
+};
+
+/**
  * Returns the prefix to prepend to a tool's description based on its permission state.
  * - 'off'  → '[Disabled] '
  * - 'ask'  → '[Requires approval] '
@@ -536,4 +558,10 @@ export const checkToolCallable = (state: ServerState, prefixedToolName: string):
 // (tests, reload.ts) can continue importing from mcp-setup.js.
 export { sanitizeOutput } from './mcp-tool-dispatch.js';
 export type { McpServerInstance, RequestHandlerExtra };
-export { createMcpServer, registerMcpHandlers, rebuildCachedBrowserTools, notifyToolListChanged };
+export {
+  createMcpServer,
+  registerMcpHandlers,
+  rebuildCachedBrowserTools,
+  notifyToolListChanged,
+  notifyAllListsChanged,
+};

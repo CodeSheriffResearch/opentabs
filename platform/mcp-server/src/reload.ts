@@ -23,7 +23,7 @@ import { sweepStaleSessions } from './http-routes.js';
 import { pruneStaleBuffers } from './log-buffer.js';
 import { log } from './logger.js';
 import type { McpServerInstance } from './mcp-setup.js';
-import { notifyToolListChanged, rebuildCachedBrowserTools, registerMcpHandlers } from './mcp-setup.js';
+import { notifyAllListsChanged, rebuildCachedBrowserTools, registerMcpHandlers } from './mcp-setup.js';
 import { buildRegistry } from './registry.js';
 import type { CachedBrowserTool, ServerState } from './state.js';
 import { checkForUpdates } from './version-check.js';
@@ -153,7 +153,7 @@ const createFileWatcherCallbacks = (
 ) => {
   const notifyAllClients = (): void => {
     for (const srv of sessionServers) {
-      notifyToolListChanged(srv);
+      notifyAllListsChanged(srv);
     }
   };
 
@@ -465,7 +465,7 @@ const performReload = async (
         `Hot reload: re-registered ${reregistered}/${sessionServers.length} session(s), notifying of list changes`,
       );
       for (const srv of sessionServers) {
-        notifyToolListChanged(srv);
+        notifyAllListsChanged(srv);
       }
     }
 
@@ -520,7 +520,7 @@ const performConfigReload = async (
     // (performReload handles its own notification after handler re-registration,
     // so reloadCore itself does not notify — each caller is responsible.)
     for (const srv of sessionServers) {
-      notifyToolListChanged(srv);
+      notifyAllListsChanged(srv);
     }
 
     log.info(`Config reload complete: ${state.registry.plugins.size} plugin(s) in ${Date.now() - startTs}ms`);

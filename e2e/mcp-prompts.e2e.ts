@@ -79,8 +79,8 @@ test.describe('MCP prompts — prompts/get', () => {
       // Description reflects the target URL
       expect(result.description).toContain('https://app.slack.com');
 
-      // Returns exactly one user message
-      expect(result.messages).toHaveLength(1);
+      // First message is the workflow text, followed by embedded resource messages
+      expect(result.messages.length).toBeGreaterThanOrEqual(1);
       const msg = result.messages[0];
       expect(msg).toBeDefined();
       expect(msg?.role).toBe('user');
@@ -95,6 +95,12 @@ test.describe('MCP prompts — prompts/get', () => {
       expect(text).toContain('Phase 3');
       expect(text).toContain('Phase 4');
       expect(text).toContain('Phase 5');
+
+      // Embedded resources: plugin-development guide and sdk-api reference
+      const embeddedResources = result.messages.filter(
+        (m: { content: { type: string } }) => m.content.type === 'resource',
+      );
+      expect(embeddedResources).toHaveLength(2);
     } finally {
       await client.close();
       await server.kill();
@@ -185,7 +191,7 @@ test.describe('MCP prompts — session lifecycle', () => {
 
       // prompts/get works without any extension connection
       const result = await client.getPrompt('build_plugin', { url: 'https://github.com' });
-      expect(result.messages).toHaveLength(1);
+      expect(result.messages.length).toBeGreaterThanOrEqual(1);
       expect(result.messages[0]?.content.text).toContain('https://github.com');
     } finally {
       await client.close();

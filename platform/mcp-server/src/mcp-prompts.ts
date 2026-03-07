@@ -39,6 +39,7 @@ interface PromptArgument {
 /** A prompt definition for MCP prompts/list */
 export interface PromptDefinition {
   name: string;
+  title?: string;
   description: string;
   arguments: PromptArgument[];
 }
@@ -78,6 +79,7 @@ export interface PromptResult {
 export const PROMPTS: PromptDefinition[] = [
   {
     name: 'build_plugin',
+    title: 'Build a Plugin',
     description:
       'Step-by-step workflow for building a new OpenTabs plugin for a web application. ' +
       'Covers site analysis, auth discovery, API mapping, scaffolding, implementation, and testing. ' +
@@ -97,6 +99,7 @@ export const PROMPTS: PromptDefinition[] = [
   },
   {
     name: 'troubleshoot',
+    title: 'Troubleshoot Issues',
     description:
       'Guided debugging workflow for diagnosing OpenTabs platform issues. ' +
       'Walks through extension connectivity, plugin state, tab readiness, permissions, ' +
@@ -114,6 +117,7 @@ export const PROMPTS: PromptDefinition[] = [
   },
   {
     name: 'setup_plugin',
+    title: 'Set Up a Plugin',
     description:
       'Step-by-step workflow for installing, configuring, reviewing, and testing an existing ' +
       'OpenTabs plugin from npm. Covers search, install, review flow, permission configuration, ' +
@@ -128,6 +132,7 @@ export const PROMPTS: PromptDefinition[] = [
   },
   {
     name: 'plugin_icon',
+    title: 'Add Plugin Icon',
     description:
       'Step-by-step workflow for adding or updating an SVG icon for an OpenTabs plugin. ' +
       'Covers obtaining the brand SVG, preparing it (square viewBox, size constraints), ' +
@@ -142,6 +147,7 @@ export const PROMPTS: PromptDefinition[] = [
   },
   {
     name: 'audit_ai_docs',
+    title: 'Audit AI Documentation',
     description:
       'Audit and improve AI-facing documentation served by the MCP server. ' +
       'Verifies accuracy of instructions, resources, and prompts against the actual codebase. ' +

@@ -35,6 +35,7 @@ interface ResourceAnnotations {
 export interface ResourceDefinition {
   uri: string;
   name: string;
+  title?: string;
   description: string;
   mimeType: string;
   annotations?: ResourceAnnotations;
@@ -51,49 +52,56 @@ export interface ResolvedResource {
 const RESOURCES: ResourceDefinition[] = [
   {
     uri: 'opentabs://guide/quick-start',
-    name: 'Quick Start Guide',
+    name: 'quick-start',
+    title: 'Quick Start Guide',
     description: 'Installation, configuration, and first tool call',
     mimeType: 'text/markdown',
     annotations: { audience: ['user', 'assistant'], priority: 0.7 },
   },
   {
     uri: 'opentabs://guide/plugin-development',
-    name: 'Plugin Development Guide',
+    name: 'plugin-development',
+    title: 'Plugin Development Guide',
     description: 'Full guide to building OpenTabs plugins (SDK, patterns, conventions)',
     mimeType: 'text/markdown',
     annotations: { audience: ['assistant'], priority: 0.9 },
   },
   {
     uri: 'opentabs://guide/troubleshooting',
-    name: 'Troubleshooting Guide',
+    name: 'troubleshooting',
+    title: 'Troubleshooting Guide',
     description: 'Common errors and resolution steps',
     mimeType: 'text/markdown',
     annotations: { audience: ['assistant'], priority: 0.6 },
   },
   {
     uri: 'opentabs://reference/sdk-api',
-    name: 'SDK API Reference',
+    name: 'sdk-api',
+    title: 'SDK API Reference',
     description: 'Plugin SDK API reference (utilities, errors, lifecycle hooks)',
     mimeType: 'text/markdown',
     annotations: { audience: ['assistant'], priority: 0.8 },
   },
   {
     uri: 'opentabs://reference/cli',
-    name: 'CLI Reference',
+    name: 'cli',
+    title: 'CLI Reference',
     description: 'CLI command reference (opentabs, opentabs-plugin)',
     mimeType: 'text/markdown',
     annotations: { audience: ['user', 'assistant'], priority: 0.5 },
   },
   {
     uri: 'opentabs://reference/browser-tools',
-    name: 'Browser Tools Reference',
+    name: 'browser-tools',
+    title: 'Browser Tools Reference',
     description: 'All browser tools organized by category',
     mimeType: 'text/markdown',
     annotations: { audience: ['assistant'], priority: 0.5 },
   },
   {
     uri: 'opentabs://status',
-    name: 'Server Status',
+    name: 'status',
+    title: 'Server Status',
     description: 'Live server state: loaded plugins, extension connectivity, tab states',
     mimeType: 'application/json',
     annotations: { audience: ['assistant'], priority: 0.4 },
@@ -118,6 +126,7 @@ export const getAllResources = (_state: ServerState): ResourceDefinition[] =>
   RESOURCES.map(r => ({
     uri: r.uri,
     name: r.name,
+    ...(r.title ? { title: r.title } : {}),
     description: r.description,
     mimeType: r.mimeType,
     ...(r.annotations ? { annotations: r.annotations } : {}),
