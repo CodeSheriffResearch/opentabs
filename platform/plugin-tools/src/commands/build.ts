@@ -306,6 +306,12 @@ const validatePackageJson = (pkgJson: unknown, projectDir: string): PluginPackag
     if (patternError) throw new Error(patternError);
   }
 
+  // Additional validation: exclude patterns
+  for (const pattern of result.value.opentabs.excludePatterns ?? []) {
+    const patternError = validateUrlPattern(pattern);
+    if (patternError) throw new Error(`Invalid exclude pattern: ${patternError}`);
+  }
+
   return result.value;
 };
 
@@ -329,6 +335,23 @@ const validatePlugin = (plugin: OpenTabsPlugin): string[] => {
     for (const pattern of plugin.urlPatterns) {
       const patternError = validateUrlPattern(pattern);
       if (patternError) errors.push(patternError);
+    }
+  }
+
+  // Exclude patterns (optional)
+  if (plugin.excludePatterns) {
+    for (const pattern of plugin.excludePatterns) {
+      const patternError = validateUrlPattern(pattern);
+      if (patternError) errors.push(`Invalid exclude pattern: ${patternError}`);
+    }
+  }
+
+  // Homepage (optional)
+  if (plugin.homepage !== undefined) {
+    try {
+      new URL(plugin.homepage);
+    } catch {
+      errors.push(`Invalid homepage URL: "${plugin.homepage}" is not a valid URL`);
     }
   }
 
