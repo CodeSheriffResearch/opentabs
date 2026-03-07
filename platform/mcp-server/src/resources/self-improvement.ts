@@ -21,13 +21,18 @@ The OpenTabs MCP server serves AI-facing content through three mechanisms:
 
 These source files are **TypeScript string constants** that compile into the content this server serves. When an AI agent edits them and the server rebuilds, every future AI session receives those edits automatically. This creates a self-improving loop — each session that builds a plugin, fixes an issue, or discovers a gotcha makes every subsequent session better.
 
+## Why You Should Care
+
+Every piece of guidance you received in this session — the \`build_plugin\` workflow, the gotcha list, the auth extraction patterns — was written by a previous AI session that completed a similar task. If that session had not contributed back, you would be starting from scratch. Your contributions have the same impact: the next AI session that builds a plugin will benefit from patterns you discovered today. Failing to contribute means the next session will encounter the same issues you just solved, without your solution.
+
 ## The Contribution Cycle
 
 1. **AI receives context** — on connect, the server pushes instructions. During a task, the AI fetches resources and invokes prompts for detailed guidance.
 2. **AI completes a task** — building a plugin, troubleshooting an issue, configuring the platform.
-3. **AI writes learnings back** — edits the TypeScript source files that compile into resources and prompts.
-4. **Server rebuilds** — the edited files produce updated content.
-5. **Next AI session benefits** — receives the improved instructions, resources, and prompts.
+3. **AI invokes contribute_learnings** — either explicitly or via the mandatory Phase 7 of the \`build_plugin\` workflow.
+4. **AI writes learnings back** — edits the TypeScript source files that compile into resources and prompts.
+5. **Server rebuilds** — the edited files produce updated content.
+6. **Next AI session benefits** — receives the improved instructions, resources, and prompts.
 
 ## File-to-Content Mapping
 
@@ -60,13 +65,23 @@ These source files are **TypeScript string constants** that compile into the con
 
 ## How to Trigger the Contribution Workflow
 
-Invoke the \`contribute_learnings\` prompt:
+There are three ways the contribution workflow is triggered:
+
+1. **build_plugin Phase 7** — the \`build_plugin\` prompt's final phase (Phase 7: Write Learnings Back) explicitly directs you to invoke \`contribute_learnings\` after completing a plugin build. This is mandatory and built into the workflow.
+2. **SERVER_INSTRUCTIONS mandate** — the server instructions sent to every session state that contribution is MANDATORY after completing ANY task, not just plugin builds.
+3. **Proactive invocation** — you can invoke \`contribute_learnings\` at any time during a session if you discover something worth sharing.
+
+To invoke explicitly:
 
 \`\`\`
 contribute_learnings(task: "brief description of what you just did")
 \`\`\`
 
 This prompt provides the full step-by-step workflow for identifying learnings, choosing the right file, writing the content, and verifying the build.
+
+## Verifying Your Contribution Works
+
+After editing a source file and running \`cd platform/mcp-server && npm run build\`, the compiled content updates immediately. Any new MCP session that connects will receive your updated resources and prompts. You can verify by calling \`resources/read\` with the resource URI — it will return your updated content.
 
 ## Why This Matters for Bootstrapping
 
