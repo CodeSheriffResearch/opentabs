@@ -650,6 +650,7 @@ describe('handleConfigSetToolPermission', () => {
     version: '1.0.0',
     displayName: name,
     urlPatterns: ['https://example.com/*'],
+    excludePatterns: [],
     iife: '',
     tools: toolNames.map(toolName => ({
       name: toolName,
@@ -966,6 +967,7 @@ describe('handleConfigSetPluginPermission', () => {
     version: '1.0.0',
     displayName: name,
     urlPatterns: ['https://example.com/*'],
+    excludePatterns: [],
     iife: '',
     tools: toolNames.map(toolName => ({
       name: toolName,

@@ -71,6 +71,7 @@ const makePlugin = (name: string, overrides: Partial<RegisteredPlugin> = {}): Re
   version: '1.0.0',
   displayName: name,
   urlPatterns: [`https://${name}.example.com/*`],
+  excludePatterns: [],
   source: 'local' as const,
   iife: `(function(){})()`,
   tools: [],

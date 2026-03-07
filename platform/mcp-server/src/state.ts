@@ -95,6 +95,8 @@ export interface RegisteredPlugin {
   version: string;
   displayName: string;
   urlPatterns: string[];
+  excludePatterns: string[];
+  homepage?: string;
   iife: string;
   tools: ManifestTool[];
   /** How this plugin was discovered: 'npm' (global auto-discovery) or 'local' (config localPlugins) */

@@ -41,6 +41,8 @@ interface LoadedPlugin {
   readonly displayName: string;
   readonly description: string;
   readonly urlPatterns: string[];
+  readonly excludePatterns: string[];
+  readonly homepage: string | undefined;
   readonly iife: string;
   readonly tools: ManifestTool[];
   readonly source: PluginSource;
@@ -305,6 +307,14 @@ const loadPlugin = async (dir: string, source: PluginSource): Promise<Result<Loa
     }
   }
 
+  // Validate exclude patterns
+  for (const pattern of pkg.opentabs.excludePatterns ?? []) {
+    const patternError = validateUrlPattern(pattern);
+    if (patternError) {
+      return err(`Invalid exclude pattern in ${dir}: ${patternError}`);
+    }
+  }
+
   // Read adapter IIFE
   const iifePath = join(dir, 'dist', ADAPTER_FILENAME);
   if (
@@ -412,6 +422,8 @@ const loadPlugin = async (dir: string, source: PluginSource): Promise<Result<Loa
     displayName: pkg.opentabs.displayName,
     description: pkg.opentabs.description,
     urlPatterns: pkg.opentabs.urlPatterns,
+    excludePatterns: pkg.opentabs.excludePatterns ?? [],
+    homepage: pkg.opentabs.homepage,
     iife,
     tools,
     source,

@@ -114,6 +114,8 @@ const serializePluginForExtension = (
   version: string;
   displayName: string;
   urlPatterns: string[];
+  excludePatterns?: string[];
+  homepage?: string;
   permission: ToolPermission;
   reviewed: boolean;
   iconSvg?: string;
@@ -140,6 +142,8 @@ const serializePluginForExtension = (
     version: plugin.version,
     displayName: plugin.displayName,
     urlPatterns: plugin.urlPatterns,
+    ...(plugin.excludePatterns.length > 0 ? { excludePatterns: plugin.excludePatterns } : {}),
+    ...(plugin.homepage ? { homepage: plugin.homepage } : {}),
     permission: pluginPermission,
     reviewed: pluginConfig?.reviewedVersion === plugin.version,
     ...(plugin.iconSvg ? { iconSvg: plugin.iconSvg } : {}),

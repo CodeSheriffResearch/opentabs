@@ -22,6 +22,7 @@ const makePlugin = (overrides: Partial<RegisteredPlugin> = {}): RegisteredPlugin
   version: '1.0.0',
   displayName: 'Test Plugin',
   urlPatterns: ['http://localhost/*'],
+  excludePatterns: [],
   source: 'local' as const,
   iife: '(function(){})()',
   tools: [],

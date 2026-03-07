@@ -1557,6 +1557,7 @@ const createTestPlugin = (overrides: Partial<RegisteredPlugin> = {}): Registered
   version: '1.2.3',
   displayName: 'Test Plugin',
   urlPatterns: ['https://test.example.com/*'],
+  excludePatterns: [],
   iife: '(function(){\n  console.log("adapter");\n})()',
   tools: [],
   source: 'local' as const,
