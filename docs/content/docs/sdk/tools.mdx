@@ -34,6 +34,7 @@ interface ToolDefinition<
   name: string;
   displayName?: string;
   description: string;
+  summary?: string;
   icon?: LucideIconName;
   group?: string;
   input: TInput;
@@ -67,6 +68,11 @@ interface ToolDefinition<
       <Table.Cell className="font-medium">`description`</Table.Cell>
       <Table.Cell>`string`</Table.Cell>
       <Table.Cell>Description shown to AI agents. Be specific — this is how the agent decides when to use the tool.</Table.Cell>
+    </Table.Row>
+    <Table.Row>
+      <Table.Cell className="font-medium">`summary`</Table.Cell>
+      <Table.Cell>`string`</Table.Cell>
+      <Table.Cell>Short human-readable summary for the UI. Falls back to `description` if omitted. Useful when the full description is too verbose for compact UI layouts.</Table.Cell>
     </Table.Row>
     <Table.Row>
       <Table.Cell className="font-medium">`icon`</Table.Cell>
