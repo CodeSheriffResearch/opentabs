@@ -611,19 +611,52 @@ npm run check        # build + type-check + lint + format:check
 
 **Every command must exit 0.** Fix any failures before proceeding.
 
-### Test with Real Browser Tab
+### Mandatory Tool Verification (every tool, no exceptions)
 
-1. Verify the plugin loaded:
+**The plugin is not done until every tool has been called against the live browser and returned correct results.** This is not optional. Tools that have not been verified against the live API are not production-ready — they may have wrong field mappings, broken endpoints, missing query parameters, or incorrect response parsing that only surfaces at runtime.
 
-   ```
-   opentabs_plugin_list_tabs(plugin: "<name>")
-   ```
+**Step 1: Verify plugin readiness**
 
-   Must show `state: "ready"` and `ready: true` for the matching tab.
+```
+opentabs_plugin_list_tabs(plugin: "<name>")
+```
 
-2. Call each tool and verify it returns expected data. Start with read-only tools (list, get) before write tools (send, create, delete).
+Must show `state: "ready"` and `ready: true` for the matching tab. If the plugin shows `unavailable`, debug `isReady()` before proceeding.
 
-3. Test error cases: invalid IDs, missing permissions, etc.
+**Step 2: Call every read-only tool**
+
+Call every list/get/search tool and verify the response contains real data with correct field mappings. Do not skip tools that return empty arrays — verify the response shape is correct (empty array, not an error). Common bugs caught here:
+- Wrong API endpoint path (404)
+- Missing required query parameters (400)
+- Field names in the mapper don't match the API response (empty strings in output)
+- API returns a wrapper object but the tool expects a raw array
+
+**Step 3: Call every write tool**
+
+For each create/update/delete tool, perform a round-trip test:
+1. Create a resource (e.g., create a secret)
+2. Verify it exists (list the resource, confirm it appears)
+3. Delete/revert the resource
+4. Verify it's gone (list again, confirm removal)
+
+This catches: wrong HTTP method, incorrect request body format, missing Content-Type header, CSRF token requirements.
+
+**Step 4: Test error classification**
+
+Call at least one tool with an invalid resource ID (e.g., `ref: "nonexistent"`) and verify:
+- 404 errors produce `ToolError.notFound`
+- 403 errors produce `ToolError.auth`
+- The error message includes useful context (not just "Internal Server Error")
+
+**Step 5: Fix every failure before declaring done**
+
+If any tool returns wrong data, an unexpected error, or empty fields that should be populated:
+1. Use `browser_execute_script` to call the raw API endpoint and inspect the actual response shape
+2. Fix the mapper, endpoint path, or query parameters
+3. Rebuild (`npm run build`)
+4. Re-test the fixed tool
+
+**A plugin with untested tools is worse than a plugin with fewer tools.** Remove tools you cannot verify rather than shipping them broken.
 
 ---
 
@@ -815,7 +848,7 @@ if (response.status === 401 || response.status === 403)
 
 ## Testing Checklist
 
-After implementing all tools, test these scenarios:
+The mandatory tool verification in Phase 6 covers functional correctness. Additionally, test these lifecycle scenarios:
 
 1. **Fresh page load** — verify `isReady()` returns true and all tools work
 2. **Wait for host app initialization** — verify tools still work after the host app finishes its boot process (some apps delete localStorage, modify globals, etc.)
@@ -867,6 +900,8 @@ When using browser tools during testing (like `browser_navigate_tab`, `browser_e
 29. **Web apps expose programmatic extension APIs on the page** — Complex web apps often expose internal extension/scripting APIs on `window` that provide higher-level operations than their raw XHR endpoints. Gmail exposes `window.gmonkey.get('2.0')` which provides `GmailMainWindow` (with `createNewCompose()`, `getOpenDraftMessages()`) and `GmailDraftMessage` (with `setToEmails()`, `setSubject()`, `setBody()`, `send()`). These APIs use the app's own send infrastructure internally, bypassing undocumented crypto tokens. Discovery approach: use `browser_execute_script` to check `Object.keys(window).filter(k => ...)` for non-standard globals, then explore their methods with `.toString()` to understand calling conventions. Other apps may have similar internal APIs — always check before assuming you need to reverse-engineer the raw protocol.
 30. **gmonkey compose requires visible compose with polling waits** — Gmail's gmonkey `GmailDraftMessage.send()` only works when the compose window is visible and the internal send button state (`draft.ha.Pk.isEnabled()`) is true. A minimized or hidden compose has `Pk.isEnabled() === false` and `send()` silently no-ops. The implementation must: (1) snapshot existing drafts with `WeakSet` before calling `createNewCompose()`, (2) poll `getOpenDraftMessages()` until a new draft appears (by object identity, not index), (3) poll `Pk.isEnabled()` with a 3s timeout to wait for compose initialization, (4) set fields with `setToEmails()`/`setSubject()`/`setBody()`, (5) wait 500ms for Gmail to process field updates, (6) verify recipients were set (Gmail resolves addresses asynchronously), and (7) call `send()`. After sending, poll for the draft to disappear to confirm delivery.
 31. **Internal API endpoints can be deprecated without warning** — Gmail's old action API (`?ui=2&view=up&act=...`) returns 404 ("Temporary Error") on some accounts while the sync API (`/sync/u/N/i/s`) continues to work. When building plugins for web apps with multiple API generations, test each endpoint independently. If an endpoint returns 404 or 403, it may be deprecated for that account or region — remove the tools that depend on it rather than shipping broken tools. Internal API paths like `/i/s`, `/i/fd`, `/i/bv` are compiled/minified route names (not randomly generated per-build) and are stable over months to years, but higher-level action endpoints (`?ui=2&act=...`) are more likely to be deprecated.
+32. **Defensive mappers must use the exact field names from the API, not guessed names** — When writing defensive mappers (`mapFoo`), use the exact field names the API returns, not what you think they should be. A mapper that reads `m?.username` when the API returns `user_name` silently produces empty strings. Always verify field names by calling the raw API with `browser_execute_script` and inspecting `Object.keys(response)` before writing mappers. The same field may have different names across list vs. detail endpoints (e.g., `slug` present in list but absent in detail — fall back to `id`).
+33. **API documentation and actual API behavior diverge** — OpenAPI specs and docs may describe query parameters or response shapes that don't match reality. Always verify each endpoint by calling it from `browser_execute_script` during Phase 3 exploration. Example: a logs endpoint documented as accepting a `source` parameter may actually require `sql` and `iso_timestamp_start` parameters. Trust the live API response, not the documentation.
 
 ---
 
