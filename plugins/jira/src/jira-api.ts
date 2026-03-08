@@ -1,67 +1,38 @@
-import { parseRetryAfterMs, ToolError } from '@opentabs-dev/plugin-sdk';
+import {
+  getAuthCache,
+  getMetaContent,
+  parseRetryAfterMs,
+  setAuthCache,
+  ToolError,
+  waitUntil,
+} from '@opentabs-dev/plugin-sdk';
 
 interface JiraAuth {
   accountId: string;
   cloudId: string;
 }
 
-const getPersistedAuth = (): JiraAuth | null => {
-  try {
-    const ns = (globalThis as Record<string, unknown>).__openTabs as Record<string, unknown> | undefined;
-    const cache = ns?.tokenCache as Record<string, JiraAuth | undefined> | undefined;
-    return cache?.jira ?? null;
-  } catch {
-    return null;
-  }
-};
-
-const setPersistedAuth = (auth: JiraAuth): void => {
-  try {
-    const g = globalThis as Record<string, unknown>;
-    if (!g.__openTabs) g.__openTabs = {};
-    const ns = g.__openTabs as Record<string, unknown>;
-    if (!ns.tokenCache) ns.tokenCache = {};
-    const cache = ns.tokenCache as Record<string, JiraAuth | undefined>;
-    cache.jira = auth;
-  } catch {
-    // Silently ignore persistence failures
-  }
-};
-
 const getAuth = (): JiraAuth | null => {
-  const persisted = getPersistedAuth();
+  const persisted = getAuthCache<JiraAuth>('jira');
   if (persisted) return persisted;
 
-  const accountId = document.querySelector('meta[name="ajs-atlassian-account-id"]')?.getAttribute('content');
-  const cloudId = document.querySelector('meta[name="ajs-cloud-id"]')?.getAttribute('content');
+  const accountId = getMetaContent('ajs-atlassian-account-id');
+  const cloudId = getMetaContent('ajs-cloud-id');
 
   if (!accountId || !cloudId) return null;
 
   const auth: JiraAuth = { accountId, cloudId };
-  setPersistedAuth(auth);
+  setAuthCache('jira', auth);
   return auth;
 };
 
 export const isAuthenticated = (): boolean => getAuth() !== null;
 
 export const waitForAuth = (): Promise<boolean> =>
-  new Promise(resolve => {
-    let elapsed = 0;
-    const interval = 500;
-    const maxWait = 5000;
-    const timer = setInterval(() => {
-      elapsed += interval;
-      if (isAuthenticated()) {
-        clearInterval(timer);
-        resolve(true);
-        return;
-      }
-      if (elapsed >= maxWait) {
-        clearInterval(timer);
-        resolve(false);
-      }
-    }, interval);
-  });
+  waitUntil(() => isAuthenticated(), { interval: 500, timeout: 5000 }).then(
+    () => true,
+    () => false,
+  );
 
 export const api = async <T>(
   endpoint: string,
