@@ -183,9 +183,10 @@ export default function Home() {
               tools, and registers it. Every line of code is yours to review.
             </p>
             <p className="mb-4 text-muted-foreground text-sm leading-relaxed">
-              Behind this is a self-improving skill — a comprehensive guide that teaches AI agents how to build plugins.
-              Every time an agent builds a plugin, it writes what it learned back into the skill. New auth patterns, API
-              discovery techniques, and edge cases all get folded in. The system gets better with every plugin built.
+              Fun fact: many of the plugins in this repo were built by AI in under five minutes. The MCP server ships
+              with site analysis tools, the SDK handles the boilerplate, and a self-improving skill teaches AI agents
+              the entire process. Every time an agent builds a plugin, it writes what it learned back into the skill —
+              so the system gets better with every plugin built.
             </p>
             <p className="mb-6 text-muted-foreground text-sm leading-relaxed">
               We think this is actually safer than installing someone else&apos;s code — your agent wrote it, you can
@@ -225,9 +226,10 @@ export default function Home() {
             Security, for real
           </Text>
           <p className="text-muted-foreground">
-            Your browser sessions are precious. We know that. We&apos;re not going to pretend a browser extension that
-            talks to your web apps is risk-free — but we wanted the defaults to be safe and the controls to be in your
-            hands.
+            We know you&apos;re the kind of person who sets{' '}
+            <code className="bg-inline-code-bg px-1.5 py-0.5 text-sm">DANGEROUSLY_SKIP_PERMISSIONS=1</code> the moment
+            something asks for confirmation. We respect your courage. But your browser sessions are precious, and we
+            still wanted the defaults to be thoughtful — even for the fearless among us.
           </p>
         </div>
         <div className="grid grid-cols-1 gap-6 sm:grid-cols-2">

@@ -73,7 +73,7 @@ This is the part we're most excited about.
 
 You can point your AI agent at any website and it'll build a plugin for you — it analyzes the page, discovers the APIs, scaffolds the code, and registers it. Your agent wrote it, you can read every line, and it runs in your browser. We think that's a pretty good deal.
 
-Behind this is a self-improving skill system. OpenTabs ships with a [build-plugin skill](.claude/skills/build-plugin/) — a comprehensive guide that teaches AI agents how to build production-ready plugins. It covers API discovery, auth patterns, error handling, schema design, testing, and a growing collection of gotchas learned from building every plugin in this repo.
+Fun fact: many of the plugins in this repo were built by AI in under five minutes. The MCP server ships with site analysis tools, the SDK handles all the boilerplate, and there's a comprehensive [build-plugin skill](.claude/skills/build-plugin/) that walks AI agents through the entire process — API discovery, auth extraction, error handling, schema design, testing, and a growing collection of gotchas learned from building every plugin in this repo.
 
 Here's the thing that makes it interesting: **every time an AI builds a plugin, it writes what it learned back into the skill.** New auth patterns, new API discovery techniques, new edge cases — they all get folded in. The skill that teaches AI to build plugins gets better with every plugin built. We'd love your help making it even better. If your agent discovers something new while building a plugin, contribute it back.
 
@@ -95,7 +95,7 @@ Plugins are standalone npm packages. Publish them and anyone can `opentabs plugi
 
 ## Security
 
-Your browser sessions are precious. We know that. Here's how we handle it:
+Look, we know you're the kind of person who sets `DANGEROUSLY_SKIP_PERMISSIONS=1` the moment something asks for confirmation. We respect your courage. But your browser sessions are precious, and we still wanted the defaults to be thoughtful — even for the fearless among us. Here's what we did:
 
 - **Everything starts off.** Every plugin's tools are disabled by default. Not "ask for confirmation" — actually off.
 - **AI-assisted code review.** When you enable a plugin, the system offers to have your AI review the adapter source code first. It checks for data exfiltration, credential access, persistence mechanisms, and scope escalation. You see the findings and decide.
