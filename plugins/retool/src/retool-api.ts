@@ -1,33 +1,17 @@
-import { ToolError, parseRetryAfterMs } from '@opentabs-dev/plugin-sdk';
+import { ToolError, getCookie, parseRetryAfterMs, waitUntil } from '@opentabs-dev/plugin-sdk';
 
 /** Extract XSRF token from the `xsrfToken` cookie. */
-const getXsrfToken = (): string | null => {
-  const match = document.cookie.split('; ').find(c => c.startsWith('xsrfToken='));
-  if (!match) return null;
-  const value = match.split('=')[1];
-  return value ? decodeURIComponent(value) : null;
-};
+const getXsrfToken = (): string | null => getCookie('xsrfToken');
 
 /** Retool uses HttpOnly session cookies. Auth is detected by the xsrfToken cookie. */
 export const isAuthenticated = (): boolean => getXsrfToken() !== null;
 
 /** Poll for authentication readiness (SPA hydration). */
 export const waitForAuth = (): Promise<boolean> =>
-  new Promise(resolve => {
-    let elapsed = 0;
-    const timer = setInterval(() => {
-      elapsed += 500;
-      if (isAuthenticated()) {
-        clearInterval(timer);
-        resolve(true);
-        return;
-      }
-      if (elapsed >= 5000) {
-        clearInterval(timer);
-        resolve(false);
-      }
-    }, 500);
-  });
+  waitUntil(() => isAuthenticated(), { interval: 500, timeout: 5000 }).then(
+    () => true,
+    () => false,
+  );
 
 /** Generic API caller for Retool's internal cookie-based API. */
 export const api = async <T>(
