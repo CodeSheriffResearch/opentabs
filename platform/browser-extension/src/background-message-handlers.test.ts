@@ -50,6 +50,8 @@ const {
   mockAddPendingPluginPermissionUpdate,
   mockRemovePendingPluginPermissionUpdate,
   mockGetPendingConfirmations,
+  mockGetPluginMeta,
+  mockFindAllMatchingTabs,
 } = vi.hoisted(() => ({
   mockSendToServer: vi.fn<(data: unknown) => void>(),
   mockForwardToSidePanel: vi.fn(),
@@ -94,6 +96,10 @@ const {
   mockAddPendingPluginPermissionUpdate: vi.fn(),
   mockRemovePendingPluginPermissionUpdate: vi.fn(),
   mockGetPendingConfirmations: vi.fn<() => unknown[]>(() => []),
+  mockGetPluginMeta: vi.fn<(name: string) => Promise<Record<string, unknown> | undefined>>(() =>
+    Promise.resolve(undefined),
+  ),
+  mockFindAllMatchingTabs: vi.fn<(meta: unknown) => Promise<chrome.tabs.Tab[]>>(() => Promise.resolve([])),
 }));
 
 vi.mock('./messaging.js', () => ({
@@ -124,6 +130,11 @@ vi.mock('./tool-dispatch.js', () => ({
 
 vi.mock('./plugin-storage.js', () => ({
   getAllPluginMeta: mockGetAllPluginMeta,
+  getPluginMeta: mockGetPluginMeta,
+}));
+
+vi.mock('./tab-matching.js', () => ({
+  findAllMatchingTabs: mockFindAllMatchingTabs,
 }));
 
 vi.mock('./server-state-cache.js', () => ({
@@ -157,6 +168,15 @@ const mockStorageSessionGet = vi.fn<() => Promise<Record<string, unknown>>>().mo
 const mockStorageSessionSet = vi.fn<() => Promise<void>>().mockResolvedValue(undefined);
 const mockStorageLocalGet = vi.fn<() => Promise<Record<string, unknown>>>().mockResolvedValue({});
 const mockRuntimeSendMessage = vi.fn(() => Promise.resolve());
+const mockTabsUpdate = vi.fn<(tabId: number, props: Record<string, unknown>) => Promise<chrome.tabs.Tab>>(() =>
+  Promise.resolve({} as chrome.tabs.Tab),
+);
+const mockTabsCreate = vi.fn<(props: Record<string, unknown>) => Promise<chrome.tabs.Tab>>(() =>
+  Promise.resolve({ id: 999 } as chrome.tabs.Tab),
+);
+const mockWindowsUpdate = vi.fn<(windowId: number, props: Record<string, unknown>) => Promise<chrome.windows.Window>>(
+  () => Promise.resolve({} as chrome.windows.Window),
+);
 
 (globalThis as Record<string, unknown>).chrome = {
   storage: {
@@ -171,6 +191,13 @@ const mockRuntimeSendMessage = vi.fn(() => Promise.resolve());
   runtime: {
     sendMessage: mockRuntimeSendMessage,
     id: 'test-extension-id',
+  },
+  tabs: {
+    update: mockTabsUpdate,
+    create: mockTabsCreate,
+  },
+  windows: {
+    update: mockWindowsUpdate,
   },
 };
 
@@ -187,6 +214,7 @@ const {
   handleBgInstallPlugin,
   handleBgRemovePlugin,
   handleBgUpdatePlugin,
+  handleBgOpenPluginTab,
   initBackgroundMessageHandlers,
   restoreWsConnectedState,
 } = await import('./background-message-handlers.js');
@@ -1974,5 +2002,202 @@ describe('EXTENSION_ONLY_TYPES security guard', () => {
 
     // Should return true (accepted and handled asynchronously)
     expect(result).toBe(true);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// handleBgOpenPluginTab (and pickNextTab indirectly)
+// ---------------------------------------------------------------------------
+
+describe('handleBgOpenPluginTab', () => {
+  /** Helper to invoke the handler and capture the response via a promise. */
+  const callOpenPluginTab = (pluginName?: string): Promise<Record<string, unknown>> =>
+    new Promise(resolve => {
+      handleBgOpenPluginTab({ pluginName } as Record<string, unknown>, resolve as (response: unknown) => void);
+    });
+
+  /** Build a minimal PluginMeta-like object accepted by getPluginMeta mock. */
+  const makeMeta = (name: string, homepage?: string) => ({
+    name,
+    homepage,
+    tools: [],
+    urlPatterns: ['*://example.com/*'],
+  });
+
+  /** Build a chrome.tabs.Tab stub with the given id, windowId, and active flag. */
+  const makeTab = (id: number, windowId: number, active = false): chrome.tabs.Tab =>
+    ({ id, windowId, active, url: 'https://example.com' }) as chrome.tabs.Tab;
+
+  test('returns { opened: false } when pluginName is missing', async () => {
+    const result = await callOpenPluginTab(undefined);
+    expect(result).toEqual({ opened: false });
+  });
+
+  test('returns { opened: false } when plugin meta not found', async () => {
+    mockGetPluginMeta.mockResolvedValueOnce(undefined);
+    const result = await callOpenPluginTab('unknown-plugin');
+    expect(result).toEqual({ opened: false });
+  });
+
+  test('with one matching tab: calls chrome.tabs.update and chrome.windows.update', async () => {
+    const meta = makeMeta('single-tab-plugin');
+    mockGetPluginMeta.mockResolvedValueOnce(meta);
+    mockFindAllMatchingTabs.mockResolvedValueOnce([makeTab(10, 1)]);
+
+    const result = await callOpenPluginTab('single-tab-plugin');
+
+    expect(mockTabsUpdate).toHaveBeenCalledWith(10, { active: true });
+    expect(mockWindowsUpdate).toHaveBeenCalledWith(1, { focused: true });
+    expect(result).toEqual({ opened: true, tabId: 10 });
+  });
+
+  test('first call with active tab among matches: focuses a non-active tab', async () => {
+    // Tab 20 is active (the user's current tab), tab 30 is not.
+    // pickNextTab first-click logic picks the first non-active tab.
+    const meta = makeMeta('first-click-plugin');
+    mockGetPluginMeta.mockResolvedValueOnce(meta);
+    mockFindAllMatchingTabs.mockResolvedValueOnce([makeTab(20, 1, true), makeTab(30, 1, false)]);
+
+    const result = await callOpenPluginTab('first-click-plugin');
+
+    // Should focus tab 30 (non-active), not tab 20 (already active)
+    expect(mockTabsUpdate).toHaveBeenCalledWith(30, { active: true });
+    expect(result).toEqual({ opened: true, tabId: 30 });
+  });
+
+  test('with two tabs: cycles between them on repeated calls (not always the same tab)', async () => {
+    // Use a unique plugin name so lastFocusedTabId state doesn't leak from other tests
+    const meta = makeMeta('cycle-2-tabs-plugin');
+    const tab1 = makeTab(100, 1, true);
+    const tab2 = makeTab(200, 1, false);
+
+    // Call 1: first click picks non-active tab (200)
+    mockGetPluginMeta.mockResolvedValueOnce(meta);
+    mockFindAllMatchingTabs.mockResolvedValueOnce([tab1, tab2]);
+    const result1 = await callOpenPluginTab('cycle-2-tabs-plugin');
+    expect(result1).toEqual({ opened: true, tabId: 200 });
+
+    // Call 2: round-robin advances past 200 → wraps to 100
+    mockGetPluginMeta.mockResolvedValueOnce(meta);
+    mockFindAllMatchingTabs.mockResolvedValueOnce([tab1, tab2]);
+    vi.clearAllMocks();
+    // Reset wsConnected state (clearAllMocks doesn't reset module state)
+    const result2 = await callOpenPluginTab('cycle-2-tabs-plugin');
+    expect(result2).toEqual({ opened: true, tabId: 100 });
+
+    // Call 3: round-robin advances past 100 → wraps to 200
+    mockGetPluginMeta.mockResolvedValueOnce(meta);
+    mockFindAllMatchingTabs.mockResolvedValueOnce([tab1, tab2]);
+    const result3 = await callOpenPluginTab('cycle-2-tabs-plugin');
+    expect(result3).toEqual({ opened: true, tabId: 200 });
+  });
+
+  test('pickNextTab wraps around to the first tab after reaching the end', async () => {
+    // Three tabs: 10, 20, 30. First call picks non-active (20 is first non-active).
+    // Subsequent calls cycle: 30, 10, 20, 30, ...
+    const meta = makeMeta('wrap-around-plugin');
+    const tab1 = makeTab(10, 1, true);
+    const tab2 = makeTab(20, 1, false);
+    const tab3 = makeTab(30, 1, false);
+
+    // Call 1: picks first non-active → tab 20
+    mockGetPluginMeta.mockResolvedValueOnce(meta);
+    mockFindAllMatchingTabs.mockResolvedValueOnce([tab1, tab2, tab3]);
+    const r1 = await callOpenPluginTab('wrap-around-plugin');
+    expect(r1).toEqual({ opened: true, tabId: 20 });
+
+    // Call 2: advances past 20 → tab 30
+    mockGetPluginMeta.mockResolvedValueOnce(meta);
+    mockFindAllMatchingTabs.mockResolvedValueOnce([tab1, tab2, tab3]);
+    const r2 = await callOpenPluginTab('wrap-around-plugin');
+    expect(r2).toEqual({ opened: true, tabId: 30 });
+
+    // Call 3: advances past 30 → wraps to tab 10
+    mockGetPluginMeta.mockResolvedValueOnce(meta);
+    mockFindAllMatchingTabs.mockResolvedValueOnce([tab1, tab2, tab3]);
+    const r3 = await callOpenPluginTab('wrap-around-plugin');
+    expect(r3).toEqual({ opened: true, tabId: 10 });
+  });
+
+  test('pickNextTab first call when all tabs are inactive picks the first tab', async () => {
+    const meta = makeMeta('all-inactive-plugin');
+    mockGetPluginMeta.mockResolvedValueOnce(meta);
+    // All tabs are inactive — find(t => !t.tab.active) returns the first one
+    mockFindAllMatchingTabs.mockResolvedValueOnce([makeTab(5, 1, false), makeTab(15, 1, false)]);
+
+    const result = await callOpenPluginTab('all-inactive-plugin');
+    expect(result).toEqual({ opened: true, tabId: 5 });
+  });
+
+  test('pickNextTab first call when only one tab exists and it is active picks that tab', async () => {
+    const meta = makeMeta('single-active-plugin');
+    mockGetPluginMeta.mockResolvedValueOnce(meta);
+    mockFindAllMatchingTabs.mockResolvedValueOnce([makeTab(42, 1, true)]);
+
+    const result = await callOpenPluginTab('single-active-plugin');
+    expect(result).toEqual({ opened: true, tabId: 42 });
+  });
+
+  test('pickNextTab with empty array returns undefined (falls through to homepage)', async () => {
+    const meta = makeMeta('empty-tabs-hp-plugin', 'https://example.com');
+    mockGetPluginMeta.mockResolvedValueOnce(meta);
+    mockFindAllMatchingTabs.mockResolvedValueOnce([]);
+
+    const result = await callOpenPluginTab('empty-tabs-hp-plugin');
+
+    expect(mockTabsUpdate).not.toHaveBeenCalled();
+    expect(mockTabsCreate).toHaveBeenCalledWith({ url: 'https://example.com' });
+    expect(result).toEqual({ opened: true, tabId: 999 });
+  });
+
+  test('handles lastFocusedTabId pointing to a tab that no longer exists (removed mid-cycle)', async () => {
+    // Setup: prime lastFocusedTabId by making a first call with tabs 50, 60
+    const meta = makeMeta('removed-tab-plugin');
+    mockGetPluginMeta.mockResolvedValueOnce(meta);
+    mockFindAllMatchingTabs.mockResolvedValueOnce([makeTab(50, 1, false), makeTab(60, 1, false)]);
+    const r1 = await callOpenPluginTab('removed-tab-plugin');
+    expect(r1).toEqual({ opened: true, tabId: 50 });
+
+    // Now tab 50 is gone. Only tab 60 remains. lastFocusedTabId=50, findIndex returns -1,
+    // so (-1 + 1) % 1 = 0 → picks sorted[0] which is tab 60.
+    mockGetPluginMeta.mockResolvedValueOnce(meta);
+    mockFindAllMatchingTabs.mockResolvedValueOnce([makeTab(60, 1, false)]);
+    const r2 = await callOpenPluginTab('removed-tab-plugin');
+    expect(r2).toEqual({ opened: true, tabId: 60 });
+  });
+
+  test('with no matching tabs and homepage: calls chrome.tabs.create with the homepage URL', async () => {
+    const meta = makeMeta('homepage-plugin', 'https://myhomepage.com');
+    mockGetPluginMeta.mockResolvedValueOnce(meta);
+    mockFindAllMatchingTabs.mockResolvedValueOnce([]);
+
+    const result = await callOpenPluginTab('homepage-plugin');
+
+    expect(mockTabsCreate).toHaveBeenCalledWith({ url: 'https://myhomepage.com' });
+    expect(result).toEqual({ opened: true, tabId: 999 });
+  });
+
+  test('with no matching tabs and no homepage: returns { opened: false }', async () => {
+    const meta = makeMeta('no-homepage-plugin');
+    mockGetPluginMeta.mockResolvedValueOnce(meta);
+    mockFindAllMatchingTabs.mockResolvedValueOnce([]);
+
+    const result = await callOpenPluginTab('no-homepage-plugin');
+
+    expect(mockTabsCreate).not.toHaveBeenCalled();
+    expect(result).toEqual({ opened: false });
+  });
+
+  test('tabs without IDs are filtered out before cycling', async () => {
+    const meta = makeMeta('no-id-tabs-plugin');
+    mockGetPluginMeta.mockResolvedValueOnce(meta);
+    // One tab with id, one without — only the one with id should be considered
+    mockFindAllMatchingTabs.mockResolvedValueOnce([
+      { windowId: 1, active: false, url: 'https://example.com' } as chrome.tabs.Tab,
+      makeTab(77, 1, false),
+    ]);
+
+    const result = await callOpenPluginTab('no-id-tabs-plugin');
+    expect(result).toEqual({ opened: true, tabId: 77 });
   });
 });
