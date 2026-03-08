@@ -60,9 +60,7 @@ const PluginMenu = ({ plugin, onUpdate, onRemove, updating, removing, muted, cla
             </Menu.Item>
           )}
           {plugin.update && <Menu.Separator />}
-          <Menu.Item
-            onSelect={() => setConfirmOpen(true)}
-            className="text-destructive focus:bg-destructive/10 focus:text-destructive data-[highlighted]:bg-destructive/10 data-[highlighted]:text-destructive">
+          <Menu.Item onSelect={() => setConfirmOpen(true)} variant="destructive">
             {removing ? <Loader size="sm" /> : <Trash2 className="h-3.5 w-3.5" />}
             {removeLabel}
           </Menu.Item>

@@ -1,4 +1,8 @@
+import type { ToolPermission } from '@opentabs-dev/shared';
 import type { Meta, StoryObj } from '@storybook/react';
+import { Package } from 'lucide-react';
+import { useState } from 'react';
+import { PermissionSelect } from '../ToolRow';
 import { Button } from './Button';
 import { Menu } from './Menu';
 
@@ -66,13 +70,43 @@ const WithSeparator: Story = {
         <Menu.Item>Edit</Menu.Item>
         <Menu.Item>Duplicate</Menu.Item>
         <Menu.Separator />
-        <Menu.Item className="text-destructive hover:text-destructive data-[highlighted]:text-destructive">
-          Delete
-        </Menu.Item>
+        <Menu.Item variant="destructive">Delete</Menu.Item>
       </Menu.Content>
     </Menu>
   ),
 };
 
+const SideBySideWithSelect: Story = {
+  render: () => {
+    const [perm, setPerm] = useState<ToolPermission>('ask');
+    return (
+      <div className="flex items-start gap-8">
+        <div>
+          <p className="mb-2 text-muted-foreground text-xs">Menu dropdown</p>
+          <Menu>
+            <Menu.Trigger asChild>
+              <Button size="sm">Open Menu</Button>
+            </Menu.Trigger>
+            <Menu.Content>
+              <Menu.Item disabled className="text-muted-foreground">
+                <Package className="h-3.5 w-3.5" />
+                v0.1.0
+              </Menu.Item>
+              <Menu.Separator />
+              <Menu.Item>Update to v0.2.0</Menu.Item>
+              <Menu.Separator />
+              <Menu.Item variant="destructive">Uninstall</Menu.Item>
+            </Menu.Content>
+          </Menu>
+        </div>
+        <div>
+          <p className="mb-2 text-muted-foreground text-xs">Select dropdown</p>
+          <PermissionSelect value={perm} onValueChange={setPerm} disabled={false} ariaLabel="Permission" />
+        </div>
+      </div>
+    );
+  },
+};
+
 export default meta;
-export { Default, Disabled, TopAligned, WithSeparator };
+export { Default, Disabled, SideBySideWithSelect, TopAligned, WithSeparator };
