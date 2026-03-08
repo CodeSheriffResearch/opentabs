@@ -286,40 +286,9 @@ Multiple tabs may match a plugin. Use plugin_list_tabs to discover tabs and IDs.
 - "Too many concurrent dispatches" → Wait briefly and retry
 - Errors with retryAfterMs → Wait the specified duration before retrying
 
-## Contributing Learnings (Mandatory — Do This After Every Task)
+## Workflow Guidance
 
-After completing any task, you **must** invoke \`contribute_learnings\` and write new patterns, gotchas, and techniques back into the MCP server source code. This is not optional — it is the final step of every task.
-
-**Why this matters:** The prompts and resources you receive were written by previous AI sessions. You are reading successful patterns because prior sessions contributed them. Failing to contribute breaks this cycle. Edited source files compile into MCP-served content — every session makes subsequent sessions smarter.
-
-**How to contribute:** Invoke \`contribute_learnings(task?)\` for the full workflow. Rules: check for duplicates first, keep learnings generic, verify the build (\`cd platform/mcp-server && npm run build\`), write ONLY to source files in \`platform/mcp-server/src/\`.
-
-## Workflow Triggers
-
-When the user's request matches a pattern below, you **MUST** invoke the corresponding prompt OR call \`plugin_get_workflow\` before proceeding — do not attempt the task from general knowledge. These workflows contain accumulated patterns, gotchas, and techniques from previous AI sessions that are critical for success. Prompts (slash commands) are preferred, but \`plugin_get_workflow\` returns the same content as a tool call — use it if prompt invocation is not available.
-
-| User intent | Prompt (slash command) | \`plugin_get_workflow\` alternative |
-|---|---|---|
-| Build / create / develop a plugin | \`build_plugin(url, name?)\` | \`plugin_get_workflow(workflow: "build_plugin", url: "...")\` |
-| Troubleshoot a failing tool or platform issue | \`troubleshoot(error?)\` | \`plugin_get_workflow(workflow: "troubleshoot", error: "...")\` |
-| Install / set up / enable / configure a plugin | \`setup_plugin(name)\` | \`plugin_get_workflow(workflow: "setup_plugin", name: "...")\` |
-| Add or update a plugin icon | \`plugin_icon(plugin)\` | — |
-| Audit or improve AI-facing documentation | \`audit_ai_docs\` | — |
-| MANDATORY after completing ANY task | \`contribute_learnings(task?)\` | — |
-
-**Always fetch \`opentabs://status\` first** when diagnosing issues.
-
-## Resources
-
-Fetch via MCP resources/read:
-- \`opentabs://status\` — Live server state, plugins, tabs
-- \`opentabs://guide/quick-start\` — Installation and configuration
-- \`opentabs://guide/plugin-development\` — Building plugins: SDK, patterns
-- \`opentabs://guide/troubleshooting\` — Common errors and fixes
-- \`opentabs://reference/sdk-api\` — Plugin SDK API reference
-- \`opentabs://reference/cli\` — CLI commands reference
-- \`opentabs://reference/browser-tools\` — Browser tools by category
-- \`opentabs://guide/self-improvement\` — Self-improvement loop and contribution rules`;
+For complex tasks like building plugins, troubleshooting issues, setting up plugins, or adding plugin icons, use the \`skill\` tool to load the relevant skill. Skills contain accumulated patterns, step-by-step workflows, and common gotchas from previous sessions.`;
 
 /**
  * Create a new low-level MCP Server instance with the OpenTabs server info
