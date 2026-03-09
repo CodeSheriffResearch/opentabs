@@ -851,6 +851,18 @@ For food ordering, e-commerce, or any transactional service, the standard flow i
 
 ## Auth Patterns
 
+### Auth Detection Sources
+
+| Source | SDK Utility | Example |
+|---|---|---|
+| Non-HttpOnly cookie | `getCookie('token')` | Sentry, Bitbucket, LinkedIn, Reddit |
+| localStorage token | `getLocalStorage('auth')` | Discord, Todoist, Bluesky |
+| Page global | `getPageGlobal('boot_data.token')` | Slack, Cloudflare, Asana, Airtable |
+| Meta tag | `getMetaContent('user-id')` | GitHub, Jira, Confluence, GitLab |
+| localStorage scan | `findLocalStorageEntry(key => key.includes('auth'))` | Teams (MSAL), ClickHouse (Auth0) |
+| Webpack chunks | Custom extraction from `webpackChunk_*` | X (GraphQL operation hashes) |
+| XHR interception | Monkey-patch XMLHttpRequest | ClickUp (WebSocket JWT) |
+
 **SDK utilities for auth detection (use these, never reimplement):**
 - `getCookie(name)` — read non-HttpOnly cookies (CSRF tokens, login indicators)
 - `getLocalStorage(key)` — read localStorage tokens (handles iframe fallback for apps that delete `window.localStorage`)
@@ -907,6 +919,7 @@ Some apps compute cryptographic tokens via obfuscated JS — capture and replay,
 26. SPA client-side flags (e.g., `sessionExpired`, `isStale`) in the Redux store may not reflect actual HTTP session validity. These flags get set during client-side session refresh flows or navigation events, even when the user's cookies and API access are still valid. For `isReady()` auth detection, prefer checking for the presence of loaded user data (e.g., `accountProfile.data` being non-null) over trusting boolean flags that the SPA's session management may toggle independently
 27. Some apps use **BFF orchestration layers** that expose a single POST endpoint per operation (e.g., `/apiproxy/v1/orchestra/<operationId>`) with a body like `{ operationId, variables }`. These combine multiple backend calls into one response. To discover all available operations, search JS bundles for the operation ID constant module — it typically exports a plain object mapping constant names to string IDs (e.g., `{PRICE_ORDER:"price-order", PLACE_ORDER:"submit-order", GET_FAVORITE_PRODUCTS:"get-favorite-products"}`). Create an `orchestraApi(operationId, variables)` helper in the API wrapper alongside the standard REST `api()` helper
 28. Some apps use **gRPC-Web** with protobuf encoding instead of REST/GraphQL. The SPA loads a protobuf library (typically `google-protobuf`) and exposes compiled message classes on a page global (e.g., `window.proto`). Each class has `serializeBinary()`, `deserializeBinary(bytes)`, and `toObject()` methods, plus dynamic setters (`setClusterId`, `setName`). The gRPC-Web transport POSTs to `/<package.Service>/<Method>` with `Content-Type: application/grpc-web+proto` and a 5-byte frame header (flag:1 + big-endian-length:4 + payload:N). Response frames use flag=0 for data and flag=128 for trailers (containing `grpc-status` and `grpc-message`). Map gRPC status codes to ToolError: 3→validation, 5→notFound, 7→auth, 8→rateLimited, 16→auth. Since the message classes are generated code with dynamic setters, create a `setField(msg, setter, value)` helper to avoid lint warnings from `as any` casts. Request classes may live across multiple proto namespaces — search all of them when constructing requests
+29. **Non-standard rate limit headers**: Not all APIs use `Retry-After`. Use `parseRateLimitHeader(headers)` from the SDK which checks: `Retry-After` (standard), `x-rate-limit-reset` (X/Twitter — epoch seconds), `x-ratelimit-reset` (Reddit — seconds until reset), `RateLimit-Reset` (IETF draft — seconds). Always handle rate limits in the API wrapper rather than individual tool handlers
 
 ---
 
