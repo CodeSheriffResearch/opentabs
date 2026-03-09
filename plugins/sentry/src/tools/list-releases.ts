@@ -23,10 +23,11 @@ export const listReleases = defineTool({
   }),
   output: z.object({
     releases: z.array(releaseSchema).describe('List of releases'),
+    cursor: z.string().describe('Pagination cursor for next page, empty if no more results'),
   }),
   handle: async params => {
     const orgSlug = getOrgSlug();
-    const data = await sentryApi<Record<string, unknown>[]>(`/organizations/${orgSlug}/releases/`, {
+    const { data, nextCursor } = await sentryApi<Record<string, unknown>[]>(`/organizations/${orgSlug}/releases/`, {
       query: {
         project: params.project,
         query: params.query,
@@ -36,6 +37,7 @@ export const listReleases = defineTool({
     });
     return {
       releases: (Array.isArray(data) ? data : []).map(r => mapRelease(r)),
+      cursor: nextCursor ?? '',
     };
   },
 });

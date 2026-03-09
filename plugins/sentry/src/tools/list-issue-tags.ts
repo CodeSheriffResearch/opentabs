@@ -30,13 +30,15 @@ export const listIssueTags = defineTool({
   }),
   output: z.object({
     tags: z.array(issueTagSchema).describe('List of tag distributions for the issue'),
+    cursor: z.string().describe('Pagination cursor for next page, empty if no more results'),
   }),
   handle: async params => {
     const orgSlug = getOrgSlug();
-    const data = await sentryApi<Record<string, unknown>[]>(
+    const { data, nextCursor } = await sentryApi<Record<string, unknown>[]>(
       `/organizations/${orgSlug}/issues/${params.issue_id}/tags/`,
     );
     return {
+      cursor: nextCursor ?? '',
       tags: (Array.isArray(data) ? data : []).map(t => {
         const topValues = (t.topValues as Array<Record<string, unknown>>) ?? [];
         return {

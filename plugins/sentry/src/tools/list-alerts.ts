@@ -38,14 +38,19 @@ export const listAlerts = defineTool({
   }),
   output: z.object({
     alerts: z.array(alertRuleSchema).describe('List of alert rules'),
+    cursor: z.string().describe('Pagination cursor for next page, empty if no more results'),
   }),
   handle: async params => {
     const orgSlug = getOrgSlug();
-    const data = await sentryApi<Record<string, unknown>[]>(`/organizations/${orgSlug}/combined-rules/`, {
-      query: { cursor: params.cursor },
-    });
+    const { data, nextCursor } = await sentryApi<Record<string, unknown>[]>(
+      `/organizations/${orgSlug}/combined-rules/`,
+      {
+        query: { cursor: params.cursor },
+      },
+    );
     return {
       alerts: (Array.isArray(data) ? data : []).map(a => mapAlertRule(a)),
+      cursor: nextCursor ?? '',
     };
   },
 });

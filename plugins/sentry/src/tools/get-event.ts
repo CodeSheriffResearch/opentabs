@@ -34,7 +34,7 @@ export const getEvent = defineTool({
   }),
   handle: async params => {
     const orgSlug = getOrgSlug();
-    const data = await sentryApi<Record<string, unknown>>(
+    const { data } = await sentryApi<Record<string, unknown>>(
       `/projects/${orgSlug}/${params.project_slug}/events/${params.event_id}/`,
     );
     const rawTags = (data.tags as Array<Record<string, unknown>>) ?? [];

@@ -39,7 +39,7 @@ export const updateIssue = defineTool({
     if (params.is_subscribed !== undefined) body.isSubscribed = params.is_subscribed;
     if (params.priority !== undefined) body.priority = params.priority;
 
-    const data = await sentryApi<Record<string, unknown>>(`/organizations/${orgSlug}/issues/${params.issue_id}/`, {
+    const { data } = await sentryApi<Record<string, unknown>>(`/organizations/${orgSlug}/issues/${params.issue_id}/`, {
       method: 'PUT',
       body,
     });

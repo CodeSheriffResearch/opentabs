@@ -28,13 +28,15 @@ export const listMonitors = defineTool({
   }),
   output: z.object({
     monitors: z.array(monitorSchema).describe('List of cron monitors'),
+    cursor: z.string().describe('Pagination cursor for next page, empty if no more results'),
   }),
   handle: async params => {
     const orgSlug = getOrgSlug();
-    const data = await sentryApi<Record<string, unknown>[]>(`/organizations/${orgSlug}/monitors/`, {
+    const { data, nextCursor } = await sentryApi<Record<string, unknown>[]>(`/organizations/${orgSlug}/monitors/`, {
       query: { per_page: params.limit, cursor: params.cursor },
     });
     return {
+      cursor: nextCursor ?? '',
       monitors: (Array.isArray(data) ? data : []).map(m => {
         const config = (m.config as Record<string, unknown>) ?? {};
         const project = (m.project as Record<string, unknown>) ?? {};

@@ -17,7 +17,7 @@ export const listOrganizations = defineTool({
     organizations: z.array(organizationSchema).describe('List of organizations'),
   }),
   handle: async params => {
-    const data = await sentryApi<Record<string, unknown>[]>('/organizations/', {
+    const { data } = await sentryApi<Record<string, unknown>[]>('/organizations/', {
       query: { cursor: params.cursor },
     });
     return {

@@ -37,10 +37,11 @@ export const searchIssues = defineTool({
   }),
   output: z.object({
     issues: z.array(issueSchema).describe('List of matching issues'),
+    cursor: z.string().describe('Pagination cursor for next page, empty if no more results'),
   }),
   handle: async params => {
     const orgSlug = getOrgSlug();
-    const data = await sentryApi<Record<string, unknown>[]>(`/organizations/${orgSlug}/issues/`, {
+    const { data, nextCursor } = await sentryApi<Record<string, unknown>[]>(`/organizations/${orgSlug}/issues/`, {
       query: {
         query: params.query ?? 'is:unresolved',
         sort: params.sort,
@@ -52,6 +53,7 @@ export const searchIssues = defineTool({
     });
     return {
       issues: (Array.isArray(data) ? data : []).map(i => mapIssue(i)),
+      cursor: nextCursor ?? '',
     };
   },
 });
