@@ -33,7 +33,7 @@ export const listProjectEnvironments = defineTool({
   }),
   handle: async params => {
     const orgSlug = getOrgSlug();
-    const data = await sentryApi<Record<string, unknown>[]>(
+    const { data } = await sentryApi<Record<string, unknown>[]>(
       `/projects/${orgSlug}/${encodeURIComponent(params.project_slug)}/environments/`,
     );
     return {

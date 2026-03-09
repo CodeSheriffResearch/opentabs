@@ -84,7 +84,22 @@ export const getOrgSlug = (): string => {
   return auth.orgSlug;
 };
 
+// --- Pagination ---
+
+/** Parse the next cursor from the Link header returned by Sentry's paginated APIs. */
+const parseLinkCursor = (headers: Headers): string | undefined => {
+  const link = headers.get('Link');
+  if (!link) return undefined;
+  const nextMatch = link.match(/<[^>]*[?&]cursor=([^&>]+)[^>]*>;\s*rel="next";\s*results="true"/);
+  return nextMatch?.[1] ?? undefined;
+};
+
 // --- API caller ---
+
+export interface SentryApiResult<T> {
+  data: T;
+  nextCursor?: string;
+}
 
 type QueryValue = string | number | boolean | undefined;
 
@@ -95,7 +110,7 @@ export const sentryApi = async <T>(
     body?: Record<string, unknown>;
     query?: Record<string, QueryValue | QueryValue[]>;
   } = {},
-): Promise<T> => {
+): Promise<SentryApiResult<T>> => {
   const auth = getAuth();
   if (!auth) throw ToolError.auth('Not authenticated — please log in to Sentry.');
 
@@ -173,6 +188,7 @@ export const sentryApi = async <T>(
     throw ToolError.internal(`API error (${response.status}): ${endpoint} — ${errorBody}`);
   }
 
-  if (response.status === 204) return {} as T;
-  return (await response.json()) as T;
+  const nextCursor = parseLinkCursor(response.headers);
+  if (response.status === 204) return { data: {} as T, nextCursor };
+  return { data: (await response.json()) as T, nextCursor };
 };

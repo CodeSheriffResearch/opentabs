@@ -19,15 +19,17 @@ export const listIssueEvents = defineTool({
   }),
   output: z.object({
     events: z.array(eventSchema).describe('List of events for the issue'),
+    cursor: z.string().describe('Pagination cursor for next page, empty if no more results'),
   }),
   handle: async params => {
     const orgSlug = getOrgSlug();
-    const data = await sentryApi<Record<string, unknown>[]>(
+    const { data, nextCursor } = await sentryApi<Record<string, unknown>[]>(
       `/organizations/${orgSlug}/issues/${params.issue_id}/events/`,
       { query: { per_page: params.limit, cursor: params.cursor } },
     );
     return {
       events: (Array.isArray(data) ? data : []).map(e => mapEvent(e)),
+      cursor: nextCursor ?? '',
     };
   },
 });

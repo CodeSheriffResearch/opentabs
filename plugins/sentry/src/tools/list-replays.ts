@@ -33,10 +33,11 @@ export const listReplays = defineTool({
   }),
   output: z.object({
     replays: z.array(replaySchema).describe('List of session replays'),
+    cursor: z.string().describe('Pagination cursor for next page, empty if no more results'),
   }),
   handle: async params => {
     const orgSlug = getOrgSlug();
-    const resp = await sentryApi<Record<string, unknown>>(`/organizations/${orgSlug}/replays/`, {
+    const { data: resp, nextCursor } = await sentryApi<Record<string, unknown>>(`/organizations/${orgSlug}/replays/`, {
       query: {
         project: params.project,
         query: params.query,
@@ -46,6 +47,7 @@ export const listReplays = defineTool({
     });
     const data = (resp.data as Array<Record<string, unknown>>) ?? [];
     return {
+      cursor: nextCursor ?? '',
       replays: data.map(r => ({
         id: (r.id as string) ?? '',
         title: (r.title as string) ?? '',

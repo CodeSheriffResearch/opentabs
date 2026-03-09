@@ -60,7 +60,7 @@ export const getRelease = defineTool({
   output: releaseDetailSchema,
   handle: async params => {
     const orgSlug = getOrgSlug();
-    const data = await sentryApi<Record<string, unknown>>(
+    const { data } = await sentryApi<Record<string, unknown>>(
       `/organizations/${orgSlug}/releases/${encodeURIComponent(params.version)}/`,
     );
     return mapReleaseDetail(data);

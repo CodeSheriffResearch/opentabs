@@ -20,7 +20,7 @@ export const createComment = defineTool({
   }),
   handle: async params => {
     const orgSlug = getOrgSlug();
-    const data = await sentryApi<Record<string, unknown>>(
+    const { data } = await sentryApi<Record<string, unknown>>(
       `/organizations/${orgSlug}/issues/${params.issue_id}/comments/`,
       { method: 'POST', body: { text: params.text } },
     );

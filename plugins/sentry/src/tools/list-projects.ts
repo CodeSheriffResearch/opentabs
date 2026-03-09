@@ -17,14 +17,16 @@ export const listProjects = defineTool({
   }),
   output: z.object({
     projects: z.array(projectSchema).describe('List of projects'),
+    cursor: z.string().describe('Pagination cursor for next page, empty if no more results'),
   }),
   handle: async params => {
     const orgSlug = getOrgSlug();
-    const data = await sentryApi<Record<string, unknown>[]>(`/organizations/${orgSlug}/projects/`, {
+    const { data, nextCursor } = await sentryApi<Record<string, unknown>[]>(`/organizations/${orgSlug}/projects/`, {
       query: { cursor: params.cursor },
     });
     return {
       projects: (Array.isArray(data) ? data : []).map(p => mapProject(p)),
+      cursor: nextCursor ?? '',
     };
   },
 });

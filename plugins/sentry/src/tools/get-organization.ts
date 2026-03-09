@@ -16,7 +16,7 @@ export const getOrganization = defineTool({
   }),
   handle: async () => {
     const orgSlug = getOrgSlug();
-    const data = await sentryApi<Record<string, unknown>>(`/organizations/${orgSlug}/`);
+    const { data } = await sentryApi<Record<string, unknown>>(`/organizations/${orgSlug}/`);
     return { organization: mapOrganization(data) };
   },
 });

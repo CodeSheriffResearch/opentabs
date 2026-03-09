@@ -20,7 +20,7 @@ export const getIssue = defineTool({
   }),
   handle: async params => {
     const orgSlug = getOrgSlug();
-    const data = await sentryApi<Record<string, unknown>>(`/organizations/${orgSlug}/issues/${params.issue_id}/`);
+    const { data } = await sentryApi<Record<string, unknown>>(`/organizations/${orgSlug}/issues/${params.issue_id}/`);
     return { issue: mapIssue(data) };
   },
 });

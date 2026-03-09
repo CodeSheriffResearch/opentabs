@@ -40,15 +40,17 @@ export const listComments = defineTool({
   }),
   output: z.object({
     comments: z.array(commentSchema).describe('List of comments on the issue'),
+    cursor: z.string().describe('Pagination cursor for next page, empty if no more results'),
   }),
   handle: async params => {
     const orgSlug = getOrgSlug();
-    const data = await sentryApi<Record<string, unknown>[]>(
+    const { data, nextCursor } = await sentryApi<Record<string, unknown>[]>(
       `/organizations/${orgSlug}/issues/${params.issue_id}/comments/`,
       { query: { cursor: params.cursor } },
     );
     return {
       comments: (Array.isArray(data) ? data : []).map(c => mapComment(c)),
+      cursor: nextCursor ?? '',
     };
   },
 });
