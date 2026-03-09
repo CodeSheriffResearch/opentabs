@@ -327,7 +327,9 @@ If `git push` is rejected because the remote has new commits, `git pull` and the
 
 ### Lockfile Auto-Staging
 
-The pre-commit hook auto-stages any dirty `package-lock.json` file whose sibling `package.json` is being committed. This prevents lockfile drift caused by `npm install` or build side effects. You do not need to manually `git add` lockfiles — the hook handles it.
+The pre-commit hook auto-stages any dirty `package-lock.json` file whose sibling `package.json` is being committed. This prevents lockfile drift caused by `npm install` or build side effects. You do not need to manually `git add` lockfiles when their sibling `package.json` is already staged — the hook handles it.
+
+**Always commit dirty lockfiles.** After builds, `npm install`, or pre-push hooks (which rebuild all plugins), `package-lock.json` files across plugins may be modified. These lockfile changes must always be committed — never leave them as unstaged changes in the working tree. If lockfiles are dirty after a push (because the pre-push hook rebuilt plugins), commit them immediately in a follow-up commit. Lockfile drift left uncommitted causes noise in future diffs and can lead to inconsistent dependency resolution.
 
 ### Concurrent AI Work
 
