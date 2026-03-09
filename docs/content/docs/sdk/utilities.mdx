@@ -10,7 +10,7 @@ The plugin SDK ships utility functions that run in the browser page context, red
 import {
   waitForSelector, waitForSelectorRemoval, querySelectorAll, getTextContent, getMetaContent, observeDOM,
   fetchFromPage, fetchJSON, postJSON, postForm, postFormData, putJSON, patchJSON, deleteJSON,
-  fetchText, buildQueryString, httpStatusToToolError, parseRetryAfterMs,
+  fetchText, buildQueryString, httpStatusToToolError, parseRetryAfterMs, parseRateLimitHeader, stripUndefined,
   getLocalStorage, setLocalStorage, removeLocalStorage,
   getSessionStorage, setSessionStorage, removeSessionStorage,
   getCookie,
@@ -247,9 +247,14 @@ Functions for making HTTP requests using the page's authenticated session. All f
       <Table.Cell>Fetch and return the response body as a string (for diffs, logs, raw content).</Table.Cell>
     </Table.Row>
     <Table.Row>
+      <Table.Cell className="font-medium">`stripUndefined`</Table.Cell>
+      <Table.Cell>—</Table.Cell>
+      <Table.Cell>Filter out keys with `undefined` values from an object. Keeps `null`, `0`, `false`, and empty string.</Table.Cell>
+    </Table.Row>
+    <Table.Row>
       <Table.Cell className="font-medium">`buildQueryString`</Table.Cell>
       <Table.Cell>—</Table.Cell>
-      <Table.Cell>Build a URL query string from a record, filtering out `undefined` values.</Table.Cell>
+      <Table.Cell>Build a URL query string from a record, filtering out `undefined` values. Array values can be `string[]`, `number[]`, or `boolean[]`.</Table.Cell>
     </Table.Row>
     <Table.Row>
       <Table.Cell className="font-medium">`httpStatusToToolError`</Table.Cell>
@@ -260,6 +265,11 @@ Functions for making HTTP requests using the page's authenticated session. All f
       <Table.Cell className="font-medium">`parseRetryAfterMs`</Table.Cell>
       <Table.Cell>—</Table.Cell>
       <Table.Cell>Parse a `Retry-After` header value into milliseconds.</Table.Cell>
+    </Table.Row>
+    <Table.Row>
+      <Table.Cell className="font-medium">`parseRateLimitHeader`</Table.Cell>
+      <Table.Cell>—</Table.Cell>
+      <Table.Cell>Check multiple rate limit headers and normalize to milliseconds.</Table.Cell>
     </Table.Row>
   </Table.Body>
 </Table>
@@ -477,13 +487,31 @@ const diff = await fetchText('/api/pull-requests/42/diff');
 const log = await fetchText('/api/jobs/123/log', { timeout: 60_000 });
 ```
 
+### `stripUndefined(obj)`
+
+Filters out keys with `undefined` values from an object. Keeps `null`, `0`, `false`, and empty string — only `undefined` is removed. Useful for building request bodies with optional fields without manual `if` checks.
+
+```typescript
+function stripUndefined<T extends Record<string, unknown>>(obj: T): Partial<T>;
+```
+
+```typescript
+// Build a request body with optional fields — no manual if-undefined checks needed
+const { task_id, ...updates } = params;
+await postJSON(`/api/tasks/${task_id}`, stripUndefined(updates));
+
+// Only undefined is removed — null, 0, false, and "" are preserved
+stripUndefined({ a: 1, b: undefined, c: null, d: 0, e: false, f: '' });
+// → { a: 1, c: null, d: 0, e: false, f: '' }
+```
+
 ### `buildQueryString(params)`
 
-Builds a URL query string from a record of key-value pairs. Filters out `undefined` values, converts numbers and booleans to strings, and supports arrays (appending multiple values for the same key). Returns the query string without a leading `?`.
+Builds a URL query string from a record of key-value pairs. Filters out `undefined` values, converts numbers and booleans to strings, and supports arrays (appending multiple values for the same key). Array values can be `string[]`, `number[]`, or `boolean[]` — all items are converted to strings. Returns the query string without a leading `?`.
 
 ```typescript
 function buildQueryString(
-  params: Record<string, string | number | boolean | string[] | undefined>,
+  params: Record<string, string | number | boolean | (string | number | boolean)[] | undefined>,
 ): string;
 ```
 
@@ -546,6 +574,26 @@ if (retryAfter) {
   if (ms) await sleep(ms);
 }
 ```
+
+### `parseRateLimitHeader(headers)`
+
+Checks multiple common rate limit header names and normalizes them to milliseconds. Checks headers in order: `Retry-After`, `x-rate-limit-reset` (X/Twitter — Unix epoch in seconds), `x-ratelimit-reset` (Reddit — seconds until reset), and `RateLimit-Reset` (IETF draft — seconds). Returns `undefined` if no rate limit header is found or the value is invalid.
+
+```typescript
+function parseRateLimitHeader(headers: Headers): number | undefined;
+```
+
+```typescript
+// Handle rate limiting from any API — checks all common header formats
+const response = await fetchFromPage('/api/data');
+if (response.status === 429) {
+  const retryMs = parseRateLimitHeader(response.headers);
+  if (retryMs) throw ToolError.rateLimited('Rate limited', retryMs);
+  throw ToolError.rateLimited('Rate limited');
+}
+```
+
+Unlike `parseRetryAfterMs` which parses a single header value, `parseRateLimitHeader` takes the entire `Headers` object and checks multiple header names used by different APIs (Twitter, Reddit, standard IETF).
 
 ---
 

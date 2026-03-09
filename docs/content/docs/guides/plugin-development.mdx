@@ -270,6 +270,22 @@ const result = await postJSON<{ id: string }>('/api/items', {
 if (!result) throw ToolError.internal('No data returned');
 ```
 
+When building request bodies with optional fields, use `stripUndefined` to remove `undefined` keys instead of writing manual `if` checks. It keeps `null`, `0`, `false`, and empty string — only `undefined` is filtered out:
+
+```typescript
+import { postJSON, stripUndefined } from '@opentabs-dev/plugin-sdk';
+
+// Without stripUndefined — verbose conditional assignment
+const body: Record<string, unknown> = { title: params.title };
+if (params.status !== undefined) body.status = params.status;
+if (params.assignee !== undefined) body.assignee = params.assignee;
+await postJSON('/api/items', body);
+
+// With stripUndefined — clean one-liner
+const { item_id, ...updates } = params;
+await postJSON(`/api/items/${item_id}`, stripUndefined(updates));
+```
+
 The SDK also provides `putJSON`, `patchJSON`, and `deleteJSON` for other HTTP methods. `putJSON` and `patchJSON` follow the same signature as `postJSON` — `deleteJSON` omits the body parameter:
 
 ```typescript
