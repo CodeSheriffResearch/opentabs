@@ -157,14 +157,6 @@ export const mapListEntry = (entry: RawListEntry) => ({
   quantity: entry.quantity ?? 1,
 });
 
-// ─── Search result ───────────────────────────────────────────────────────────
-
-export const searchResultSchema = z.object({
-  item_number: z.string().describe('Costco item number'),
-  name: z.string().describe('Product name from search results'),
-  url: z.string().describe('Product page URL'),
-});
-
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
 const stripHtml = (html: string): string => {

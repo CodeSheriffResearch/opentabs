@@ -1,18 +1,17 @@
-import { defineTool } from '@opentabs-dev/plugin-sdk';
+import { ToolError, defineTool } from '@opentabs-dev/plugin-sdk';
 import { z } from 'zod';
-import { extractSearchResults } from '../costco-api.js';
-import { searchResultSchema } from './schemas.js';
+import { fetchProducts } from '../costco-api.js';
+import { mapProduct, productSchema } from './schemas.js';
 
 export const searchProducts = defineTool({
   name: 'search_products',
   displayName: 'Search Products',
   description:
-    'Search for products on Costco. First navigates to the search page, then extracts results from the DOM and fetches full product details via the API. The browser tab will navigate to the search results page.',
-  summary: 'Search for Costco products by keyword',
+    'Search for products on Costco by reading the current search results page and enriching with full product details from the API. The browser must already be on a Costco search results page — call navigate_to_search first to navigate to the search page, wait for it to load, then call this tool to extract and enrich the results.',
+  summary: 'Extract and enrich products from the current search page',
   icon: 'search',
   group: 'Products',
   input: z.object({
-    keyword: z.string().describe('Search keyword (e.g., "laptop", "kirkland olive oil")'),
     max_results: z
       .number()
       .int()
@@ -22,40 +21,54 @@ export const searchProducts = defineTool({
       .describe('Maximum number of results to return (default 10, max 24)'),
   }),
   output: z.object({
-    results: z.array(searchResultSchema).describe('Product search results with item numbers and names'),
-    total_found: z.number().int().describe('Number of products found on the search page'),
+    results: z.array(productSchema).describe('Product search results with full details'),
+    total_found: z.number().int().describe('Number of unique products found on the search page'),
   }),
   handle: async params => {
     const max = params.max_results ?? 10;
-    // Navigate to the search page
-    window.location.href = `https://www.costco.com/s?keyword=${encodeURIComponent(params.keyword)}`;
 
-    // Wait for the page to load and product links to appear
-    await new Promise<void>(resolve => {
-      const check = () => {
-        const links = document.querySelectorAll('a[href*=".product."]');
-        if (links.length > 0) {
-          resolve();
-          return;
-        }
-        setTimeout(check, 500);
-      };
-      setTimeout(check, 2000);
-    });
+    // Extract item numbers from the already-rendered search results DOM
+    const itemNumbers = extractItemNumbersFromDom(max);
+    if (itemNumbers.length === 0) {
+      throw ToolError.validation(
+        'No search results found on the current page. Call navigate_to_search with a keyword first, then retry.',
+      );
+    }
 
-    // Give a bit more time for all results to render
-    await new Promise(r => setTimeout(r, 1000));
-
-    const searchResults = extractSearchResults();
-    const limited = searchResults.slice(0, max);
+    // Enrich with full product data via the GraphQL API
+    const resp = await fetchProducts(itemNumbers);
+    const catalog = resp.data?.products?.catalogData ?? [];
+    const fulfillment = resp.data?.products?.fulfillmentData ?? [];
+    const fulfillmentMap = new Map(fulfillment.map(f => [f.itemNumber ?? '', f]));
 
     return {
-      results: limited.map(r => ({
-        item_number: r.itemNumber,
-        name: r.name,
-        url: r.href,
-      })),
-      total_found: searchResults.length,
+      results: catalog.map(c => mapProduct(c, fulfillmentMap.get(c.itemNumber ?? ''))),
+      total_found: itemNumbers.length,
     };
   },
 });
+
+/** Extract unique product item numbers from the current search results DOM. */
+const extractItemNumbersFromDom = (max: number): string[] => {
+  const links = document.querySelectorAll<HTMLAnchorElement>('a[href*=".product."]');
+  const seen = new Set<string>();
+  const items: string[] = [];
+
+  for (const link of links) {
+    const match = link.href.match(/\.product\.(\d+)\.html/);
+    if (!match) continue;
+
+    const itemNumber = match[1] ?? '';
+    if (!itemNumber || seen.has(itemNumber)) continue;
+
+    // Skip non-product links (e.g., "See Details" buttons)
+    const name = link.textContent?.trim() ?? '';
+    if (!name || name === 'See Details') continue;
+
+    seen.add(itemNumber);
+    items.push(itemNumber);
+    if (items.length >= max) break;
+  }
+
+  return items;
+};

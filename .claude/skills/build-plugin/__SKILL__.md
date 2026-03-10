@@ -97,9 +97,20 @@ The most critical phase. Use browser tools to understand the web app's APIs and 
 
 ### Core Principle: Use Real APIs, Never the DOM
 
-Every tool must use the web app's own APIs — HTTP endpoints, WebSocket channels, or internal RPC. DOM scraping and HTML parsing are **never acceptable** — they are fragile, limited, slow, and produce unreliable plugins that break on any UI change.
+Every tool must use the web app's own APIs — HTTP endpoints, WebSocket channels, or internal RPC. DOM scraping and HTML parsing are **never acceptable** as the primary data source — they are fragile, limited, slow, and produce unreliable plugins that break on any UI change.
 
-**Only acceptable DOM uses:** `isReady()` auth detection, URL hash navigation, last-resort compose flows (rare).
+**Absolute prohibitions:**
+- **Never navigate the page inside a tool handler** (`window.location.href = ...`). Page navigation destroys the adapter's JavaScript execution context — the handler's promises, callbacks, and polling loops are killed mid-flight, causing the tool to time out or return empty. Navigation tools (`navigate_to_*`) work because they return immediately before the navigation takes effect — they do not attempt to read data after navigating. Any tool that needs to both navigate AND extract data is architecturally broken.
+- **Never poll the DOM for data** (`document.querySelectorAll` in a retry loop waiting for elements to appear). This couples the plugin to the site's HTML structure, which changes without warning.
+- **Never use `document.querySelectorAll` to extract product data, search results, or API responses** from rendered HTML. If the data is in the DOM, it came from an API — find that API.
+
+**Only acceptable DOM uses:** `isReady()` auth detection (checking for a logged-in indicator), `window.location.href` assignment in `navigate_to_*` tools (fire-and-forget, no data extraction after), and last-resort compose flows (rare).
+
+**The search pattern:** When a site has no search API (search results are client-side rendered from an SSR shell with no embedded data), the correct approach is:
+1. **Best:** Find the internal search API the SPA calls (network capture during search interaction)
+2. **Good:** Fetch the SSR HTML page via `fetchText`, extract product/item IDs (from `data-*` attributes, inline JSON, or script tags), then batch-enrich via a product details API (the Best Buy pattern — gotcha #42)
+3. **Acceptable:** If the page is fully CSR with no extractable IDs in the HTML, use `navigate_to_search` (fire-and-forget navigation) as a separate tool, then have `search_products` read item IDs from the *already-rendered* DOM and enrich via the product API. The navigation and extraction must be separate tool calls — never combine them in one handler
+4. **Never:** Navigate + poll + scrape in a single tool handler
 
 **If the first round of API discovery only turns up telemetry, analytics, or HTML endpoints, do not give up.** Dig deeper — every non-trivial web app has internal APIs. Try these escalation techniques before concluding a site has no APIs:
 

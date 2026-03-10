@@ -401,34 +401,3 @@ export const geocodeLocation = async (query: string, country: string): Promise<R
   if (resp.status === 204) return [];
   return (await resp.json()) as RawGeoLocation[];
 };
-
-// ─── Search (DOM extraction) ──────────────────────────────────────────────────
-
-export interface SearchProductLink {
-  itemNumber: string;
-  name: string;
-  href: string;
-}
-
-/** Extract product item numbers from the current search results DOM. */
-export const extractSearchResults = (): SearchProductLink[] => {
-  const links = document.querySelectorAll<HTMLAnchorElement>('a[href*=".product."]');
-  const seen = new Set<string>();
-  const results: SearchProductLink[] = [];
-
-  for (const link of links) {
-    const match = link.href.match(/\.product\.(\d+)\.html/);
-    if (!match) continue;
-
-    const itemNumber = match[1] ?? '';
-    if (!itemNumber || seen.has(itemNumber)) continue;
-    seen.add(itemNumber);
-
-    const name = link.textContent?.trim() ?? '';
-    if (!name || name === 'See Details') continue;
-
-    results.push({ itemNumber, name, href: link.href });
-  }
-
-  return results;
-};
