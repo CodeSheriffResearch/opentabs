@@ -11,10 +11,12 @@ import {
   handleTabSyncAll,
   handleToolProgress,
   rejectAllPendingConfirmations,
+  sendToConnection,
+  sendToExtension,
 } from './extension-handlers.js';
 import { clearAllLogs, getLogs } from './log-buffer.js';
-import type { PendingConfirmation, PendingDispatch, RegisteredPlugin } from './state.js';
-import { createState, DISPATCH_TIMEOUT_MS, getAnyConnection, MAX_DISPATCH_TIMEOUT_MS } from './state.js';
+import type { ExtensionConnection, PendingConfirmation, PendingDispatch, RegisteredPlugin } from './state.js';
+import { createState, DISPATCH_TIMEOUT_MS, getMergedTabMapping, MAX_DISPATCH_TIMEOUT_MS } from './state.js';
 
 vi.mock('./plugin-management.js', () => ({
   searchNpmPlugins: vi.fn().mockResolvedValue([]),
@@ -1304,18 +1306,25 @@ describe('handleConfigSetPluginPermission', () => {
 });
 
 describe('handleTabSyncAll — activeNetworkCaptures cleanup', () => {
-  test('removes stale activeNetworkCaptures entries for tabs absent from sync', () => {
+  /** Create a state with a single test connection and return both */
+  const createConnState = () => {
     const state = createState();
-    state.extensionConnections.set('test-conn', {
+    const conn: ExtensionConnection = {
       ws: { send() {}, close() {} },
       connectionId: 'test-conn',
       tabMapping: new Map(),
       activeNetworkCaptures: new Set(),
-    });
+    };
+    state.extensionConnections.set('test-conn', conn);
+    return { state, conn };
+  };
+
+  test('removes stale activeNetworkCaptures entries for tabs absent from sync', () => {
+    const { conn } = createConnState();
     // Tab 1 and 2 had active captures before the sync
-    getAnyConnection(state)!.activeNetworkCaptures.add(1);
-    getAnyConnection(state)!.activeNetworkCaptures.add(2);
-    getAnyConnection(state)!.activeNetworkCaptures.add(3);
+    conn.activeNetworkCaptures.add(1);
+    conn.activeNetworkCaptures.add(2);
+    conn.activeNetworkCaptures.add(3);
 
     // Sync arrives: only tab 2 is still present
     handleTabSyncAll(
@@ -1324,39 +1333,27 @@ describe('handleTabSyncAll — activeNetworkCaptures cleanup', () => {
           slack: { state: 'ready', tabs: [{ tabId: 2, url: 'https://app.slack.com', ready: true }] },
         },
       },
-      getAnyConnection(state),
+      conn,
     );
 
-    expect(getAnyConnection(state)!.activeNetworkCaptures.has(1)).toBe(false);
-    expect(getAnyConnection(state)!.activeNetworkCaptures.has(2)).toBe(true);
-    expect(getAnyConnection(state)!.activeNetworkCaptures.has(3)).toBe(false);
+    expect(conn.activeNetworkCaptures.has(1)).toBe(false);
+    expect(conn.activeNetworkCaptures.has(2)).toBe(true);
+    expect(conn.activeNetworkCaptures.has(3)).toBe(false);
   });
 
   test('clears all activeNetworkCaptures when sync has no tabs', () => {
-    const state = createState();
-    state.extensionConnections.set('test-conn', {
-      ws: { send() {}, close() {} },
-      connectionId: 'test-conn',
-      tabMapping: new Map(),
-      activeNetworkCaptures: new Set(),
-    });
-    getAnyConnection(state)!.activeNetworkCaptures.add(10);
-    getAnyConnection(state)!.activeNetworkCaptures.add(20);
+    const { conn } = createConnState();
+    conn.activeNetworkCaptures.add(10);
+    conn.activeNetworkCaptures.add(20);
 
-    handleTabSyncAll({ tabs: {} }, getAnyConnection(state));
+    handleTabSyncAll({ tabs: {} }, conn);
 
-    expect(getAnyConnection(state)!.activeNetworkCaptures.size).toBe(0);
+    expect(conn.activeNetworkCaptures.size).toBe(0);
   });
 
   test('retains activeNetworkCaptures entries for tabs still present after sync', () => {
-    const state = createState();
-    state.extensionConnections.set('test-conn', {
-      ws: { send() {}, close() {} },
-      connectionId: 'test-conn',
-      tabMapping: new Map(),
-      activeNetworkCaptures: new Set(),
-    });
-    getAnyConnection(state)!.activeNetworkCaptures.add(5);
+    const { conn } = createConnState();
+    conn.activeNetworkCaptures.add(5);
 
     handleTabSyncAll(
       {
@@ -1364,43 +1361,43 @@ describe('handleTabSyncAll — activeNetworkCaptures cleanup', () => {
           slack: { state: 'ready', tabs: [{ tabId: 5, url: 'https://app.slack.com', ready: true }] },
         },
       },
-      getAnyConnection(state),
+      conn,
     );
 
-    expect(getAnyConnection(state)!.activeNetworkCaptures.has(5)).toBe(true);
+    expect(conn.activeNetworkCaptures.has(5)).toBe(true);
   });
 });
 
 describe('handleTabStateChanged — activeNetworkCaptures cleanup', () => {
-  /** Set up a minimal registry with a given plugin name, and ensure a connection exists */
-  const withPlugin = (state: ReturnType<typeof createState>, pluginName: string) => {
+  /** Set up a state with a minimal registry and a single test connection */
+  const withPlugin = (pluginName: string) => {
+    const state = createState();
     state.registry = {
       ...state.registry,
       plugins: new Map([[pluginName, {} as RegisteredPlugin]]) as ReadonlyMap<string, RegisteredPlugin>,
     };
-    if (state.extensionConnections.size === 0) {
-      state.extensionConnections.set('test-conn', {
-        ws: { send() {}, close() {} },
-        connectionId: 'test-conn',
-        tabMapping: new Map(),
-        activeNetworkCaptures: new Set(),
-      });
-    }
+    const conn: ExtensionConnection = {
+      ws: { send() {}, close() {} },
+      connectionId: 'test-conn',
+      tabMapping: new Map(),
+      activeNetworkCaptures: new Set(),
+    };
+    state.extensionConnections.set('test-conn', conn);
+    return { state, conn };
   };
 
   test('removes activeNetworkCaptures entry when a tab is removed from the plugin mapping', () => {
-    const state = createState();
-    withPlugin(state, 'slack');
+    const { state, conn } = withPlugin('slack');
     // Plugin currently has tabs 10 and 11, both with active captures
-    getAnyConnection(state)!.tabMapping.set('slack', {
+    conn.tabMapping.set('slack', {
       state: 'ready',
       tabs: [
         { tabId: 10, url: 'https://app.slack.com', title: 'Slack', ready: true },
         { tabId: 11, url: 'https://app.slack.com', title: 'Slack', ready: true },
       ],
     });
-    getAnyConnection(state)!.activeNetworkCaptures.add(10);
-    getAnyConnection(state)!.activeNetworkCaptures.add(11);
+    conn.activeNetworkCaptures.add(10);
+    conn.activeNetworkCaptures.add(11);
 
     // State change arrives: only tab 10 remains
     handleTabStateChanged(
@@ -1411,35 +1408,33 @@ describe('handleTabStateChanged — activeNetworkCaptures cleanup', () => {
         tabs: [{ tabId: 10, url: 'https://app.slack.com', title: 'Slack', ready: true }],
       },
       undefined,
-      getAnyConnection(state),
+      conn,
     );
 
-    expect(getAnyConnection(state)!.activeNetworkCaptures.has(10)).toBe(true);
-    expect(getAnyConnection(state)!.activeNetworkCaptures.has(11)).toBe(false);
+    expect(conn.activeNetworkCaptures.has(10)).toBe(true);
+    expect(conn.activeNetworkCaptures.has(11)).toBe(false);
   });
 
   test('removes all plugin tab activeNetworkCaptures entries when state changes to closed', () => {
-    const state = createState();
-    withPlugin(state, 'slack');
-    getAnyConnection(state)!.tabMapping.set('slack', {
+    const { state, conn } = withPlugin('slack');
+    conn.tabMapping.set('slack', {
       state: 'ready',
       tabs: [{ tabId: 42, url: 'https://app.slack.com', title: 'Slack', ready: true }],
     });
-    getAnyConnection(state)!.activeNetworkCaptures.add(42);
+    conn.activeNetworkCaptures.add(42);
 
-    handleTabStateChanged(state, { plugin: 'slack', state: 'closed', tabs: [] }, undefined, getAnyConnection(state));
+    handleTabStateChanged(state, { plugin: 'slack', state: 'closed', tabs: [] }, undefined, conn);
 
-    expect(getAnyConnection(state)!.activeNetworkCaptures.has(42)).toBe(false);
+    expect(conn.activeNetworkCaptures.has(42)).toBe(false);
   });
 
   test('does not touch activeNetworkCaptures for tabs that remain in the mapping', () => {
-    const state = createState();
-    withPlugin(state, 'slack');
-    getAnyConnection(state)!.tabMapping.set('slack', {
+    const { state, conn } = withPlugin('slack');
+    conn.tabMapping.set('slack', {
       state: 'ready',
       tabs: [{ tabId: 7, url: 'https://app.slack.com', title: 'Slack', ready: true }],
     });
-    getAnyConnection(state)!.activeNetworkCaptures.add(7);
+    conn.activeNetworkCaptures.add(7);
 
     // Same tab 7 still present
     handleTabStateChanged(
@@ -1450,10 +1445,10 @@ describe('handleTabStateChanged — activeNetworkCaptures cleanup', () => {
         tabs: [{ tabId: 7, url: 'https://app.slack.com', title: 'Slack', ready: true }],
       },
       undefined,
-      getAnyConnection(state),
+      conn,
     );
 
-    expect(getAnyConnection(state)!.activeNetworkCaptures.has(7)).toBe(true);
+    expect(conn.activeNetworkCaptures.has(7)).toBe(true);
   });
 });
 
@@ -1515,5 +1510,199 @@ describe('handlePluginRemove', () => {
 
     const successResponse = sentMessages.find(m => m.id === 'req-2' && m.result !== undefined);
     expect(successResponse).toBeDefined();
+  });
+});
+
+/** Helper to create a mock connection with tracked sent messages */
+const createTrackedConnection = (id: string): { conn: ExtensionConnection; sent: string[] } => {
+  const sent: string[] = [];
+  const conn: ExtensionConnection = {
+    ws: { send: (msg: string) => sent.push(msg), close() {} },
+    connectionId: id,
+    tabMapping: new Map(),
+    activeNetworkCaptures: new Set(),
+  };
+  return { conn, sent };
+};
+
+describe('multi-connection — sendToExtension broadcasts to all', () => {
+  test('broadcasts message to both connections', () => {
+    const state = createState();
+    const { conn: connA, sent: sentA } = createTrackedConnection('conn-a');
+    const { conn: connB, sent: sentB } = createTrackedConnection('conn-b');
+    state.extensionConnections.set('conn-a', connA);
+    state.extensionConnections.set('conn-b', connB);
+
+    const result = sendToExtension(state, { jsonrpc: '2.0', method: 'test.broadcast' });
+
+    expect(result).toBe(true);
+    expect(sentA).toHaveLength(1);
+    expect(sentB).toHaveLength(1);
+    expect(sentA[0]).toBe(sentB[0]); // Same serialized message
+  });
+
+  test('returns false when no connections exist', () => {
+    const state = createState();
+    const result = sendToExtension(state, { jsonrpc: '2.0', method: 'test.broadcast' });
+    expect(result).toBe(false);
+  });
+
+  test('returns true if at least one send succeeds when another throws', () => {
+    const state = createState();
+    const { conn: connA, sent: sentA } = createTrackedConnection('conn-a');
+    const connB: ExtensionConnection = {
+      ws: {
+        send() {
+          throw new Error('WebSocket closed');
+        },
+        close() {},
+      },
+      connectionId: 'conn-b',
+      tabMapping: new Map(),
+      activeNetworkCaptures: new Set(),
+    };
+    state.extensionConnections.set('conn-a', connA);
+    state.extensionConnections.set('conn-b', connB);
+
+    const result = sendToExtension(state, { jsonrpc: '2.0', method: 'test.broadcast' });
+
+    expect(result).toBe(true);
+    expect(sentA).toHaveLength(1);
+  });
+});
+
+describe('multi-connection — sendToConnection sends to specific connection', () => {
+  test('sends to the targeted connection only', () => {
+    const state = createState();
+    const { conn: connA, sent: sentA } = createTrackedConnection('conn-a');
+    const { conn: connB, sent: sentB } = createTrackedConnection('conn-b');
+    state.extensionConnections.set('conn-a', connA);
+    state.extensionConnections.set('conn-b', connB);
+
+    const result = sendToConnection(state, 'conn-b', { jsonrpc: '2.0', method: 'test.targeted' });
+
+    expect(result).toBe(true);
+    expect(sentA).toHaveLength(0);
+    expect(sentB).toHaveLength(1);
+  });
+
+  test('returns false when connection ID does not exist', () => {
+    const state = createState();
+    const result = sendToConnection(state, 'nonexistent', { jsonrpc: '2.0', method: 'test.targeted' });
+    expect(result).toBe(false);
+  });
+});
+
+describe('multi-connection — handleTabSyncAll scopes per-connection', () => {
+  test('tab.syncAll from connection A does not clear connection B tabs', () => {
+    const state = createState();
+    const { conn: connA } = createTrackedConnection('conn-a');
+    const { conn: connB } = createTrackedConnection('conn-b');
+
+    // Connection B already has tabs
+    connB.tabMapping.set('discord', {
+      state: 'ready',
+      tabs: [{ tabId: 100, url: 'https://discord.com', title: 'Discord', ready: true }],
+    });
+
+    state.extensionConnections.set('conn-a', connA);
+    state.extensionConnections.set('conn-b', connB);
+
+    // Sync from connection A: only slack tabs
+    handleTabSyncAll(
+      {
+        tabs: {
+          slack: { state: 'ready', tabs: [{ tabId: 1, url: 'https://app.slack.com', ready: true }] },
+        },
+      },
+      connA,
+    );
+
+    // Connection A's tab mapping is updated
+    expect(connA.tabMapping.size).toBe(1);
+    expect(connA.tabMapping.has('slack')).toBe(true);
+
+    // Connection B's tab mapping is untouched
+    expect(connB.tabMapping.size).toBe(1);
+    expect(connB.tabMapping.has('discord')).toBe(true);
+
+    // Merged view shows both
+    const merged = getMergedTabMapping(state);
+    expect(merged.size).toBe(2);
+    expect(merged.has('slack')).toBe(true);
+    expect(merged.has('discord')).toBe(true);
+  });
+
+  test('tab.syncAll from connection A replacing its own tabs does not affect connection B', () => {
+    const state = createState();
+    const { conn: connA } = createTrackedConnection('conn-a');
+    const { conn: connB } = createTrackedConnection('conn-b');
+
+    // Both connections initially have slack tabs
+    connA.tabMapping.set('slack', {
+      state: 'ready',
+      tabs: [{ tabId: 1, url: 'https://app.slack.com', title: 'Slack 1', ready: true }],
+    });
+    connB.tabMapping.set('slack', {
+      state: 'ready',
+      tabs: [{ tabId: 2, url: 'https://app.slack.com', title: 'Slack 2', ready: true }],
+    });
+
+    state.extensionConnections.set('conn-a', connA);
+    state.extensionConnections.set('conn-b', connB);
+
+    // Sync from connection A: now has no tabs
+    handleTabSyncAll({ tabs: {} }, connA);
+
+    // Connection A's tabs are cleared
+    expect(connA.tabMapping.size).toBe(0);
+
+    // Connection B's tabs are preserved
+    expect(connB.tabMapping.size).toBe(1);
+    expect(connB.tabMapping.get('slack')?.tabs[0]?.tabId).toBe(2);
+  });
+});
+
+describe('multi-connection — handleTabStateChanged scopes per-connection', () => {
+  test('tab.stateChanged updates only the sender connection tabMapping', () => {
+    const state = createState();
+    const { conn: connA } = createTrackedConnection('conn-a');
+    const { conn: connB } = createTrackedConnection('conn-b');
+
+    state.registry = {
+      ...state.registry,
+      plugins: new Map([['slack', {} as RegisteredPlugin]]) as ReadonlyMap<string, RegisteredPlugin>,
+    };
+
+    connA.tabMapping.set('slack', {
+      state: 'ready',
+      tabs: [{ tabId: 10, url: 'https://app.slack.com', title: 'Slack A', ready: true }],
+    });
+    connB.tabMapping.set('slack', {
+      state: 'ready',
+      tabs: [{ tabId: 20, url: 'https://app.slack.com', title: 'Slack B', ready: true }],
+    });
+
+    state.extensionConnections.set('conn-a', connA);
+    state.extensionConnections.set('conn-b', connB);
+
+    // State change from connection A: tab 10 is now unavailable
+    handleTabStateChanged(
+      state,
+      {
+        plugin: 'slack',
+        state: 'unavailable',
+        tabs: [{ tabId: 10, url: 'https://app.slack.com', title: 'Slack A', ready: false }],
+      },
+      undefined,
+      connA,
+    );
+
+    // Connection A's state updated
+    expect(connA.tabMapping.get('slack')?.state).toBe('unavailable');
+
+    // Connection B's state untouched
+    expect(connB.tabMapping.get('slack')?.state).toBe('ready');
+    expect(connB.tabMapping.get('slack')?.tabs[0]?.tabId).toBe(20);
   });
 });

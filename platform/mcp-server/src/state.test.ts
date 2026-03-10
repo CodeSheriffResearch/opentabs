@@ -1,18 +1,38 @@
+import type { WsHandle } from '@opentabs-dev/shared';
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
+import type { ExtensionConnection } from './state.js';
 import {
   consumeReviewToken,
   createState,
   EMPTY_REGISTRY,
+  findConnectionByWs,
   generateReviewToken,
+  getAnyConnection,
   getConfiguredToolPermission,
+  getConnectionForTab,
   getMergedTabMapping,
   getNextRequestId,
   getToolPermission,
+  isExtensionConnected,
   prefixedToolName,
   REVIEW_TOKEN_TTL_MS,
   STATE_SCHEMA_VERSION,
   validateReviewToken,
 } from './state.js';
+
+/** Create a mock WsHandle */
+const createMockWs = (): WsHandle => ({
+  send() {},
+  close() {},
+});
+
+/** Create a mock ExtensionConnection */
+const createMockConnection = (id: string, ws?: WsHandle): ExtensionConnection => ({
+  ws: ws ?? createMockWs(),
+  connectionId: id,
+  tabMapping: new Map(),
+  activeNetworkCaptures: new Set(),
+});
 
 describe('createState', () => {
   test('returns state with correct defaults', () => {
@@ -329,6 +349,174 @@ describe('review tokens', () => {
 
       // Should not throw
       consumeReviewToken(state, 'nonexistent-token');
+    });
+  });
+});
+
+describe('multi-connection helpers', () => {
+  describe('isExtensionConnected', () => {
+    test('returns false when no connections exist', () => {
+      const state = createState();
+      expect(isExtensionConnected(state)).toBe(false);
+    });
+
+    test('returns true when one connection exists', () => {
+      const state = createState();
+      state.extensionConnections.set('conn-1', createMockConnection('conn-1'));
+      expect(isExtensionConnected(state)).toBe(true);
+    });
+
+    test('returns true when multiple connections exist', () => {
+      const state = createState();
+      state.extensionConnections.set('conn-1', createMockConnection('conn-1'));
+      state.extensionConnections.set('conn-2', createMockConnection('conn-2'));
+      expect(isExtensionConnected(state)).toBe(true);
+    });
+  });
+
+  describe('getAnyConnection', () => {
+    test('returns undefined when no connections exist', () => {
+      const state = createState();
+      expect(getAnyConnection(state)).toBeUndefined();
+    });
+
+    test('returns a connection when one exists', () => {
+      const state = createState();
+      const conn = createMockConnection('conn-1');
+      state.extensionConnections.set('conn-1', conn);
+      expect(getAnyConnection(state)).toBe(conn);
+    });
+  });
+
+  describe('getConnectionForTab', () => {
+    test('returns undefined when no connections exist', () => {
+      const state = createState();
+      expect(getConnectionForTab(state, 42)).toBeUndefined();
+    });
+
+    test('returns the connection that owns the tab', () => {
+      const state = createState();
+      const connA = createMockConnection('conn-a');
+      connA.tabMapping.set('slack', {
+        state: 'ready',
+        tabs: [{ tabId: 10, url: 'https://app.slack.com', title: 'Slack', ready: true }],
+      });
+      const connB = createMockConnection('conn-b');
+      connB.tabMapping.set('slack', {
+        state: 'ready',
+        tabs: [{ tabId: 20, url: 'https://app.slack.com', title: 'Slack', ready: true }],
+      });
+      state.extensionConnections.set('conn-a', connA);
+      state.extensionConnections.set('conn-b', connB);
+
+      expect(getConnectionForTab(state, 10)).toBe(connA);
+      expect(getConnectionForTab(state, 20)).toBe(connB);
+    });
+
+    test('returns undefined when tab is not in any connection', () => {
+      const state = createState();
+      const conn = createMockConnection('conn-1');
+      conn.tabMapping.set('slack', {
+        state: 'ready',
+        tabs: [{ tabId: 10, url: 'https://app.slack.com', title: 'Slack', ready: true }],
+      });
+      state.extensionConnections.set('conn-1', conn);
+
+      expect(getConnectionForTab(state, 999)).toBeUndefined();
+    });
+  });
+
+  describe('findConnectionByWs', () => {
+    test('returns undefined when no connections exist', () => {
+      const state = createState();
+      expect(findConnectionByWs(state, createMockWs())).toBeUndefined();
+    });
+
+    test('returns the connection matching the ws by identity', () => {
+      const state = createState();
+      const ws1 = createMockWs();
+      const ws2 = createMockWs();
+      const conn1 = createMockConnection('conn-1', ws1);
+      const conn2 = createMockConnection('conn-2', ws2);
+      state.extensionConnections.set('conn-1', conn1);
+      state.extensionConnections.set('conn-2', conn2);
+
+      expect(findConnectionByWs(state, ws1)).toBe(conn1);
+      expect(findConnectionByWs(state, ws2)).toBe(conn2);
+    });
+
+    test('returns undefined for an unregistered ws', () => {
+      const state = createState();
+      const ws1 = createMockWs();
+      state.extensionConnections.set('conn-1', createMockConnection('conn-1', ws1));
+
+      expect(findConnectionByWs(state, createMockWs())).toBeUndefined();
+    });
+  });
+
+  describe('getMergedTabMapping', () => {
+    test('returns empty map when no connections exist', () => {
+      const state = createState();
+      expect(getMergedTabMapping(state).size).toBe(0);
+    });
+
+    test('returns single connection tabs unchanged', () => {
+      const state = createState();
+      const conn = createMockConnection('conn-1');
+      conn.tabMapping.set('slack', {
+        state: 'ready',
+        tabs: [{ tabId: 1, url: 'https://app.slack.com', title: 'Slack', ready: true }],
+      });
+      state.extensionConnections.set('conn-1', conn);
+
+      const merged = getMergedTabMapping(state);
+      expect(merged.size).toBe(1);
+      expect(merged.get('slack')?.tabs).toHaveLength(1);
+      expect(merged.get('slack')?.tabs[0]?.tabId).toBe(1);
+    });
+
+    test('merges tabs from multiple connections for the same plugin', () => {
+      const state = createState();
+      const connA = createMockConnection('conn-a');
+      connA.tabMapping.set('slack', {
+        state: 'ready',
+        tabs: [{ tabId: 1, url: 'https://app.slack.com', title: 'Slack 1', ready: true }],
+      });
+      const connB = createMockConnection('conn-b');
+      connB.tabMapping.set('slack', {
+        state: 'unavailable',
+        tabs: [{ tabId: 2, url: 'https://app.slack.com', title: 'Slack 2', ready: false }],
+      });
+      state.extensionConnections.set('conn-a', connA);
+      state.extensionConnections.set('conn-b', connB);
+
+      const merged = getMergedTabMapping(state);
+      expect(merged.size).toBe(1);
+      const slackMapping = merged.get('slack');
+      expect(slackMapping?.tabs).toHaveLength(2);
+      // Uses the "most ready" state: ready > unavailable
+      expect(slackMapping?.state).toBe('ready');
+    });
+
+    test('merges different plugins from different connections', () => {
+      const state = createState();
+      const connA = createMockConnection('conn-a');
+      connA.tabMapping.set('slack', {
+        state: 'ready',
+        tabs: [{ tabId: 1, url: 'https://app.slack.com', title: 'Slack', ready: true }],
+      });
+      const connB = createMockConnection('conn-b');
+      connB.tabMapping.set('discord', {
+        state: 'ready',
+        tabs: [{ tabId: 2, url: 'https://discord.com', title: 'Discord', ready: true }],
+      });
+      state.extensionConnections.set('conn-a', connA);
+      state.extensionConnections.set('conn-b', connB);
+
+      const merged = getMergedTabMapping(state);
+      expect(merged.size).toBe(2);
+      expect(merged.has('slack')).toBe(true);
+      expect(merged.has('discord')).toBe(true);
     });
   });
 });

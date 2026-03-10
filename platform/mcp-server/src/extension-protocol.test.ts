@@ -15,14 +15,8 @@ import {
   writeAdapterFile,
 } from './extension-protocol.js';
 import { buildRegistry } from './registry.js';
-import type { ConfirmationDecision, PendingDispatch, RegisteredPlugin } from './state.js';
-import {
-  createState,
-  DISPATCH_TIMEOUT_MS,
-  getAnyConnection,
-  getMergedTabMapping,
-  MAX_DISPATCH_TIMEOUT_MS,
-} from './state.js';
+import type { ConfirmationDecision, ExtensionConnection, PendingDispatch, RegisteredPlugin } from './state.js';
+import { createState, DISPATCH_TIMEOUT_MS, getMergedTabMapping, MAX_DISPATCH_TIMEOUT_MS } from './state.js';
 
 /** Create a mock WsHandle that records sent messages */
 const createMockWs = (): WsHandle & { sent: string[] } => ({
@@ -49,7 +43,7 @@ const parseJson = (
   JSON.parse(text) as { jsonrpc?: string; method?: string; id?: number; error?: { code: number; message: string } };
 
 describe('handleExtensionMessage — ping', () => {
-  test('ping replies with pong on the sender ws, not state.extensionWs', () => {
+  test('ping replies with pong on the sender ws, not the connection ws', () => {
     const state = createState();
     const extensionWs = createMockWs();
     const senderWs = createMockWs();
@@ -69,7 +63,7 @@ describe('handleExtensionMessage — ping', () => {
     expect(extensionWs.sent).toHaveLength(0);
   });
 
-  test('ping falls back to state.extensionWs when no senderWs provided', () => {
+  test('ping falls back to any active connection when no senderWs provided', () => {
     const state = createState();
     const extensionWs = createMockWs();
     state.extensionConnections.set('test-conn', {
@@ -393,13 +387,14 @@ describe('handleExtensionMessage — tab.syncAll', () => {
 
   test('clears previous tabMapping entries on sync', () => {
     const state = createState();
-    state.extensionConnections.set('test-conn', {
+    const conn: ExtensionConnection = {
       ws: createMockWs(),
       connectionId: 'test-conn',
       tabMapping: new Map(),
       activeNetworkCaptures: new Set(),
-    });
-    getAnyConnection(state)!.tabMapping.set('old-plugin', {
+    };
+    state.extensionConnections.set('test-conn', conn);
+    conn.tabMapping.set('old-plugin', {
       state: 'ready',
       tabs: [{ tabId: 1, url: 'https://old.com', title: 'Old', ready: true }],
     });
@@ -467,14 +462,15 @@ describe('handleExtensionMessage — tab.stateChanged', () => {
 
   test('does not affect other entries in tabMapping', () => {
     const state = createState();
-    state.extensionConnections.set('test-conn', {
+    const conn: ExtensionConnection = {
       ws: createMockWs(),
       connectionId: 'test-conn',
       tabMapping: new Map(),
       activeNetworkCaptures: new Set(),
-    });
+    };
+    state.extensionConnections.set('test-conn', conn);
     state.registry = buildRegistry([makePlugin('slack'), makePlugin('github')], []);
-    getAnyConnection(state)!.tabMapping.set('github', {
+    conn.tabMapping.set('github', {
       state: 'ready',
       tabs: [{ tabId: 10, url: 'https://github.com', title: 'GitHub', ready: true }],
     });
@@ -1110,7 +1106,7 @@ describe('sendSyncFull', () => {
 });
 
 describe('dispatchToExtension', () => {
-  test('rejects immediately when extensionWs is null', async () => {
+  test('rejects immediately when no connections exist', async () => {
     const state = createState();
 
     await expect(dispatchToExtension(state, 'tool.dispatch', { tool: 'test' })).rejects.toThrow(
@@ -1225,12 +1221,13 @@ describe('handleExtensionMessage — config.getState', () => {
   test('returns plugins with displayName, version, tabState, urlPatterns, and tools', () => {
     const state = createState();
     const ws = createMockWs();
-    state.extensionConnections.set('test-conn', {
+    const conn: ExtensionConnection = {
       ws: ws,
       connectionId: 'test-conn',
       tabMapping: new Map(),
       activeNetworkCaptures: new Set(),
-    });
+    };
+    state.extensionConnections.set('test-conn', conn);
 
     state.registry = buildRegistry(
       [
@@ -1261,7 +1258,7 @@ describe('handleExtensionMessage — config.getState', () => {
       ],
       [],
     );
-    getAnyConnection(state)!.tabMapping.set('test-plugin', {
+    conn.tabMapping.set('test-plugin', {
       state: 'ready',
       tabs: [{ tabId: 10, url: 'http://test.com', title: 'Test', ready: true }],
     });
@@ -3283,5 +3280,173 @@ describe('handleExtensionMessage — confirmation.response routing', () => {
     );
 
     expect(resolved).toEqual({ action: 'allow', alwaysAllow: false });
+  });
+});
+
+/** Helper to create a mock connection with a trackable WsHandle */
+const createMockConnection = (id: string): { conn: ExtensionConnection; ws: WsHandle & { sent: string[] } } => {
+  const ws = createMockWs();
+  const conn: ExtensionConnection = {
+    ws,
+    connectionId: id,
+    tabMapping: new Map(),
+    activeNetworkCaptures: new Set(),
+  };
+  return { conn, ws };
+};
+
+describe('multi-connection — dispatch routing', () => {
+  test('dispatchToExtension routes to the connection owning the target tabId', () => {
+    const state = createState();
+    const { conn: connA, ws: wsA } = createMockConnection('conn-a');
+    const { conn: connB, ws: wsB } = createMockConnection('conn-b');
+    connA.tabMapping.set('slack', {
+      state: 'ready',
+      tabs: [{ tabId: 10, url: 'https://app.slack.com', title: 'Slack', ready: true }],
+    });
+    connB.tabMapping.set('slack', {
+      state: 'ready',
+      tabs: [{ tabId: 20, url: 'https://app.slack.com', title: 'Slack', ready: true }],
+    });
+    state.extensionConnections.set('conn-a', connA);
+    state.extensionConnections.set('conn-b', connB);
+
+    // Dispatch targeting tab 20 (owned by connB)
+    const promise = dispatchToExtension(
+      state,
+      'tool.dispatch',
+      { plugin: 'slack', tool: 'send', tabId: 20 },
+      'slack/send',
+    );
+
+    // Only connB's ws should receive the dispatch
+    expect(wsB.sent).toHaveLength(1);
+    expect(wsA.sent).toHaveLength(0);
+
+    // Settle to prevent timeout leak
+    const pending = [...state.pendingDispatches.values()][0];
+    pending?.resolve('ok');
+    if (pending) clearTimeout(pending.timerId);
+    return promise;
+  });
+
+  test('dispatchToExtension falls back to any connection when tabId matches no connection', () => {
+    const state = createState();
+    const { conn: connA, ws: wsA } = createMockConnection('conn-a');
+    state.extensionConnections.set('conn-a', connA);
+
+    // Dispatch targeting a tabId that no connection owns
+    const promise = dispatchToExtension(
+      state,
+      'tool.dispatch',
+      { plugin: 'slack', tool: 'send', tabId: 999 },
+      'slack/send',
+    );
+
+    // Should fall back to the only available connection
+    expect(wsA.sent).toHaveLength(1);
+
+    const pending = [...state.pendingDispatches.values()][0];
+    pending?.resolve('ok');
+    if (pending) clearTimeout(pending.timerId);
+    return promise;
+  });
+
+  test('dispatchToExtension uses first connection when no tabId is provided', () => {
+    const state = createState();
+    const { conn: connA, ws: wsA } = createMockConnection('conn-a');
+    const { conn: connB, ws: wsB } = createMockConnection('conn-b');
+    state.extensionConnections.set('conn-a', connA);
+    state.extensionConnections.set('conn-b', connB);
+
+    const promise = dispatchToExtension(state, 'tool.dispatch', { plugin: 'slack', tool: 'echo' }, 'slack/echo');
+
+    // Should send to one of the connections (first in map iteration order)
+    const totalSent = wsA.sent.length + wsB.sent.length;
+    expect(totalSent).toBe(1);
+
+    const pending = [...state.pendingDispatches.values()][0];
+    pending?.resolve('ok');
+    if (pending) clearTimeout(pending.timerId);
+    return promise;
+  });
+
+  test('dispatchToExtension stores connectionId on PendingDispatch', () => {
+    const state = createState();
+    const { conn } = createMockConnection('conn-alpha');
+    state.extensionConnections.set('conn-alpha', conn);
+
+    const promise = dispatchToExtension(state, 'tool.dispatch', { plugin: 'slack', tool: 'echo' }, 'slack/echo');
+
+    const pending = [...state.pendingDispatches.values()][0];
+    expect(pending?.connectionId).toBe('conn-alpha');
+
+    pending?.resolve('ok');
+    if (pending) clearTimeout(pending.timerId);
+    return promise;
+  });
+});
+
+describe('multi-connection — sendSyncFull broadcasts to all', () => {
+  let tmpDir: string;
+  let originalConfigDir: string | undefined;
+
+  beforeEach(() => {
+    originalConfigDir = process.env.OPENTABS_CONFIG_DIR;
+    tmpDir = mkdtempSync(join(tmpdir(), 'opentabs-test-'));
+    process.env.OPENTABS_CONFIG_DIR = tmpDir;
+  });
+
+  afterEach(() => {
+    if (originalConfigDir !== undefined) {
+      process.env.OPENTABS_CONFIG_DIR = originalConfigDir;
+    } else {
+      delete process.env.OPENTABS_CONFIG_DIR;
+    }
+    if (tmpDir) {
+      rmSync(tmpDir, { recursive: true, force: true });
+    }
+  });
+
+  test('sendSyncFull sends to both connections', async () => {
+    const state = createState();
+    const { conn: connA, ws: wsA } = createMockConnection('conn-a');
+    const { conn: connB, ws: wsB } = createMockConnection('conn-b');
+    state.extensionConnections.set('conn-a', connA);
+    state.extensionConnections.set('conn-b', connB);
+
+    await sendSyncFull(state);
+
+    expect(wsA.sent.length).toBeGreaterThanOrEqual(1);
+    expect(wsB.sent.length).toBeGreaterThanOrEqual(1);
+    // Both connections should receive the same sync.full message
+    const msgA = JSON.parse(wsA.sent[0] as string) as { method?: string };
+    const msgB = JSON.parse(wsB.sent[0] as string) as { method?: string };
+    expect(msgA.method).toBe('sync.full');
+    expect(msgB.method).toBe('sync.full');
+  });
+});
+
+describe('multi-connection — sendConfirmationRequest broadcasts to all', () => {
+  test('confirmation request is broadcast to both connections', () => {
+    const state = createState();
+    const { conn: connA, ws: wsA } = createMockConnection('conn-a');
+    const { conn: connB, ws: wsB } = createMockConnection('conn-b');
+    state.extensionConnections.set('conn-a', connA);
+    state.extensionConnections.set('conn-b', connB);
+
+    const promise = sendConfirmationRequest(state, 'slack_send_message', 'slack', { text: 'hi' });
+
+    // Both connections should receive the confirmation.request
+    expect(wsA.sent.length).toBeGreaterThanOrEqual(1);
+    expect(wsB.sent.length).toBeGreaterThanOrEqual(1);
+
+    const msgA = JSON.parse(wsA.sent[wsA.sent.length - 1] as string) as { method?: string };
+    expect(msgA.method).toBe('confirmation.request');
+
+    // Settle to prevent timeout leak
+    const [, pending] = [...state.pendingConfirmations.entries()][0] ?? [];
+    pending?.resolve({ action: 'allow', alwaysAllow: false });
+    return promise;
   });
 });

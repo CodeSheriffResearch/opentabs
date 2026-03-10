@@ -6,8 +6,8 @@ import { afterAll, afterEach, beforeEach, describe, expect, test } from 'vitest'
 import { stopFileWatching } from './file-watcher.js';
 import { performConfigReload, performReload } from './reload.js';
 import { resetGlobalPathsCache } from './resolver.js';
-import type { ServerState } from './state.js';
-import { createState, getAnyConnection, getMergedTabMapping } from './state.js';
+import type { ExtensionConnection, ServerState } from './state.js';
+import { createState, getMergedTabMapping } from './state.js';
 
 /**
  * Integration tests for the reload module.
@@ -132,17 +132,18 @@ describe('performReload', () => {
   });
 
   test('prunes stale tabMapping entries for removed plugins', async () => {
-    state.extensionConnections.set('test-conn', {
+    const conn: ExtensionConnection = {
       ws: { send() {}, close() {} },
       connectionId: 'test-conn',
       tabMapping: new Map(),
       activeNetworkCaptures: new Set(),
-    });
-    getAnyConnection(state)!.tabMapping.set('old-plugin', {
+    };
+    state.extensionConnections.set('test-conn', conn);
+    conn.tabMapping.set('old-plugin', {
       state: 'ready',
       tabs: [{ tabId: 1, url: 'http://example.com', title: 'Example', ready: true }],
     });
-    getAnyConnection(state)!.tabMapping.set('my-plugin', {
+    conn.tabMapping.set('my-plugin', {
       state: 'ready',
       tabs: [{ tabId: 2, url: 'http://alpha.com', title: 'Alpha', ready: true }],
     });
@@ -499,13 +500,14 @@ describe('performConfigReload', () => {
   });
 
   test('prunes stale tabMapping entries', async () => {
-    state.extensionConnections.set('test-conn', {
+    const conn: ExtensionConnection = {
       ws: { send() {}, close() {} },
       connectionId: 'test-conn',
       tabMapping: new Map(),
       activeNetworkCaptures: new Set(),
-    });
-    getAnyConnection(state)!.tabMapping.set('removed-plugin', {
+    };
+    state.extensionConnections.set('test-conn', conn);
+    conn.tabMapping.set('removed-plugin', {
       state: 'ready',
       tabs: [{ tabId: 1, url: 'http://example.com', title: 'Example', ready: true }],
     });

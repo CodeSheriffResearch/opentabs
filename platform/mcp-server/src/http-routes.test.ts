@@ -10,7 +10,7 @@ import {
 } from './http-routes.js';
 import type { McpServerInstance } from './mcp-setup.js';
 import { buildRegistry } from './registry.js';
-import type { PendingDispatch } from './state.js';
+import type { ExtensionConnection, PendingDispatch } from './state.js';
 import { createState, getAnyConnection, getMergedTabMapping, STATE_SCHEMA_VERSION } from './state.js';
 import { version } from './version.js';
 
@@ -328,13 +328,14 @@ describe('/health endpoint', () => {
       ],
       [],
     );
-    state.extensionConnections.set('test-conn', {
+    const conn: ExtensionConnection = {
       ws: { send() {}, close() {} },
       connectionId: 'test-conn',
       tabMapping: new Map(),
       activeNetworkCaptures: new Set(),
-    });
-    getAnyConnection(state)!.tabMapping.set('test-plugin', {
+    };
+    state.extensionConnections.set('test-conn', conn);
+    conn.tabMapping.set('test-plugin', {
       state: 'ready',
       tabs: [{ tabId: 1, url: 'https://example.com', title: 'Example', ready: true }],
     });
@@ -752,20 +753,21 @@ describe('wsClose handler', () => {
   test('matching ws clears activeNetworkCaptures and tabMapping', () => {
     const { handlers, state } = createTestHandlers();
     const ws = createMockWsHandle();
-    state.extensionConnections.set('test-conn', {
+    const conn: ExtensionConnection = {
       ws: ws,
       connectionId: 'test-conn',
       tabMapping: new Map(),
       activeNetworkCaptures: new Set(),
-    });
+    };
+    state.extensionConnections.set('test-conn', conn);
 
-    getAnyConnection(state)!.activeNetworkCaptures.add(1);
-    getAnyConnection(state)!.activeNetworkCaptures.add(2);
-    getAnyConnection(state)!.tabMapping.set('plugin-a', {
+    conn.activeNetworkCaptures.add(1);
+    conn.activeNetworkCaptures.add(2);
+    conn.tabMapping.set('plugin-a', {
       state: 'ready',
       tabs: [{ tabId: 1, url: 'https://example.com', title: 'Example', ready: true }],
     });
-    getAnyConnection(state)!.tabMapping.set('plugin-b', { state: 'unavailable', tabs: [] });
+    conn.tabMapping.set('plugin-b', { state: 'unavailable', tabs: [] });
 
     handlers.wsClose(ws);
 
@@ -1122,5 +1124,178 @@ describe('checkEndpointRateLimit', () => {
 
     expect(allowed).toBe(false);
     expect(state.endpointCallTimestamps.has('/reload')).toBe(false);
+  });
+});
+
+describe('multi-connection — wsClose scoping', () => {
+  test('closing one connection does not affect the other connection', () => {
+    const { handlers, state } = createTestHandlers();
+    const wsA = createMockWsHandle();
+    const wsB = createMockWsHandle();
+    state.extensionConnections.set('conn-a', {
+      ws: wsA,
+      connectionId: 'conn-a',
+      tabMapping: new Map([
+        [
+          'slack',
+          { state: 'ready' as const, tabs: [{ tabId: 1, url: 'https://app.slack.com', title: 'Slack', ready: true }] },
+        ],
+      ]),
+      activeNetworkCaptures: new Set(),
+    });
+    state.extensionConnections.set('conn-b', {
+      ws: wsB,
+      connectionId: 'conn-b',
+      tabMapping: new Map([
+        [
+          'discord',
+          { state: 'ready' as const, tabs: [{ tabId: 2, url: 'https://discord.com', title: 'Discord', ready: true }] },
+        ],
+      ]),
+      activeNetworkCaptures: new Set(),
+    });
+
+    // Close connection A
+    handlers.wsClose(wsA);
+
+    // Connection A is removed
+    expect(state.extensionConnections.has('conn-a')).toBe(false);
+    // Connection B is still present
+    expect(state.extensionConnections.has('conn-b')).toBe(true);
+    expect(state.extensionConnections.get('conn-b')?.ws).toBe(wsB);
+    // Merged tabs only show conn-b's tabs
+    expect(getMergedTabMapping(state).size).toBe(1);
+    expect(getMergedTabMapping(state).has('discord')).toBe(true);
+  });
+
+  test('closing connection A only rejects dispatches sent over connection A', () => {
+    const { handlers, state } = createTestHandlers();
+    const wsA = createMockWsHandle();
+    const wsB = createMockWsHandle();
+    state.extensionConnections.set('conn-a', {
+      ws: wsA,
+      connectionId: 'conn-a',
+      tabMapping: new Map(),
+      activeNetworkCaptures: new Set(),
+    });
+    state.extensionConnections.set('conn-b', {
+      ws: wsB,
+      connectionId: 'conn-b',
+      tabMapping: new Map(),
+      activeNetworkCaptures: new Set(),
+    });
+
+    const errorsA: Error[] = [];
+    const errorsB: Error[] = [];
+    const pendingA: PendingDispatch = {
+      resolve: () => {},
+      reject: err => errorsA.push(err),
+      label: 'test-a',
+      startTs: Date.now(),
+      timerId: setTimeout(() => {}, 60_000),
+      connectionId: 'conn-a',
+    };
+    const pendingB: PendingDispatch = {
+      resolve: () => {},
+      reject: err => errorsB.push(err),
+      label: 'test-b',
+      startTs: Date.now(),
+      timerId: setTimeout(() => {}, 60_000),
+      connectionId: 'conn-b',
+    };
+    state.pendingDispatches.set('dispatch-a', pendingA);
+    state.pendingDispatches.set('dispatch-b', pendingB);
+
+    handlers.wsClose(wsA);
+
+    // Dispatch A is rejected (it was on conn-a)
+    expect(errorsA).toHaveLength(1);
+    expect(errorsA[0]?.message).toBe('Extension disconnected');
+    expect(state.pendingDispatches.has('dispatch-a')).toBe(false);
+
+    // Dispatch B is NOT rejected (it was on conn-b which is still alive)
+    expect(errorsB).toHaveLength(0);
+    expect(state.pendingDispatches.has('dispatch-b')).toBe(true);
+
+    // Cleanup
+    clearTimeout(pendingB.timerId);
+  });
+
+  test('health endpoint shows extensionConnected: true with one connection', async () => {
+    const { handlers, state } = createTestHandlers();
+    state.extensionConnections.set('conn-1', {
+      ws: createMockWsHandle(),
+      connectionId: 'conn-1',
+      tabMapping: new Map(),
+      activeNetworkCaptures: new Set(),
+    });
+
+    const body = await fetchJson<HealthResponse>(handlers, 'http://localhost:9876/health');
+
+    expect(body.extensionConnected).toBe(true);
+    expect(body.extensionConnections).toBe(1);
+  });
+
+  test('health endpoint shows multiple extensionConnections', async () => {
+    const { handlers, state } = createTestHandlers();
+    state.extensionConnections.set('conn-1', {
+      ws: createMockWsHandle(),
+      connectionId: 'conn-1',
+      tabMapping: new Map(),
+      activeNetworkCaptures: new Set(),
+    });
+    state.extensionConnections.set('conn-2', {
+      ws: createMockWsHandle(),
+      connectionId: 'conn-2',
+      tabMapping: new Map(),
+      activeNetworkCaptures: new Set(),
+    });
+
+    const body = await fetchJson<HealthResponse>(handlers, 'http://localhost:9876/health');
+
+    expect(body.extensionConnected).toBe(true);
+    expect(body.extensionConnections).toBe(2);
+  });
+});
+
+describe('multi-connection — wsOpen with explicit connectionId', () => {
+  test('two connections with different IDs coexist', () => {
+    const { handlers, state } = createTestHandlers();
+    const ws1 = createMockWsHandle();
+    const ws2 = createMockWsHandle();
+
+    // Set explicit connectionIds via _pendingConnectionId
+    state._pendingConnectionId = 'profile-regular';
+    handlers.wsOpen(ws1);
+    state._pendingConnectionId = 'profile-incognito';
+    handlers.wsOpen(ws2);
+
+    expect(state.extensionConnections.size).toBe(2);
+    expect(state.extensionConnections.has('profile-regular')).toBe(true);
+    expect(state.extensionConnections.has('profile-incognito')).toBe(true);
+  });
+
+  test('reconnecting with the same connectionId replaces only that connection', () => {
+    const { handlers, state } = createTestHandlers();
+    const ws1 = createMockWsHandle();
+    const ws2 = createMockWsHandle();
+    const wsReconnect = createMockWsHandle();
+
+    state._pendingConnectionId = 'alpha';
+    handlers.wsOpen(ws1);
+    state._pendingConnectionId = 'beta';
+    handlers.wsOpen(ws2);
+
+    expect(state.extensionConnections.size).toBe(2);
+
+    // Reconnect with same connectionId 'alpha'
+    state._pendingConnectionId = 'alpha';
+    handlers.wsOpen(wsReconnect);
+
+    expect(state.extensionConnections.size).toBe(2);
+    expect(state.extensionConnections.get('alpha')?.ws).toBe(wsReconnect);
+    expect(state.extensionConnections.get('beta')?.ws).toBe(ws2);
+    expect(ws1.closed).toBe(true);
+    expect((ws2 as ReturnType<typeof createMockWsHandle>).closed).toBe(false);
   });
 });
