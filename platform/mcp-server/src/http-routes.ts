@@ -340,6 +340,7 @@ const handleHealth = async (
       sdkVersion,
       mode: isDev() ? 'dev' : 'production',
       extensionConnected: isExtensionConnected(state),
+      extensionConnections: state.extensionConnections.size,
       mcpClients: transports.size,
       plugins: state.registry.plugins.size,
       pluginDetails,

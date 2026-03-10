@@ -248,6 +248,7 @@ interface HealthResponse {
   version: string;
   mode: 'dev' | 'production';
   extensionConnected: boolean;
+  extensionConnections: number;
   mcpClients: number;
   plugins: number;
   pluginDetails: { name: string; displayName: string; toolCount: number; tabState: string; source: string }[];
@@ -288,6 +289,7 @@ describe('/health endpoint', () => {
     expect(body.status).toBe('ok');
     expect(body.version).toBe(version);
     expect(body.extensionConnected).toBe(false);
+    expect(body.extensionConnections).toBe(0);
     expect(body.mcpClients).toBe(0);
     expect(body.plugins).toBe(0);
     expect(body.pluginDetails).toEqual([]);
@@ -451,6 +453,7 @@ describe('/health endpoint', () => {
     // Unauthenticated response omits version and extensionConnected to prevent fingerprinting
     expect(body).not.toHaveProperty('version');
     expect(body).not.toHaveProperty('extensionConnected');
+    expect(body).not.toHaveProperty('extensionConnections');
     expect(body).not.toHaveProperty('pluginDetails');
     expect(body).not.toHaveProperty('toolCount');
     expect(body).not.toHaveProperty('uptime');
@@ -477,6 +480,7 @@ describe('/health endpoint', () => {
     expect(body.status).toBe('ok');
     expect(body.version).toBe(version);
     expect(body.extensionConnected).toBe(false);
+    expect(body.extensionConnections).toBe(0);
     expect(body.mcpClients).toBe(0);
     expect(body.plugins).toBe(0);
     expect(body.pluginDetails).toEqual([]);
