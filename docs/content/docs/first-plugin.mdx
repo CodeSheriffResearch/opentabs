@@ -62,7 +62,7 @@ import type { ToolDefinition } from '@opentabs-dev/plugin-sdk';
 class MyAppPlugin extends OpenTabsPlugin {
   readonly name = 'my-app';
   readonly description = 'My first OpenTabs plugin';
-  readonly displayName = 'My App';
+  override readonly displayName = 'My App';
   readonly urlPatterns = ['*://*.example.com/*'];
   readonly tools: ToolDefinition[] = [getPageTitle];
 

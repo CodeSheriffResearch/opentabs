@@ -144,6 +144,7 @@ Pass `Authorization: Bearer <secret>` to get the full payload:
   "sdkVersion": "0.0.4",
   "mode": "production",
   "extensionConnected": true,
+  "extensionConnections": 1,
   "mcpClients": 1,
   "plugins": 2,
   "pluginDetails": [
@@ -173,7 +174,7 @@ Pass `Authorization: Bearer <secret>` to get the full payload:
   "reloadCount": 2,
   "lastReloadTimestamp": 1740134100000,
   "lastReloadDurationMs": 45,
-  "stateSchemaVersion": 4,
+  "stateSchemaVersion": 6,
   "discoveryErrors": [],
   "fileWatcher": {
     "watchedPlugins": 1,
@@ -194,6 +195,7 @@ Pass `Authorization: Bearer <secret>` to get the full payload:
 Key fields:
 
 - `mode` — `"dev"` or `"production"`
+- `extensionConnections` — number of active extension WebSocket connections
 - `sdkVersion` — server-level SDK version
 - `browserToolCount` — number of built-in browser tools registered
 - `pluginToolCount` — total number of plugin tools across all loaded plugins
@@ -210,7 +212,7 @@ Key fields:
 - `lastReloadDurationMs` — how long the last reload took in milliseconds
 - `stateSchemaVersion` — internal state schema version number
 - `discoveryErrors` — array of non-fatal errors encountered during plugin discovery
-- `fileWatcher` — file watcher status (dev mode only): `watchedPlugins` (actively watched), `pendingPlugins` (not yet watched), `lastPollAt` (last mtime poll timestamp), `pollDetections` (changes detected via polling)
+- `fileWatcher` — file watcher status (dev mode only): `watchedPlugins` (actively watched), `pendingPlugins` (not yet watched), `lastPollAt` (last mtime poll timestamp, null if no poll yet), `pollDetections` (changes detected via polling)
 - `auditSummary` — aggregate stats from the in-memory audit log, including `last24h` breakdown and `avgDurationMs`
 
 ---
@@ -360,7 +362,7 @@ The server rejects all HTTP requests with a browser `Origin` header, except thos
 
 ## Rate Limiting
 
-Admin endpoints (`/reload`, `/extension/reload`) are rate-limited to 10 requests/minute. Exceeding the limit returns HTTP 429 with `Retry-After: 60`.
+Admin endpoints (`/reload`, `/extension/reload`) are rate-limited to 10 requests/minute. MCP session creation (`/mcp` initialize requests) is rate-limited to 5 per minute. Exceeding the limit returns HTTP 429 with `Retry-After: 60`.
 
 ---
 
@@ -507,6 +509,16 @@ Admin endpoints (`/reload`, `/extension/reload`) are rate-limited to 10 requests
       <Table.Cell className="font-medium">`plugin.checkUpdates`</Table.Cell>
       <Table.Cell>Request</Table.Cell>
       <Table.Cell>Check for available updates to installed plugins.</Table.Cell>
+    </Table.Row>
+    <Table.Row>
+      <Table.Cell className="font-medium">`plugin.removeBySpecifier`</Table.Cell>
+      <Table.Cell>Request</Table.Cell>
+      <Table.Cell>Remove a plugin by npm specifier (package name).</Table.Cell>
+    </Table.Row>
+    <Table.Row>
+      <Table.Cell className="font-medium">`folder.open`</Table.Cell>
+      <Table.Cell>Request</Table.Cell>
+      <Table.Cell>Open a folder path on the host filesystem.</Table.Cell>
     </Table.Row>
     <Table.Row>
       <Table.Cell className="font-medium">`confirmation.response`</Table.Cell>

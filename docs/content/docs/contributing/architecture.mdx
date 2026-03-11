@@ -227,7 +227,7 @@ The wire protocol is the glue between server and extension. All communication us
     </Table.Row>
     <Table.Row>
       <Table.Cell className="font-medium">`confirmation.request`</Table.Cell>
-      <Table.Cell>Request user approval for a browser tool (id, tool, domain, tabId, paramsPreview, timeoutMs)</Table.Cell>
+      <Table.Cell>Request user approval for a tool call (id, tool, plugin, params)</Table.Cell>
     </Table.Row>
     <Table.Row>
       <Table.Cell className="font-medium">`extension.reload`</Table.Cell>
@@ -301,6 +301,14 @@ The wire protocol is the glue between server and extension. All communication us
     <Table.Row>
       <Table.Cell className="font-medium">`plugin.checkUpdates`</Table.Cell>
       <Table.Cell>Check for available updates to installed plugins</Table.Cell>
+    </Table.Row>
+    <Table.Row>
+      <Table.Cell className="font-medium">`plugin.removeBySpecifier`</Table.Cell>
+      <Table.Cell>Remove a plugin by npm specifier (package name)</Table.Cell>
+    </Table.Row>
+    <Table.Row>
+      <Table.Cell className="font-medium">`folder.open`</Table.Cell>
+      <Table.Cell>Open a folder path on the host filesystem</Table.Cell>
     </Table.Row>
     <Table.Row>
       <Table.Cell className="font-medium">`confirmation.response`</Table.Cell>
