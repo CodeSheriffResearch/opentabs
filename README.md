@@ -4,7 +4,7 @@
 
 <p align="center">
   <a href="https://www.youtube.com/watch?v=PBvUXDAGVM8">
-    <img src="https://img.youtube.com/vi/PBvUXDAGVM8/maxresdefault.jpg" alt="Demo: AI checks stocks, orders food, and sends a Discord message — all through the browser" width="700" />
+    <img src="https://img.youtube.com/vi/PBvUXDAGVM8/maxresdefault.jpg" alt="Demo: AI checks stocks, orders food, and sends a Discord message — all through the browser" />
   </a>
 </p>
 
@@ -21,7 +21,9 @@ Those internal APIs need to run inside your browser — that's where your sessio
 
 When your AI calls a tool, the server routes it to the right tab, the plugin makes the API call using your session, and the result flows back. That's the whole loop.
 
-There are 100+ plugins covering ~2,000 tools across Slack, Discord, GitHub, Jira, Notion, Figma, AWS, Stripe, Robinhood, DoorDash, Airbnb, Netflix — and a bunch more. Check the [`plugins/`](plugins/) directory. Plus there are built-in browser tools (screenshots, clicking, typing, network capture, DOM inspection) that work on any tab without a plugin.
+There are 100+ plugins covering ~2,000 tools across Slack, Discord, GitHub, Jira, Notion, Figma, AWS, Stripe, Robinhood, DoorDash, Airbnb, Netflix — and a bunch more. Check the [`plugins/`](plugins/) directory. i built every one of them with end-to-end testing as a requirement, but i'll be honest — i haven't had the resources to manually verify all 2,000 tools. If something's broken, point your AI at it and open a PR. My AI will review what your AI wrote, and we'll merge it together. That's kind of the whole idea.
+
+There are also built-in browser tools (screenshots, clicking, typing, network capture, DOM inspection) that work on any tab without a plugin.
 
 Works with [Claude Code](https://github.com/anthropics/claude-code), Cursor, Windsurf, [OpenCode](https://github.com/anomalyco/opencode), and any MCP client that supports Streamable HTTP.
 
@@ -93,7 +95,7 @@ i won't pretend this is bulletproof. Browser extensions that interact with your 
 
 <p align="center">
   <a href="https://youtu.be/6CL6kwk8d9w">
-    <img src="https://img.youtube.com/vi/6CL6kwk8d9w/maxresdefault.jpg" alt="Demo: Permission dialog asking for approval before a tool call executes" width="700" />
+    <img src="https://img.youtube.com/vi/6CL6kwk8d9w/maxresdefault.jpg" alt="Demo: Permission dialog asking for approval before a tool call executes" />
   </a>
 </p>
 
@@ -183,7 +185,7 @@ i asked Claude to talk to Gemini about what makes ChatGPT good. Three rounds, no
 
 <p align="center">
   <a href="https://youtu.be/WRrCeRfiVaI">
-    <img src="https://img.youtube.com/vi/WRrCeRfiVaI/maxresdefault.jpg" alt="Claude talking to Gemini about ChatGPT through OpenTabs" width="700" />
+    <img src="https://img.youtube.com/vi/WRrCeRfiVaI/maxresdefault.jpg" alt="Claude talking to Gemini about ChatGPT through OpenTabs" />
   </a>
 </p>
 
