@@ -182,9 +182,11 @@ test.describe('Side panel npm search', () => {
       const sidePanelPage = await openSidePanel(context);
       await expect(sidePanelPage.getByText('E2E Test')).toBeVisible({ timeout: 30_000 });
 
-      // Wait for the Slack plugin card to appear (discovered via npm auto-discovery)
+      // Wait for the Slack plugin card to appear (discovered via npm auto-discovery).
+      // npm auto-discovery calls `npm root -g` and scans the isolated prefix directory,
+      // which can be slow in CI/Docker environments with cold npm caches.
       const slackTrigger = sidePanelPage.locator('button[aria-expanded]').filter({ hasText: 'Slack' });
-      await expect(slackTrigger).toBeVisible({ timeout: 30_000 });
+      await expect(slackTrigger).toBeVisible({ timeout: 60_000 });
 
       // --- Uninstall phase ---
 
