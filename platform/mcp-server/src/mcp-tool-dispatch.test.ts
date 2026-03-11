@@ -389,6 +389,11 @@ describe('handleBrowserToolCall', () => {
     expect(state.pluginPermissions.browser?.tools?.browser_test_tool).toBe('auto');
     expect(savePluginPermissions).toHaveBeenCalledWith(state, state.pluginPermissions);
     expect(callbacks.onToolConfigChanged).toHaveBeenCalled();
+    expect(sendToExtension).toHaveBeenCalledWith(state, {
+      jsonrpc: '2.0',
+      method: 'plugins.changed',
+      params: expect.objectContaining({ plugins: expect.any(Array) }),
+    });
   });
 
   test('permission ask sends progress notification when progressToken available', async () => {
@@ -720,6 +725,11 @@ describe('handlePluginToolCall', () => {
     expect(state.pluginPermissions.testplugin?.tools?.test_action).toBe('auto');
     expect(savePluginPermissions).toHaveBeenCalledWith(state, state.pluginPermissions);
     expect(callbacks.onToolConfigChanged).toHaveBeenCalled();
+    expect(sendToExtension).toHaveBeenCalledWith(state, {
+      jsonrpc: '2.0',
+      method: 'plugins.changed',
+      params: expect.objectContaining({ plugins: expect.any(Array) }),
+    });
   });
 
   test('permission auto proceeds to dispatch without confirmation', async () => {

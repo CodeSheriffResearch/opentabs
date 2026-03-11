@@ -173,6 +173,13 @@ const runAskFlow = async (
     state.pluginPermissions[pluginName] = updatedConfig;
     void savePluginPermissions(state, state.pluginPermissions);
     callbacks.onToolConfigChanged();
+
+    // Notify the extension so the side panel reflects the new permission
+    sendToExtension(state, {
+      jsonrpc: '2.0',
+      method: 'plugins.changed',
+      params: { ...buildConfigStatePayload(state) },
+    });
   }
 
   return 'allow';

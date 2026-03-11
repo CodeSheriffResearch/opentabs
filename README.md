@@ -3,7 +3,9 @@
 **Your browser is already logged in. Let your AI use it.**
 
 <p align="center">
-  <img src=".github/assets/demo.gif" alt="Claude Code calling OpenTabs tools through the browser" width="700" />
+  <a href="https://www.youtube.com/watch?v=PBvUXDAGVM8">
+    <img src="https://img.youtube.com/vi/PBvUXDAGVM8/maxresdefault.jpg" alt="Demo: AI checks stocks, orders food, and sends a Discord message — all through the browser" width="700" />
+  </a>
 </p>
 
 I reverse-engineered (okay, I asked Claude Opus to reverse-engineer) the internal APIs that web apps use — the same endpoints their own frontend calls — and exposed them as [MCP tools](https://modelcontextprotocol.io/) so your AI agent can call them directly.
@@ -87,7 +89,9 @@ I know you're the kind of person who sets `DANGEROUSLY_SKIP_PERMISSIONS=1` the m
 I won't pretend this is bulletproof. Browser extensions that interact with your web apps are inherently a trust decision. But the defaults are safe, the controls are in your hands, and the code is open source — [read it](https://opentabs.dev/docs/reference/configuration).
 
 <p align="center">
-  <img src=".github/assets/permissions.gif" alt="Permission dialog asking for approval before a tool call executes" width="700" />
+  <a href="https://youtu.be/6CL6kwk8d9w">
+    <img src="https://img.youtube.com/vi/6CL6kwk8d9w/maxresdefault.jpg" alt="Demo: Permission dialog asking for approval before a tool call executes" width="700" />
+  </a>
 </p>
 
 ## FAQ
