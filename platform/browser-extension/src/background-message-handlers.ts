@@ -232,6 +232,7 @@ const handleBgGetFullState: MessageHandler = (_message, sendResponse) => {
         source: serverPlugin?.source ?? 'local',
         reviewed: serverPlugin?.reviewed ?? false,
         sdkVersion: serverPlugin?.sdkVersion,
+        npmPackageName: serverPlugin?.npmPackageName,
         update: serverPlugin?.update,
         ...(hasLastSeenUrlMap.has(meta.name) && { hasLastSeenUrl: true }),
       };

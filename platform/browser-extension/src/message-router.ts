@@ -379,6 +379,7 @@ const handleSyncFull = async (params: Record<string, unknown>): Promise<void> =>
       iconInactiveSvg: p.iconInactiveSvg,
       iconDarkSvg: p.iconDarkSvg,
       iconDarkInactiveSvg: p.iconDarkInactiveSvg,
+      ...(typeof raw?.npmPackageName === 'string' ? { npmPackageName: raw.npmPackageName } : {}),
       ...(typeof raw?.sdkVersion === 'string' ? { sdkVersion: raw.sdkVersion } : {}),
       ...(raw?.update && typeof raw.update === 'object'
         ? {
