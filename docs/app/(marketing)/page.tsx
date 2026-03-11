@@ -35,7 +35,7 @@ const steps = [
     step: 1,
     title: 'Your AI sends a tool call',
     description:
-      'Claude, Cursor, or any MCP client calls a tool like slack_send_message — just a normal MCP tool call.',
+      'Claude, Cursor, or any MCP client calls a tool like discord_send_message — just a normal MCP tool call.',
   },
   {
     step: 2,
@@ -55,7 +55,7 @@ const securityPoints = [
     icon: LockIcon,
     title: 'Everything starts off',
     description:
-      "Every plugin's tools are disabled by default — even the ones we ship. What if our account gets compromised? You shouldn't have to trust us blindly either.",
+      "Every plugin's tools are disabled by default — even the ones I ship. What if my account gets compromised? You shouldn't have to trust me blindly either.",
   },
   {
     icon: EyeIcon,
@@ -89,7 +89,7 @@ export default function Home() {
             already logged in
           </Text>
           <p className="mx-auto mb-4 max-w-xl text-lg text-muted-foreground">
-            Most MCP servers ask for your API keys. We thought that was a bit odd. You&apos;re already logged into
+            Most MCP servers ask for your API keys. I thought that was a bit odd. You&apos;re already logged into
             Slack, GitHub, Jira, and a dozen other apps in Chrome.
           </p>
           <p className="mx-auto mb-10 max-w-xl font-medium text-foreground text-lg">Let your AI use them.</p>
@@ -147,7 +147,7 @@ export default function Home() {
           How it works
         </Text>
         <p className="mb-12 max-w-xl text-muted-foreground">
-          OpenTabs is a Chrome extension and MCP server. Your AI agent sends a tool call, we route it to the right
+          OpenTabs is a Chrome extension and MCP server. Your AI agent sends a tool call, it gets routed to the right
           browser tab, and the action happens on the real web app.
         </p>
         <div className="grid grid-cols-1 gap-8 lg:grid-cols-3">
@@ -184,13 +184,13 @@ export default function Home() {
               tools, and registers it. Every line of code is yours to review.
             </p>
             <p className="mb-4 text-muted-foreground text-sm leading-relaxed">
-              Fun fact: many of the plugins in this repo were built by AI in under five minutes. The MCP server ships
+              Fun fact: many of the plugins in this repo were built by AI in minutes. The MCP server ships
               with site analysis tools, the SDK handles the boilerplate, and a self-improving skill teaches AI agents
               the entire process. Every time an agent builds a plugin, it writes what it learned back into the skill —
               so the system gets better with every plugin built.
             </p>
             <p className="mb-6 text-muted-foreground text-sm leading-relaxed">
-              We think this is actually safer than installing someone else&apos;s code — your agent wrote it, you can
+              I think this is actually safer than installing someone else&apos;s code — your agent wrote it, you can
               read every line, and it runs in your browser.
             </p>
             <Link href="/docs/guides/plugin-development" className="font-medium text-sm underline underline-offset-4">
@@ -227,10 +227,10 @@ export default function Home() {
             Security, for real
           </Text>
           <p className="text-muted-foreground">
-            We know you&apos;re the kind of person who sets{' '}
+            I know you&apos;re the kind of person who sets{' '}
             <code className="bg-inline-code-bg px-1.5 py-0.5 text-sm">DANGEROUSLY_SKIP_PERMISSIONS=1</code> the moment
-            something asks for confirmation. We respect your courage. But your browser sessions are precious, and we
-            still wanted the defaults to be thoughtful — even for the fearless among us.
+            something asks for confirmation. I respect that. But your browser sessions are precious, so I wanted the
+            defaults to be thoughtful — even for the fearless.
           </p>
         </div>
         <div className="grid grid-cols-1 gap-6 sm:grid-cols-2">
@@ -266,11 +266,11 @@ export default function Home() {
               Why not just use the official MCP server for Slack / GitHub / etc.?
             </p>
             <p className="max-w-3xl text-muted-foreground text-sm leading-relaxed">
-              If an official MCP server works well for you, absolutely use it. We started building OpenTabs for apps
-              that don&apos;t ship official MCP support — Discord, Figma, Linear, and many others had nothing when we
-              began. And some probably never will — we&apos;re not holding our breath for a Domino&apos;s MCP server.
-              Along the way, we noticed that setting up separate API keys for each service adds up when you use ten of
-              them, and the web app often has access to more features than the public API exposes. We see OpenTabs and
+              If an official MCP server works well for you, absolutely use it. I started building OpenTabs for apps
+              that don&apos;t ship official MCP support — Discord, Figma, Linear, and many others had nothing when I
+              began. And some probably never will — I&apos;m not holding my breath for a Domino&apos;s MCP server.
+              Along the way, I noticed that setting up separate API keys for each service adds up when you use ten of
+              them, and the web app often has access to more features than the public API exposes. I see OpenTabs and
               official servers as complementary — use whatever works best, or mix and match.
             </p>
           </div>
@@ -293,7 +293,7 @@ export default function Home() {
                 className="underline underline-offset-4">
                 WebMCP
               </Link>{' '}
-              is a proposal where websites expose structured MCP tools natively. We think it&apos;s a great idea —
+              is a proposal where websites expose structured MCP tools natively. I think it&apos;s a great idea —
               it&apos;s how the web should probably work long-term. The timeline depends on adoption, though. OpenTabs
               works right now, in about five minutes. When WebMCP is widespread, OpenTabs plugins can evolve to use it.
             </p>
@@ -301,9 +301,9 @@ export default function Home() {
           <div>
             <p className="mb-3 font-bold text-foreground">Can I build a plugin for Google Docs?</p>
             <p className="max-w-3xl text-muted-foreground text-sm leading-relaxed">
-              We&apos;ll be honest: we burned a lot of tokens trying and couldn&apos;t crack it. Google did a genuinely
+              I&apos;ll be honest: I burned a lot of tokens trying and couldn&apos;t crack it. Google did a genuinely
               impressive job obscuring their internal APIs — hats off to them. If you manage to figure it out and want
-              to contribute a Google Workspace plugin back, you&apos;d be our hero.
+              to contribute a Google Workspace plugin back, you&apos;d be my hero.
             </p>
           </div>
         </div>
@@ -322,7 +322,7 @@ export default function Home() {
             </p>
             <p className="mb-6 text-muted-foreground leading-relaxed">
               The work queue is just git — <code className="bg-inline-code-bg px-1.5 py-0.5 text-sm">git push</code>{' '}
-              serialization acts as a distributed lock. No Redis, no SQS. We open-sourced every single PRD.
+              serialization acts as a distributed lock. No Redis, no SQS. I open-sourced every single PRD.
             </p>
             <Link href={PRDS_URL} target="_blank" className="font-medium text-sm underline underline-offset-4">
               Browse the 568 PRDs
