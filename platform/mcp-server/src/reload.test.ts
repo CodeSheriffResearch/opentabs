@@ -2,12 +2,15 @@ import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'nod
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import type { WebStandardStreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/webStandardStreamableHttp.js';
-import { afterAll, afterEach, beforeEach, describe, expect, test } from 'vitest';
+import { afterAll, afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
 import { stopFileWatching } from './file-watcher.js';
 import { performConfigReload, performReload } from './reload.js';
 import { resetGlobalPathsCache } from './resolver.js';
 import type { ExtensionConnection, ServerState } from './state.js';
 import { createState, getMergedTabMapping } from './state.js';
+import { checkForUpdates } from './version-check.js';
+
+vi.mock('./version-check.js');
 
 /**
  * Integration tests for the reload module.
@@ -799,5 +802,52 @@ describe('reviewedVersion reset on plugin update', () => {
     // Browser is skipped by resetStaleReviewedVersions
     expect(state.pluginPermissions.browser?.permission).toBe('auto');
     expect(state.pluginPermissions.browser?.reviewedVersion).toBe('0.0.0');
+  });
+});
+
+describe('performConfigReload — checkForUpdates integration', () => {
+  let configDir: string;
+  let state: ServerState;
+
+  beforeEach(() => {
+    configDir = mkdtempSync(join(tmpdir(), 'opentabs-update-check-'));
+    writeConfig(configDir);
+    process.env.OPENTABS_CONFIG_DIR = configDir;
+    state = createState();
+
+    (globalThis as Record<string, unknown>).__opentabs_reload_chain__ = undefined;
+    (globalThis as Record<string, unknown>).__opentabs_global_paths__ = [];
+
+    vi.mocked(checkForUpdates).mockClear();
+    vi.mocked(checkForUpdates).mockResolvedValue(undefined);
+  });
+
+  afterEach(() => {
+    stopFileWatching(state);
+    rmSync(configDir, { recursive: true, force: true });
+    resetGlobalPathsCache();
+  });
+
+  afterAll(() => {
+    if (originalConfigDir !== undefined) {
+      process.env.OPENTABS_CONFIG_DIR = originalConfigDir;
+    } else {
+      delete process.env.OPENTABS_CONFIG_DIR;
+    }
+  });
+
+  test('performConfigReload calls checkForUpdates', async () => {
+    await performConfigReload(state, [], emptyTransports());
+
+    expect(vi.mocked(checkForUpdates)).toHaveBeenCalledWith(state);
+  });
+
+  test('performConfigReload succeeds when checkForUpdates throws', async () => {
+    vi.mocked(checkForUpdates).mockRejectedValue(new Error('npm registry unreachable'));
+
+    const result = await performConfigReload(state, [], emptyTransports());
+
+    expect(result.plugins).toBeGreaterThanOrEqual(0);
+    expect(result.durationMs).toBeGreaterThanOrEqual(0);
   });
 });
