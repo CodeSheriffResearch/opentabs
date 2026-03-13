@@ -1,159 +1,98 @@
-# opentabs-plugin-bluesky
+# Bluesky
 
-OpenTabs plugin for Bluesky
+OpenTabs plugin for Bluesky — gives AI agents access to Bluesky through your authenticated browser session.
 
-## Project Structure
-
-```
-bluesky/
-├── package.json          # Plugin metadata (name, opentabs field, dependencies)
-├── icon.svg              # Optional custom icon (square SVG, max 8KB)
-├── icon-inactive.svg     # Optional manual inactive icon override
-├── src/
-│   ├── index.ts          # Plugin class (extends OpenTabsPlugin)
-│   └── tools/            # One file per tool (using defineTool)
-│       └── example.ts
-└── dist/                 # Build output (generated)
-    ├── adapter.iife.js   # Bundled adapter injected into matching tabs
-    └── tools.json        # Tool schemas for MCP registration
-```
-
-## Configuration
-
-Plugin metadata is defined in `package.json` under the `opentabs` field:
-
-```json
-{
-  "name": "opentabs-plugin-bluesky",
-  "main": "dist/adapter.iife.js",
-  "opentabs": {
-    "displayName": "Bluesky",
-    "description": "OpenTabs plugin for Bluesky",
-    "urlPatterns": ["*://*.bsky.app/*"]
-  }
-}
-```
-
-- **`main`** — entry point for the bundled adapter IIFE
-- **`opentabs.displayName`** — human-readable name shown in the side panel
-- **`opentabs.description`** — short description of what the plugin does
-- **`opentabs.urlPatterns`** — Chrome match patterns for tabs where the adapter is injected
-
-## Custom Icons
-
-By default, the side panel shows a colored letter avatar for your plugin. To use a custom icon, place an `icon.svg` file in the plugin root (next to `package.json`):
-
-```
-bluesky/
-├── package.json
-├── icon.svg              ← custom icon (optional)
-├── icon-inactive.svg     ← manual inactive override (optional, requires icon.svg)
-├── src/
-│   └── ...
-```
-
-**How it works:**
-
-- `opentabs-plugin build` reads `icon.svg`, validates it, auto-generates a grayscale inactive variant, and embeds both in `dist/tools.json`
-- To override the auto-generated inactive icon, provide `icon-inactive.svg` (must use only grayscale colors)
-- If no `icon.svg` is provided, the letter avatar is used automatically
-
-**Icon requirements:**
-
-- Square SVG with a `viewBox` attribute (e.g., `viewBox="0 0 32 32"`)
-- Maximum 8 KB file size
-- No embedded `<image>`, `<script>`, or event handler attributes (`onclick`, etc.)
-- Manual `icon-inactive.svg` must use only achromatic (grayscale) colors
-
-## Development
+## Install
 
 ```bash
-npm install
-npm run build       # tsc && opentabs-plugin build
-npm run dev         # watch mode (tsc --watch + opentabs-plugin build --watch)
-npm run type-check  # tsc --noEmit
-npm run lint        # biome
+opentabs plugin install bluesky
 ```
 
-## Adding Tools
+Or install globally via npm:
 
-Create a new file in `src/tools/` using `defineTool`:
-
-```ts
-import { z } from 'zod';
-import { defineTool } from '@opentabs-dev/plugin-sdk';
-
-export const myTool = defineTool({
-  name: 'my_tool',
-  displayName: 'My Tool',
-  description: 'What this tool does',
-  icon: 'wrench',
-  input: z.object({ /* ... */ }),
-  output: z.object({ /* ... */ }),
-  handle: async (params) => {
-    // Tool implementation runs in the browser tab context
-    return { /* ... */ };
-  },
-});
+```bash
+npm install -g @opentabs-dev/opentabs-plugin-bluesky
 ```
 
-Then register it in `src/index.ts` by adding it to the `tools` array.
+## Setup
 
-## Authentication
+1. Open [bsky.app](https://bsky.app) in Chrome and log in
+2. Open the OpenTabs side panel — the Bluesky plugin should appear as **ready**
 
-Plugin tools run in the browser tab context, so they can read auth tokens directly from the page. The SDK provides utilities for the most common patterns:
+## Tools (38)
 
-```ts
-import { getLocalStorage, getCookie, getPageGlobal } from '@opentabs-dev/plugin-sdk';
+### Feed (6)
 
-// localStorage — most common
-const token = getLocalStorage('token');
+| Tool | Description | Type |
+|---|---|---|
+| `get_timeline` | Get the home timeline | Read |
+| `get_feed` | Get posts from a custom feed | Read |
+| `get_author_feed` | Get posts by a specific user | Read |
+| `get_post_thread` | Get a post and its reply thread | Read |
+| `get_posts` | Get multiple posts by URI | Read |
+| `get_list_feed` | Get posts from a user list | Read |
 
-// Cookies — session tokens, JWTs
-const session = getCookie('session_id');
+### Posts (7)
 
-// Page globals — SPA boot data (e.g., window.__APP_STATE__)
-const appState = getPageGlobal('__APP_STATE__');
-```
+| Tool | Description | Type |
+|---|---|---|
+| `create_post` | Create a new post | Write |
+| `delete_post` | Delete a post | Write |
+| `search_posts` | Search posts by keyword | Read |
+| `like_post` | Like a post | Write |
+| `unlike_post` | Remove a like from a post | Write |
+| `repost` | Repost a post | Write |
+| `unrepost` | Remove a repost | Write |
 
-**Iframe fallback:** Some apps (e.g., Discord) delete `window.localStorage` after boot. `getLocalStorage` automatically tries a hidden same-origin iframe fallback before returning `null`, so you don't need to handle this case manually.
+### Profiles (5)
 
-**SPA hydration:** Auth tokens may not be available immediately on page load. Implement polling in `isReady()` to wait until the app has hydrated before your tools run. See the comments in `src/index.ts` for an example polling pattern.
+| Tool | Description | Type |
+|---|---|---|
+| `get_current_user` | Get the authenticated user's profile | Read |
+| `get_user_profile` | Get a user profile by DID or handle | Read |
+| `get_user_profiles` | Get multiple user profiles | Read |
+| `search_users` | Search for users | Read |
+| `search_users_typeahead` | Typeahead search for users | Read |
 
-## Shared Schemas
+### Social Graph (9)
 
-When 3 or more tools share the same input or output shape, extract common Zod schemas into a shared file to avoid duplication:
+| Tool | Description | Type |
+|---|---|---|
+| `get_followers` | Get a user's followers | Read |
+| `get_follows` | Get accounts a user follows | Read |
+| `follow_user` | Follow a user | Write |
+| `unfollow_user` | Unfollow a user | Write |
+| `get_blocks` | Get blocked accounts | Read |
+| `mute_actor` | Mute a user | Write |
+| `unmute_actor` | Unmute a user | Write |
+| `mute_thread` | Mute a thread | Write |
+| `unmute_thread` | Unmute a thread | Write |
 
-```ts
-// src/schemas/channel.ts
-import { z } from 'zod';
+### Notifications (3)
 
-export const channelSchema = z.object({
-  id: z.string().describe('Channel ID'),
-  name: z.string().describe('Channel name'),
-});
+| Tool | Description | Type |
+|---|---|---|
+| `list_notifications` | List notifications | Read |
+| `get_unread_count` | Get unread notification count | Read |
+| `mark_notifications_seen` | Mark notifications as seen | Write |
 
-export type Channel = z.infer<typeof channelSchema>;
-```
+### Chat (8)
 
-Then import and reuse in your tools:
+| Tool | Description | Type |
+|---|---|---|
+| `list_conversations` | List DM conversations | Read |
+| `get_conversation` | Get conversation details | Read |
+| `get_messages` | Get messages in a conversation | Read |
+| `send_message` | Send a DM | Write |
+| `delete_message` | Delete a message | Write |
+| `mute_conversation` | Mute a conversation | Write |
+| `unmute_conversation` | Unmute a conversation | Write |
+| `mark_conversation_read` | Mark a conversation as read | Write |
 
-```ts
-// src/tools/list-channels.ts
-import { channelSchema } from '../schemas/channel.js';
+## How It Works
 
-export const listChannels = defineTool({
-  name: 'list_channels',
-  displayName: 'List Channels',
-  description: 'List all available channels',
-  icon: 'list',
-  input: z.object({}),
-  output: z.object({ channels: z.array(channelSchema) }),
-  handle: async () => {
-    // ...
-    return { channels: [] };
-  },
-});
-```
+This plugin runs inside your Bluesky tab through the [OpenTabs](https://opentabs.dev) Chrome extension. It uses your existing browser session — no API tokens or OAuth apps required. All operations happen as you, with your permissions.
 
-This keeps your tool schemas DRY and makes it easy to evolve shared types in one place.
+## License
+
+MIT
