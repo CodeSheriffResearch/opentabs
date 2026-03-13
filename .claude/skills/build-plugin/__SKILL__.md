@@ -558,6 +558,8 @@ npm run check     # build + type-check + lint + format:check
 
 Every command must exit 0. Use `opentabs-plugin build --watch` for iterative development. Use `opentabs-plugin inspect` to verify the built manifest (tool count, schemas).
 
+**Do NOT run the root-level E2E tests (`npm run test:e2e`) or the full root verification suite (`npm run check`).** Plugin-only changes do not affect the platform — `npm run check` inside the plugin directory is sufficient. The root CLAUDE.md verification checklist applies to platform code changes, not plugin development.
+
 ### Enable the Plugin
 
 New plugins start with permission `off`. Before testing, enable it:
