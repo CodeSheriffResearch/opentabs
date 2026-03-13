@@ -35,7 +35,7 @@
 
 **CLI** (`platform/cli`): User-facing CLI (`opentabs`). See `platform/cli/CLAUDE.md` for details.
 
-**create-plugin** (`platform/create-plugin`): Scaffolding CLI (`create-opentabs-plugin`) for new plugin projects.
+**create-plugin** (`platform/create-plugin`): Scaffolding CLI (`npx @opentabs-dev/create-plugin`) for new plugin projects.
 
 ### You Are Connected to This Project's MCP Server
 

@@ -2,7 +2,7 @@
 
 ## Overview
 
-Plugins in `plugins/` are **fully standalone projects** — exactly as if created by an external developer using `create-opentabs-plugin`. They are NOT part of the root npm workspace.
+Plugins in `plugins/` are **fully standalone projects** — exactly as if created by an external developer using `npx @opentabs-dev/create-plugin`. They are NOT part of the root npm workspace.
 
 ## Plugin Isolation
 

@@ -1,6 +1,6 @@
 # Plugins
 
-Plugins in this directory are **fully standalone projects** — identical to what an external developer would get from `create-opentabs-plugin`. They depend on published `@opentabs-dev/*` npm packages and have their own toolchain.
+Plugins in this directory are **fully standalone projects** — identical to what an external developer would get from `npx @opentabs-dev/create-plugin`. They depend on published `@opentabs-dev/*` npm packages and have their own toolchain.
 
 ## Excluded from root tooling
 

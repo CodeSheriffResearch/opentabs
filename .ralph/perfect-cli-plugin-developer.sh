@@ -51,7 +51,7 @@ IMPORTANT: Clean up when done: `docker stop opentabs-plugin-dev-test`
 Install CLI, verify help output, start server in background, verify with status/doctor.
 
 ### Phase 2: Test scaffolding CLI — all invocation paths
-1. `npx create-opentabs-plugin test-a --domain example.com`
+1. `npx @opentabs-dev/create-plugin test-a --domain example.com`
 2. `npx @opentabs-dev/create-plugin test-b --domain example.com`
 3. `npm create @opentabs-dev/plugin test-c -- --domain example.com`
 4. `opentabs plugin create my-plugin --domain example.com --display "My Plugin"`
