@@ -6,8 +6,9 @@ import { loadPlugin } from './loader.js';
 import { log } from './logger.js';
 import { buildRegistry } from './registry.js';
 import { discoverGlobalNpmPlugins, resolvePluginPath } from './resolver.js';
+import { resolvePluginSettings } from './settings-resolver.js';
 import { isSkipNpmDiscovery } from './skip-npm-discovery.js';
-import type { FailedPlugin, PluginRegistry } from './state.js';
+import type { FailedPlugin, PluginRegistry, RegisteredPlugin } from './state.js';
 
 /** Outcome of plugin discovery: an immutable registry plus any errors from failed plugins. */
 interface DiscoveryResult {
@@ -30,7 +31,11 @@ interface DiscoveryError {
  * Phase 4: Merge — local plugins override npm plugins of the same name.
  * Phase 5: Build immutable registry.
  */
-const discoverPlugins = async (localPlugins: string[], configDir: string): Promise<DiscoveryResult> => {
+const discoverPlugins = async (
+  localPlugins: string[],
+  configDir: string,
+  pluginSettings?: Record<string, Record<string, unknown>>,
+): Promise<DiscoveryResult> => {
   log.info('Starting plugin discovery...');
 
   const errors: DiscoveryError[] = [];
@@ -110,8 +115,27 @@ const discoverPlugins = async (localPlugins: string[], configDir: string): Promi
     merged.set(plugin.name, plugin);
   }
 
+  // Phase 4.5: Apply settings resolution — derive URL patterns from url-type settings
+  const resolved: RegisteredPlugin[] = Array.from(merged.values()).map(plugin => {
+    const settings = pluginSettings?.[plugin.name];
+    if (!plugin.configSchema && !settings) return plugin;
+
+    const { effectiveUrlPatterns, effectiveHomepage } = resolvePluginSettings(
+      plugin.name,
+      plugin.urlPatterns,
+      plugin.homepage,
+      plugin.configSchema,
+      settings,
+    );
+    return {
+      ...plugin,
+      urlPatterns: effectiveUrlPatterns,
+      homepage: effectiveHomepage,
+    };
+  });
+
   // Phase 5: Build immutable registry
-  const registry = buildRegistry(Array.from(merged.values()), failures);
+  const registry = buildRegistry(resolved, failures);
 
   for (const plugin of registry.plugins.values()) {
     const toolNames = plugin.tools.map(t => t.name).join(', ');

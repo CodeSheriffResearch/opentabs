@@ -52,7 +52,12 @@ describe('loadConfig / saveConfig round-trip', () => {
     expect(existsSync(configPath)).toBe(true);
   });
 
-  test('round-trips through save and load', async () => {
+  test('creates default config with empty settings', async () => {
+    const config = await loadConfig();
+    expect(config.settings).toEqual({});
+  });
+
+  test('round-trips through save and load including settings', async () => {
     await loadConfig();
 
     const custom: OpentabsConfig = {
@@ -61,12 +66,16 @@ describe('loadConfig / saveConfig round-trip', () => {
         slack: { permission: 'auto', tools: { send_message: 'ask' } },
         discord: { permission: 'off' },
       },
+      settings: {
+        sqlpad: { instanceUrl: 'https://sqlpad.example.com' },
+      },
     };
     await saveConfigWrapped(custom);
 
     const loaded = await loadConfig();
     expect(loaded.localPlugins).toEqual(custom.localPlugins);
     expect(loaded.permissions).toEqual(custom.permissions);
+    expect(loaded.settings).toEqual(custom.settings);
   });
 
   test('filters non-string elements from localPlugins array', async () => {
@@ -122,6 +131,60 @@ describe('loadConfig / saveConfig round-trip', () => {
     const config = await loadConfig();
     expect(config.permissions).toEqual({});
   });
+
+  test('parses settings field with nested plugin objects', async () => {
+    await writeFile(
+      configPath,
+      JSON.stringify({
+        localPlugins: [],
+        permissions: {},
+        settings: {
+          sqlpad: { instanceUrl: 'https://sqlpad.example.com', port: 3000 },
+          jira: { baseUrl: 'https://jira.company.com' },
+        },
+      }),
+    );
+
+    const config = await loadConfig();
+    expect(config.settings).toEqual({
+      sqlpad: { instanceUrl: 'https://sqlpad.example.com', port: 3000 },
+      jira: { baseUrl: 'https://jira.company.com' },
+    });
+  });
+
+  test('ignores non-object entries in settings map', async () => {
+    await writeFile(
+      configPath,
+      JSON.stringify({
+        localPlugins: [],
+        permissions: {},
+        settings: {
+          valid: { key: 'value' },
+          invalid_string: 'not-an-object',
+          invalid_array: [1, 2],
+          invalid_null: null,
+        },
+      }),
+    );
+
+    const config = await loadConfig();
+    expect(config.settings).toEqual({
+      valid: { key: 'value' },
+    });
+  });
+
+  test('returns empty settings when settings field is absent', async () => {
+    await writeFile(
+      configPath,
+      JSON.stringify({
+        localPlugins: [],
+        permissions: {},
+      }),
+    );
+
+    const config = await loadConfig();
+    expect(config.settings).toEqual({});
+  });
 });
 
 describe('savePluginPermissions round-trip', () => {
@@ -135,6 +198,7 @@ describe('savePluginPermissions round-trip', () => {
     const initial: OpentabsConfig = {
       localPlugins: ['/my/plugin'],
       permissions: {},
+      settings: {},
     };
     await saveConfigWrapped(initial);
 
@@ -158,6 +222,7 @@ describe('savePluginPermissions round-trip', () => {
     const initial: OpentabsConfig = {
       localPlugins: [],
       permissions: { slack: { permission: 'auto' } },
+      settings: {},
     };
     await saveConfigWrapped(initial);
 
@@ -171,6 +236,26 @@ describe('savePluginPermissions round-trip', () => {
     expect(loaded.permissions).toEqual({
       discord: { permission: 'off' },
     });
+  });
+
+  test('preserves settings when saving plugin permissions', async () => {
+    const initial: OpentabsConfig = {
+      localPlugins: [],
+      permissions: {},
+      settings: {
+        sqlpad: { instanceUrl: 'https://sqlpad.example.com' },
+      },
+    };
+    await saveConfigWrapped(initial);
+
+    const state = { configWriteMutex: Promise.resolve() };
+    await savePluginPermissions(state, { slack: { permission: 'auto' } });
+
+    const loaded = await loadConfig();
+    expect(loaded.settings).toEqual({
+      sqlpad: { instanceUrl: 'https://sqlpad.example.com' },
+    });
+    expect(loaded.permissions).toEqual({ slack: { permission: 'auto' } });
   });
 });
 
@@ -193,6 +278,7 @@ describe('saveConfig error propagation', () => {
     const config: OpentabsConfig = {
       localPlugins: [],
       permissions: {},
+      settings: {},
     };
 
     await expect(saveConfig(state, config)).rejects.toThrow();
@@ -209,6 +295,7 @@ describe('saveConfig error propagation', () => {
     const config: OpentabsConfig = {
       localPlugins: ['/test/path'],
       permissions: {},
+      settings: {},
     };
 
     // First write fails

@@ -11,7 +11,7 @@
 
 import { access, readFile } from 'node:fs/promises';
 import { join } from 'node:path';
-import type { ManifestTool, Result } from '@opentabs-dev/shared';
+import type { ConfigSchema, ManifestTool, Result } from '@opentabs-dev/shared';
 import {
   ADAPTER_FILENAME,
   ADAPTER_SOURCE_MAP_FILENAME,
@@ -61,6 +61,8 @@ interface LoadedPlugin {
   readonly iconDarkSvg: string | undefined;
   /** Optional SVG icon for dark mode inactive state (from tools.json) */
   readonly iconDarkInactiveSvg: string | undefined;
+  /** Optional config schema from tools.json manifest */
+  readonly configSchema: ConfigSchema | undefined;
 }
 
 /**
@@ -408,6 +410,12 @@ const loadPlugin = async (dir: string, source: PluginSource): Promise<Result<Loa
     // Source map not available — not an error
   }
 
+  // Extract optional configSchema from manifest
+  const configSchema =
+    manifestObj && typeof manifestObj.configSchema === 'object' && manifestObj.configSchema !== null
+      ? (manifestObj.configSchema as ConfigSchema)
+      : undefined;
+
   // Extract optional SVG icons from manifest
   const iconSvg = manifestObj && typeof manifestObj.iconSvg === 'string' ? manifestObj.iconSvg : undefined;
   const iconInactiveSvg =
@@ -436,6 +444,7 @@ const loadPlugin = async (dir: string, source: PluginSource): Promise<Result<Loa
     iconInactiveSvg,
     iconDarkSvg,
     iconDarkInactiveSvg,
+    configSchema,
   });
 };
 

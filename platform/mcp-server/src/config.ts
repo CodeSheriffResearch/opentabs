@@ -44,6 +44,8 @@ interface OpentabsConfig {
   localPlugins: string[];
   /** Per-plugin permission configuration: plugin name → { permission?, tools? } */
   permissions: Record<string, PluginPermissionConfig>;
+  /** Per-plugin settings: plugin name → { settingKey: value } */
+  settings: Record<string, Record<string, unknown>>;
 }
 
 /** Version marker file for the managed extension install */
@@ -149,6 +151,19 @@ const parsePluginsConfig = (raw: unknown): Record<string, PluginPermissionConfig
   return result;
 };
 
+/** Parse the settings map from a raw config record: { pluginName: { key: value } } */
+const parseSettingsConfig = (raw: unknown): Record<string, Record<string, unknown>> => {
+  const result: Record<string, Record<string, unknown>> = {};
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return result;
+
+  for (const [pluginName, entry] of Object.entries(raw as Record<string, unknown>)) {
+    if (entry && typeof entry === 'object' && !Array.isArray(entry)) {
+      result[pluginName] = entry as Record<string, unknown>;
+    }
+  }
+  return result;
+};
+
 /**
  * Parse a raw config record into an OpentabsConfig.
  * Validates and normalizes field types to prevent downstream errors.
@@ -159,8 +174,9 @@ const parseConfigRecord = (record: Record<string, unknown>): OpentabsConfig => {
     : [];
 
   const permissions = parsePluginsConfig(record.permissions);
+  const settings = parseSettingsConfig(record.settings);
 
-  return { localPlugins, permissions };
+  return { localPlugins, permissions, settings };
 };
 
 /**
@@ -187,6 +203,7 @@ const loadConfig = async (): Promise<OpentabsConfig> => {
     const config: OpentabsConfig = {
       localPlugins: [],
       permissions: {},
+      settings: {},
     };
     await atomicWriteConfig(configPath, `${JSON.stringify(config, null, 2)}\n`);
     log.info(`Created default config at ${configPath}`);
@@ -254,6 +271,7 @@ const savePluginPermissions = async (
     const updated: OpentabsConfig = {
       localPlugins: current.localPlugins,
       permissions: plugins,
+      settings: current.settings,
     };
     await atomicWriteConfig(configPath, `${JSON.stringify(updated, null, 2)}\n`);
   })();

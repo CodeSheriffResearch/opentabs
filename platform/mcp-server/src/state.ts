@@ -9,6 +9,7 @@
 
 import type { FSWatcher } from 'node:fs';
 import type {
+  ConfigSchema,
   ManifestTool,
   PluginPermissionConfig,
   PluginTabInfo,
@@ -119,6 +120,8 @@ export interface RegisteredPlugin {
   iconDarkSvg?: string;
   /** Optional SVG icon for dark mode inactive state */
   iconDarkInactiveSvg?: string;
+  /** Config schema defining user-configurable settings for this plugin */
+  configSchema?: ConfigSchema;
 }
 
 /** Tab mapping entry for a plugin — tracks aggregate state and all matching tabs */

@@ -258,7 +258,7 @@ const reloadCore = async ({ state, sessionServers, transports }: ReloadCoreArgs)
   try {
     const config = await loadConfig();
     const configDir = getConfigDir();
-    const { registry, errors } = await discoverPlugins(config.localPlugins, configDir);
+    const { registry, errors } = await discoverPlugins(config.localPlugins, configDir, config.settings);
 
     // Compute all new state values locally before touching state.
     // This ensures an atomic swap: if any step throws, state retains its previous values.
