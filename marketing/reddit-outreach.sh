@@ -38,8 +38,9 @@ if [[ ! -f "$STATE_FILE" ]]; then
   echo '{"comments_posted":[]}' | jq '.' > "$STATE_FILE"
 fi
 
-# ─── Stream filter (from ralph) ─────────────────────────────────────────────
-# Extracts readable progress lines from claude's stream-json output.
+# ─── Stream filter ───────────────────────────────────────────────────────────
+# Parses Claude's stream-json output into readable terminal output.
+# Shows: thinking, tool calls (with Reddit-aware formatting), text, and result.
 
 stream_filter() {
   while IFS= read -r line; do
@@ -48,6 +49,7 @@ stream_filter() {
     msg_type=$(echo "$line" | jq -r '.type // empty' 2>/dev/null) || continue
     case "$msg_type" in
       assistant)
+        # Tool calls
         local tool_uses
         tool_uses=$(echo "$line" | jq -r '
           .message.content[]? |
@@ -57,18 +59,38 @@ stream_filter() {
             elif .name == "Write" then (.input.file_path // "")
             elif .name == "Edit" then (.input.file_path // "")
             elif .name == "Bash" then ((.input.description // .input.command // "") | .[0:80])
-            elif .name == "Glob" then (.input.pattern // "")
-            elif .name == "Grep" then (.input.pattern // "") + " " + (.input.path // "")
-            else (.input | tostring | .[0:80])
+            elif (.name | startswith("mcp__opentabs__reddit_")) then
+              (.name | ltrimstr("mcp__opentabs__")) + "(" +
+              ([.input | to_entries[] | select(.key != "tabId") | .key + "=" + (.value | tostring | .[0:40])] | join(", ")) +
+              ")"
+            else
+              .name + "(" + ([.input | to_entries[] | .key + "=" + (.value | tostring | .[0:30])] | join(", ")) + ")"
             end
           )
         ' 2>/dev/null)
         if [ -n "$tool_uses" ]; then
           while IFS=$'\t' read -r tool_name tool_detail; do
             [ -z "$tool_name" ] && continue
-            printf "  ▸ %-20s %s\n" "$tool_name" "$tool_detail"
+            # For MCP tools, the detail already has the full call — just print it
+            if [[ "$tool_name" == mcp__opentabs__* ]]; then
+              printf "  🔧 %s\n" "$tool_detail"
+            else
+              printf "  ▸ %-8s %s\n" "$tool_name" "$tool_detail"
+            fi
           done <<< "$tool_uses"
         fi
+
+        # Thinking blocks
+        local thinking
+        thinking=$(echo "$line" | jq -r '
+          [.message.content[]? | select(.type == "thinking") | .thinking] | join("")
+        ' 2>/dev/null)
+        if [ -n "$thinking" ] && [ "$thinking" != "null" ]; then
+          # Show first 200 chars of thinking
+          printf "  💭 %.200s\n" "$thinking"
+        fi
+
+        # Text output (Claude's messages to us)
         local text_content
         text_content=$(echo "$line" | jq -r '
           [.message.content[]? | select(.type == "text") | .text] | join("")
@@ -82,7 +104,7 @@ stream_filter() {
         duration_s=$(echo "$line" | jq -r '((.duration_ms // 0) / 1000 | floor)' 2>/dev/null)
         cost=$(echo "$line" | jq -r '.total_cost_usd // 0' 2>/dev/null)
         num_turns=$(echo "$line" | jq -r '.num_turns // 0' 2>/dev/null)
-        printf "  ⏱  %ss  │  %s turns  │  \$%s\n" "$duration_s" "$num_turns" "$cost"
+        printf "\n  ⏱  %ss  │  %s turns  │  \$%s\n" "$duration_s" "$num_turns" "$cost"
         ;;
     esac
   done
@@ -212,10 +234,12 @@ while true; do
 
   prompt=$(build_prompt)
 
+  # Run Claude: raw JSON goes to the log file, filtered output goes to terminal.
   cd "$REPO_ROOT"
   claude --dangerously-skip-permissions --output-format stream-json --verbose \
     < <(echo "$prompt") 2>/dev/null \
-    | tee >(stream_filter) > "$log_file"
+    | tee "$log_file" \
+    | stream_filter
 
   echo ""
   echo "[$(date '+%H:%M:%S')] Run #${run_count} complete. Log: $log_file"
