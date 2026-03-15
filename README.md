@@ -188,10 +188,10 @@ This project wouldn't exist without [Claude Code](https://github.com/anthropics/
 I asked Claude to talk to Gemini about what makes ChatGPT good. Three rounds, no scripting. Just two AIs being professionals.
 
 <p align="center">
-  <a href="https://youtu.be/WRrCeRfiVaI">
-    <img src="https://img.youtube.com/vi/WRrCeRfiVaI/maxresdefault.jpg" alt="Claude talking to Gemini about ChatGPT through OpenTabs" />
-  </a>
+  <img src="assets/demo-claude-gemini-chatgpt.gif" alt="Claude talking to Gemini about ChatGPT through OpenTabs" />
 </p>
+
+[Watch the full video on YouTube](https://youtu.be/WRrCeRfiVaI)
 
 ## Disclaimer
 
