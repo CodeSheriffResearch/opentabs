@@ -55,6 +55,7 @@ const {
   mockHandleBrowserHandleDialog,
   mockHandleBrowserShowNotification,
   mockHandleBrowserGetAccessibilityTree,
+  mockHandleBrowserGetPerformanceMetrics,
   mockHandleExtensionGetState,
   mockHandleExtensionGetLogs,
   mockHandleExtensionGetSidePanel,
@@ -183,6 +184,9 @@ const {
     mockHandleBrowserGetAccessibilityTree: vi.fn(
       asyncNoop as (params: Record<string, unknown>, id: string | number) => Promise<void>,
     ),
+    mockHandleBrowserGetPerformanceMetrics: vi.fn(
+      asyncNoop as (params: Record<string, unknown>, id: string | number) => Promise<void>,
+    ),
     mockHandleExtensionGetState: vi.fn(asyncNoop as (id: string | number) => Promise<void>),
     mockHandleExtensionGetLogs: vi.fn(
       asyncNoop as (params: Record<string, unknown>, id: string | number) => Promise<void>,
@@ -309,6 +313,7 @@ vi.mock('./browser-commands/index.js', () => ({
   handleBrowserHandleDialog: mockHandleBrowserHandleDialog,
   handleBrowserShowNotification: mockHandleBrowserShowNotification,
   handleBrowserGetAccessibilityTree: mockHandleBrowserGetAccessibilityTree,
+  handleBrowserGetPerformanceMetrics: mockHandleBrowserGetPerformanceMetrics,
   initNotificationClickHandler: vi.fn(),
   handleExtensionCheckAdapter: mockHandleExtensionCheckAdapter,
   handleExtensionForceReconnect: mockHandleExtensionForceReconnect,

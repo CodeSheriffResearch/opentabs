@@ -30,6 +30,7 @@ import { getConsoleLogs } from './get-console-logs.js';
 import { getCookies } from './get-cookies.js';
 import { getNetworkRequests } from './get-network-requests.js';
 import { getPageHtml } from './get-page-html.js';
+import { getPerformanceMetrics } from './get-performance-metrics.js';
 import { getResourceContent } from './get-resource-content.js';
 import { getStorage } from './get-storage.js';
 import { getTabContent } from './get-tab-content.js';
@@ -106,6 +107,7 @@ const browserTools: BrowserToolDefinition[] = [
   analyzeSiteTool,
   pluginListTabs,
   getAccessibilityTree,
+  getPerformanceMetrics,
 ];
 
 // Validate that every tool definition matches its entry in BROWSER_TOOLS_CATALOG.

@@ -142,6 +142,14 @@ export const BROWSER_TOOLS_CATALOG: readonly BrowserToolMeta[] = [
     group: 'Page Inspection',
   },
   {
+    name: 'browser_get_performance_metrics',
+    description:
+      'Get performance metrics for a browser tab using the Chrome DevTools Protocol. Returns DOM stats (nodes, documents, event listeners), JS heap memory usage, layout metrics (count, duration, style recalculations), and Web Vitals timing (TTFB, DOM content loaded, load complete, FCP, LCP). Useful for diagnosing performance bottlenecks, memory leaks, and layout thrashing.',
+    summary: 'Get performance metrics for a tab',
+    icon: 'gauge',
+    group: 'Performance',
+  },
+  {
     name: 'browser_get_resource_content',
     description:
       'Read the content of a specific resource (JS, CSS, HTML, etc.) loaded by a page. Returns content from the browser cache — does not re-fetch the resource. Use browser_list_resources first to find the resource URL you want to read. Useful for reading minified JavaScript to understand API patterns, endpoints, data models, and authentication. Text content is returned as a string; binary resources (images, fonts, wasm) are returned as base64.',
