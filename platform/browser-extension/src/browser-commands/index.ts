@@ -25,6 +25,7 @@ export {
   handleBrowserWaitForElement,
 } from './interaction-commands.js';
 export { handleBrowserPressKey } from './key-press-command.js';
+export { handleBrowserGetMemoryUsage } from './memory-commands.js';
 export {
   handleBrowserClearConsoleLogs,
   handleBrowserDisableNetworkCapture,

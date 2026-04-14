@@ -29,6 +29,7 @@ import { focusTab } from './focus-tab.js';
 import { getAccessibilityTree } from './get-accessibility-tree.js';
 import { getConsoleLogs } from './get-console-logs.js';
 import { getCookies } from './get-cookies.js';
+import { getMemoryUsage } from './get-memory-usage.js';
 import { getNetworkRequests } from './get-network-requests.js';
 import { getPageHtml } from './get-page-html.js';
 import { getPerformanceMetrics } from './get-performance-metrics.js';
@@ -112,6 +113,7 @@ const browserTools: BrowserToolDefinition[] = [
   getPerformanceMetrics,
   auditPage,
   getSecurityInfo,
+  getMemoryUsage,
 ];
 
 // Validate that every tool definition matches its entry in BROWSER_TOOLS_CATALOG.

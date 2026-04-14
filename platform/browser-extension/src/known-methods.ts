@@ -54,6 +54,7 @@ export const DISPATCH_METHODS = [
   'browser.getPerformanceMetrics',
   'browser.auditPage',
   'browser.getSecurityInfo',
+  'browser.getMemoryUsage',
   'extension.reload',
   'extension.getState',
   'extension.getLogs',
