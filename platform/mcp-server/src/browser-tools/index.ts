@@ -33,6 +33,7 @@ import { getNetworkRequests } from './get-network-requests.js';
 import { getPageHtml } from './get-page-html.js';
 import { getPerformanceMetrics } from './get-performance-metrics.js';
 import { getResourceContent } from './get-resource-content.js';
+import { getSecurityInfo } from './get-security-info.js';
 import { getStorage } from './get-storage.js';
 import { getTabContent } from './get-tab-content.js';
 import { getTabInfo } from './get-tab-info.js';
@@ -110,6 +111,7 @@ const browserTools: BrowserToolDefinition[] = [
   getAccessibilityTree,
   getPerformanceMetrics,
   auditPage,
+  getSecurityInfo,
 ];
 
 // Validate that every tool definition matches its entry in BROWSER_TOOLS_CATALOG.

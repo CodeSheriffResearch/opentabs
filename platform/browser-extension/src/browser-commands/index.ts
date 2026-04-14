@@ -46,6 +46,7 @@ export {
   withDebugger,
 } from './resource-commands.js';
 export { handleBrowserScroll } from './scroll-command.js';
+export { handleBrowserGetSecurityInfo } from './security-commands.js';
 export {
   handleBrowserAddTabsToGroup,
   handleBrowserCloseTab,

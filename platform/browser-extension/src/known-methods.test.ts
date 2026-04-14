@@ -68,6 +68,7 @@ vi.mock('./browser-commands/index.js', () => ({
   handleBrowserGetAccessibilityTree: vi.fn(asyncNoop),
   handleBrowserGetPerformanceMetrics: vi.fn(asyncNoop),
   handleBrowserAuditPage: vi.fn(asyncNoop),
+  handleBrowserGetSecurityInfo: vi.fn(asyncNoop),
   initNotificationClickHandler: vi.fn(),
   handleExtensionCheckAdapter: vi.fn(asyncNoop),
   handleExtensionForceReconnect: vi.fn(asyncNoop),

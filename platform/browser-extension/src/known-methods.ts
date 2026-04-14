@@ -53,6 +53,7 @@ export const DISPATCH_METHODS = [
   'browser.getAccessibilityTree',
   'browser.getPerformanceMetrics',
   'browser.auditPage',
+  'browser.getSecurityInfo',
   'extension.reload',
   'extension.getState',
   'extension.getLogs',
