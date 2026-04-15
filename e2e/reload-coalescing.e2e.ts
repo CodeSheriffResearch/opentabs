@@ -44,22 +44,24 @@ test.describe('POST /reload coalescing', () => {
       await server.waitForHealth(h => h.status === 'ok');
       const headers = authHeaders(server.secret);
 
+      // Capture reloadCount before firing concurrent requests
+      const healthBefore = await server.waitForHealth(h => h.status === 'ok');
+      const countBefore = healthBefore.reloadCount;
+
       // Fire 5 requests simultaneously
       const results = await Promise.all(Array.from({ length: 5 }, () => postReload(server.port, headers)));
 
-      const bodies: Array<{ ok: boolean; plugins: number; durationMs: number }> = [];
       for (const res of results) {
         expect(res.status).toBe(200);
         const body = (await res.json()) as { ok: boolean; plugins: number; durationMs: number };
         expect(body.ok).toBe(true);
         expect(typeof body.plugins).toBe('number');
         expect(typeof body.durationMs).toBe('number');
-        bodies.push(body);
       }
 
-      // All coalesced callers share the same reload — durationMs should be identical
-      const durations = new Set(bodies.map(b => b.durationMs));
-      expect(durations.size).toBe(1);
+      // All 5 concurrent reloads should have been coalesced into exactly 1 reload cycle
+      const healthAfter = await server.waitForHealth(h => h.reloadCount > countBefore);
+      expect(healthAfter.reloadCount).toBe(countBefore + 1);
     } finally {
       await server.kill();
     }

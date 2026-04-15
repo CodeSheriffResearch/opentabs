@@ -22,7 +22,7 @@ import {
   test,
   writeTestConfig,
 } from './fixtures.js';
-import { waitForLog, waitForToolList } from './helpers.js';
+import { waitFor, waitForLog, waitForToolList } from './helpers.js';
 
 /**
  * POST /reload to the MCP server. Returns the response.
@@ -83,10 +83,19 @@ test.describe('Browser permission persistence across reloads', () => {
       // Wait for reload to complete
       await waitForLog(server, 'Config reload complete', 10_000);
 
+      // Count existing 'Config reload complete' entries before the second reload
+      const serverLogs = server.logs;
+      const reloadCountBefore = serverLogs.filter(l => l.includes('Config reload complete')).length;
+
       // Now trigger another reload — browser permission must persist
       const reloadResp2 = await postReload(server.port, configDir);
       expect(reloadResp2.ok).toBe(true);
-      await waitForLog(server, 'Config reload complete', 10_000);
+      await waitFor(
+        () => serverLogs.filter(l => l.includes('Config reload complete')).length > reloadCountBefore,
+        10_000,
+        200,
+        'second Config reload complete',
+      );
 
       // Verify config on disk still has browser permission
       const diskPermission = readBrowserPermissionFromDisk(configDir);
