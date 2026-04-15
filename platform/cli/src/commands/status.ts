@@ -198,10 +198,13 @@ const handleStatus = async (options: StatusOptions): Promise<void> => {
         : [];
       if (disabledBrowserTools.length > 0) {
         console.log('');
-        console.log(pc.bold('  Disabled Browser Tools'));
-        for (const name of disabledBrowserTools) {
-          console.log(`    ${pc.red(name)}`);
-        }
+        const extensionConnected = data.extensionConnected === true;
+        const reason = extensionConnected ? '' : ' — connect the Chrome extension to enable';
+        console.log(
+          pc.dim(
+            `  ${disabledBrowserTools.length} browser tool${disabledBrowserTools.length === 1 ? '' : 's'} disabled${reason}`,
+          ),
+        );
       }
 
       const failedPlugins = Array.isArray(data.failedPlugins) ? (data.failedPlugins as FailedPluginEntry[]) : [];
