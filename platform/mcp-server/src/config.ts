@@ -168,6 +168,8 @@ const KNOWN_CONFIG_KEYS = new Set([
   'settings',
   'additionalAllowedDirectories',
   'updateCheckIntervalMinutes',
+  'telemetryNoticeShown',
+  'port',
 ]);
 
 /** Compute Levenshtein edit distance between two strings */

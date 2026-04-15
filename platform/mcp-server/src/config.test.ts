@@ -582,7 +582,9 @@ describe('KNOWN_CONFIG_KEYS', () => {
     expect(KNOWN_CONFIG_KEYS).toContain('settings');
     expect(KNOWN_CONFIG_KEYS).toContain('additionalAllowedDirectories');
     expect(KNOWN_CONFIG_KEYS).toContain('updateCheckIntervalMinutes');
-    expect(KNOWN_CONFIG_KEYS.size).toBe(7);
+    expect(KNOWN_CONFIG_KEYS).toContain('telemetryNoticeShown');
+    expect(KNOWN_CONFIG_KEYS).toContain('port');
+    expect(KNOWN_CONFIG_KEYS.size).toBe(9);
   });
 });
 
