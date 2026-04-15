@@ -18,6 +18,7 @@ import {
   readPluginToolNames,
   startMcpServer,
   test,
+  waitForHealth,
 } from './fixtures.js';
 import { parseToolResult, setupToolTest, waitForExtensionConnected, waitForLog, waitForToolResult } from './helpers.js';
 
@@ -57,8 +58,8 @@ const openAndCloseSseStream = async (port: number, sessionId: string, secret?: s
 
 /**
  * Open a GET /mcp SSE stream that stays open until the returned `destroy`
- * function is called. Returns a promise that resolves once the proxy has
- * had time to register the stream (500ms delay, matching openAndCloseSseStream).
+ * function is called. Polls the /health endpoint until the proxy has
+ * registered the stream (mcpClients >= 1) before resolving.
  */
 const openPersistentSseStream = async (
   port: number,
@@ -81,9 +82,9 @@ const openPersistentSseStream = async (
   });
   req.end();
 
-  // Give the proxy time to receive the GET, register the stream in sseStreams,
-  // and open the upstream SSE connection to the worker.
-  await new Promise<void>(r => setTimeout(r, 500));
+  // Poll the health endpoint until the server has registered at least one MCP
+  // client session, confirming the SSE stream has been accepted by the proxy.
+  await waitForHealth(port, h => h.mcpClients >= 1, 5_000, 100, secret);
 
   return { destroy: () => req.destroy() };
 };

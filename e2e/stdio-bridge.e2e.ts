@@ -185,8 +185,8 @@ test.describe('stdio bridge', () => {
         method: 'notifications/initialized',
       });
 
-      // Small delay for notification processing
-      await new Promise(r => setTimeout(r, 500));
+      // MCP messages are processed in FIFO order over a single stream, so
+      // tools/list sent after initialized will be handled after it completes.
 
       // Send tools/list request
       bridge.send({
