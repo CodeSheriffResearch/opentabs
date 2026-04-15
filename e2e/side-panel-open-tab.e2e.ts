@@ -14,6 +14,7 @@ import os from 'node:os';
 import path from 'node:path';
 import {
   cleanupTestConfigDir,
+  copyE2eTestPlugin,
   E2E_TEST_PLUGIN_DIR,
   expect,
   launchExtensionContext,
@@ -329,35 +330,44 @@ test.describe('Side panel open tab', () => {
   });
 
   test('clicking icon opens homepage when no matching tab exists', async () => {
-    const absPluginPath = path.resolve(E2E_TEST_PLUGIN_DIR);
+    // Use a copy of the e2e-test plugin so we can remove the static homepage —
+    // this lets the server derive the homepage from the instanceUrl setting,
+    // pointing at our dynamic-port server instead of the hardcoded port 9876.
+    const { pluginDir: absPluginPath, tmpDir: pluginTmpDir } = copyE2eTestPlugin();
+    const pkgPath = path.join(absPluginPath, 'package.json');
+    const pkg = JSON.parse(fs.readFileSync(pkgPath, 'utf-8'));
+    delete pkg.opentabs.homepage;
+    fs.writeFileSync(pkgPath, `${JSON.stringify(pkg, null, 2)}\n`, 'utf-8');
+
     const prefixedToolNames = readPluginToolNames();
     const tools: Record<string, boolean> = {};
     for (const t of prefixedToolNames) {
       tools[t] = true;
     }
 
-    // Start a minimal HTTP server on the homepage port (9876) so the opened
-    // tab stays at http://localhost:9876/ instead of navigating to chrome-error://.
-    // Handle EADDRINUSE gracefully — another parallel test may already hold the port.
+    // Start a minimal HTTP server on a dynamic port so the opened tab stays
+    // at a real page instead of navigating to chrome-error://.
     const homepageServer = http.createServer((_req, res) => {
       res.writeHead(200, { 'Content-Type': 'text/html' });
       res.end('<html><body>Homepage</body></html>');
     });
+    let homepagePort!: number;
     await new Promise<void>((resolve, reject) => {
-      homepageServer.once('error', (err: NodeJS.ErrnoException) => {
-        if (err.code === 'EADDRINUSE') {
-          // Port 9876 is taken by another test — listen on dynamic port.
-          // The tab will still navigate to port 9876 (served by the other test).
-          homepageServer.listen(0, resolve);
-        } else {
-          reject(err);
-        }
+      homepageServer.once('error', (err: NodeJS.ErrnoException) => reject(err));
+      homepageServer.listen(0, () => {
+        homepagePort = (homepageServer.address() as { port: number }).port;
+        resolve();
       });
-      homepageServer.listen(9876, resolve);
     });
 
     const configDir = fs.mkdtempSync(path.join(os.tmpdir(), 'opentabs-e2e-sp-opentab-homepage-'));
-    writeTestConfig(configDir, { localPlugins: [absPluginPath], tools });
+    writeTestConfig(configDir, {
+      localPlugins: [absPluginPath],
+      tools,
+      settings: {
+        'e2e-test': { instanceUrl: { default: `http://localhost:${String(homepagePort)}` } },
+      },
+    });
 
     const server = await startMcpServer(configDir, true);
     const { context, cleanupDir, extensionDir } = await launchExtensionContext(server.port, server.secret);
@@ -371,8 +381,8 @@ test.describe('Side panel open tab', () => {
       const sidePanelPage = await openSidePanel(context);
       await expect(sidePanelPage.getByText('E2E Test')).toBeVisible({ timeout: 30_000 });
 
-      // The e2e-test plugin has homepage http://localhost:9876, so in closed
-      // state the icon button should be enabled with "Open ... in new tab" tooltip.
+      // The plugin homepage is derived from the instanceUrl setting, so in
+      // closed state the icon button should be enabled with "Open ... in new tab" tooltip.
       const iconButton = sidePanelPage.locator('button[aria-label="Open E2E Test in new tab"]');
       await expect(iconButton).toBeVisible({ timeout: 5_000 });
       await expect(iconButton).toBeEnabled();
@@ -382,13 +392,13 @@ test.describe('Side panel open tab', () => {
       // chrome.tabs.create in the background script.
       const [newPage] = await Promise.all([context.waitForEvent('page', { timeout: 15_000 }), iconButton.click()]);
 
-      // Verify the new page URL matches the plugin's homepage
+      // Verify the new page URL matches the actual port the homepageServer bound to
       await expect
         .poll(() => newPage.url(), {
           timeout: 10_000,
-          message: 'New page URL did not match homepage (localhost:9876)',
+          message: `New page URL did not match homepage (localhost:${String(homepagePort)})`,
         })
-        .toContain('localhost:9876');
+        .toContain(`localhost:${String(homepagePort)}`);
 
       // After the new tab opens, the plugin should transition from 'closed' to
       // 'unavailable' or 'ready' (the homepage matches urlPatterns http://localhost/*)
@@ -419,9 +429,10 @@ test.describe('Side panel open tab', () => {
     } finally {
       await context.close().catch(() => {});
       await server.kill();
-      homepageServer.close();
+      await new Promise<void>(resolve => homepageServer.close(() => resolve()));
       fs.rmSync(cleanupDir, { recursive: true, force: true });
       cleanupTestConfigDir(configDir);
+      fs.rmSync(pluginTmpDir, { recursive: true, force: true });
     }
   });
 
