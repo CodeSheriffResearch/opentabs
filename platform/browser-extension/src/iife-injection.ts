@@ -265,7 +265,8 @@ const resolvePerTabSettings = (
   try {
     const tabHost = new URL(tabUrl).host;
     for (const [name, pattern] of Object.entries(instanceMap)) {
-      const patternHost = pattern.replace('*://', '').replace('/*', '');
+      const m = pattern.match(/^(?:\*|https?):\/\/([^/]+)/);
+      const patternHost = m ? m[1] : '';
       if (tabHost === patternHost) {
         matchedInstance = name;
         break;
