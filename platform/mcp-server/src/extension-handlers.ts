@@ -57,7 +57,7 @@ const VALID_PERMISSIONS = new Set<string>(['off', 'ask', 'auto']);
 interface McpCallbacks {
   onToolConfigChanged: () => void;
   onPluginPermissionsPersist: () => void;
-  onPluginSettingsPersist: () => void;
+  onPluginSettingsPersist: () => Promise<void>;
   onPluginLog: (entry: PluginLogEntry) => void;
   onReload: () => Promise<{ plugins: number; durationMs: number }>;
   /** Send a JSON-RPC request to the extension and return the response (with timeout). */
@@ -732,7 +732,7 @@ const handleConfigSetPluginSettings = async (
 
   // Store settings in state (lenient — store even if plugin isn't loaded yet)
   state.pluginSettings[pluginName] = settingsObj;
-  callbacks.onPluginSettingsPersist();
+  await callbacks.onPluginSettingsPersist();
 
   // Reload to re-derive URL patterns from url-type settings
   try {

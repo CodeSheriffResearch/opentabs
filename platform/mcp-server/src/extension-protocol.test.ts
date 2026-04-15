@@ -33,7 +33,7 @@ const createMockWs = (): WsHandle & { sent: string[] } => ({
 const noopCallbacks = {
   onToolConfigChanged: () => {},
   onPluginPermissionsPersist: () => {},
-  onPluginSettingsPersist: () => {},
+  onPluginSettingsPersist: () => Promise.resolve(),
   onPluginLog: () => {},
   onReload: () => Promise.resolve({ plugins: 0, durationMs: 0 }),
   queryExtension: () => Promise.resolve(undefined),
@@ -1839,7 +1839,7 @@ describe('handleExtensionMessage — config.setToolPermission', () => {
       onPluginPermissionsPersist: () => {
         configPersistCalled = true;
       },
-      onPluginSettingsPersist: () => {},
+      onPluginSettingsPersist: () => Promise.resolve(),
       onPluginLog: () => {},
       onReload: () => Promise.resolve({ plugins: 0, durationMs: 0 }),
       queryExtension: () => Promise.resolve(undefined),
@@ -2032,7 +2032,7 @@ describe('handleExtensionMessage — config.setToolPermission', () => {
       onPluginPermissionsPersist: () => {
         configPersistCalled = true;
       },
-      onPluginSettingsPersist: () => {},
+      onPluginSettingsPersist: () => Promise.resolve(),
       onPluginLog: () => {},
       onReload: () => Promise.resolve({ plugins: 0, durationMs: 0 }),
       queryExtension: () => Promise.resolve(undefined),
@@ -2166,7 +2166,7 @@ describe('handleExtensionMessage — config.setToolPermission', () => {
       onPluginPermissionsPersist: () => {
         configPersistCalled = true;
       },
-      onPluginSettingsPersist: () => {},
+      onPluginSettingsPersist: () => Promise.resolve(),
       onPluginLog: () => {},
       onReload: () => Promise.resolve({ plugins: 0, durationMs: 0 }),
       queryExtension: () => Promise.resolve(undefined),
@@ -2405,7 +2405,7 @@ describe('handleExtensionMessage — config.setPluginPermission', () => {
       onPluginPermissionsPersist: () => {
         configPersistCalled = true;
       },
-      onPluginSettingsPersist: () => {},
+      onPluginSettingsPersist: () => Promise.resolve(),
       onPluginLog: () => {},
       onReload: () => Promise.resolve({ plugins: 0, durationMs: 0 }),
       queryExtension: () => Promise.resolve(undefined),
@@ -2446,7 +2446,7 @@ describe('handleExtensionMessage — config.setPluginPermission', () => {
       onPluginPermissionsPersist: () => {
         configPersistCalled = true;
       },
-      onPluginSettingsPersist: () => {},
+      onPluginSettingsPersist: () => Promise.resolve(),
       onPluginLog: () => {},
       onReload: () => Promise.resolve({ plugins: 0, durationMs: 0 }),
       queryExtension: () => Promise.resolve(undefined),

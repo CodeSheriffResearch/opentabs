@@ -89,11 +89,10 @@ const createMcpCallbacks = (
       // Best-effort persistence — errors are non-fatal for in-memory state
     });
   },
-  onPluginSettingsPersist: () => {
+  onPluginSettingsPersist: () =>
     savePluginSettings(state, { ...state.pluginSettings }).catch(() => {
       // Best-effort persistence — errors are non-fatal for in-memory state
-    });
-  },
+    }),
   onPluginLog: entry => {
     const mcpLevel = entry.level;
     const logger = `plugin:${entry.plugin}`;

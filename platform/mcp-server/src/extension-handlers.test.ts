@@ -85,7 +85,7 @@ const createPendingConfirmation = (
 const noopCallbacks: McpCallbacks = {
   onToolConfigChanged: () => {},
   onPluginPermissionsPersist: () => {},
-  onPluginSettingsPersist: () => {},
+  onPluginSettingsPersist: () => Promise.resolve(),
   onPluginLog: () => {},
   onReload: () => Promise.resolve({ plugins: 0, durationMs: 0 }),
   queryExtension: () => Promise.resolve(undefined),
@@ -1824,6 +1824,7 @@ describe('handleConfigSetPluginSettings', () => {
       ...noopCallbacks,
       onPluginSettingsPersist: () => {
         settingsPersisted = true;
+        return Promise.resolve();
       },
     };
 
