@@ -381,9 +381,9 @@ process.env.OPENTABS_DEV = '1';
 //    old version). Running `lefthook install` at dev startup guarantees the
 //    hooks match the installed version.
 {
-  const { execFileSync } = await import('node:child_process');
+  const { execSync } = await import('node:child_process');
   try {
-    execFileSync('npx', ['lefthook', 'install'], { cwd: ROOT, stdio: 'ignore', shell: true });
+    execSync('npx lefthook install', { cwd: ROOT, stdio: 'ignore' });
   } catch {
     // Non-fatal — lefthook may not be installed yet (first clone before npm install)
   }
