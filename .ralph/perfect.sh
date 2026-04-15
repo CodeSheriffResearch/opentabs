@@ -74,7 +74,10 @@ for f in "${SCRIPTS[@]}"; do
   echo -e "$(ts) ${DIM}  Starting: $short${RESET}"
 
   # Launch script, pipe stdout+stderr through ts_prefix for live streaming.
-  bash "$f" 2>&1 | ts_prefix "$short" &
+  # Wrap in a subshell so $! captures the subshell PID and wait returns the
+  # exit code of bash "$f" (via PIPESTATUS[0]) rather than ts_prefix's exit
+  # code (which is always 0).
+  (bash "$f" 2>&1 | ts_prefix "$short"; exit "${PIPESTATUS[0]}") &
   PIDS+=($!)
 done
 
