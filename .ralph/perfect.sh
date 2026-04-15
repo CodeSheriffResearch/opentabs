@@ -74,7 +74,7 @@ for f in "${SCRIPTS[@]}"; do
   echo -e "$(ts) ${DIM}  Starting: $short${RESET}"
 
   # Launch script, pipe stdout+stderr through ts_prefix for live streaming.
-  bash "$f" 2>&1 | ts_prefix "$short" &
+  (bash "$f" 2>&1 | ts_prefix "$short") &
   PIDS+=($!)
 done
 
