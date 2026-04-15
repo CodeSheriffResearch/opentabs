@@ -68,6 +68,7 @@ export const PLATFORM_PACKAGES = new Set([
   '@opentabs-dev/cli',
   '@opentabs-dev/create-plugin',
   '@opentabs-dev/mcp-server',
+  '@opentabs-dev/opentabs-plugin-e2e-test',
   '@opentabs-dev/plugin-sdk',
   '@opentabs-dev/plugin-tools',
   '@opentabs-dev/shared',
