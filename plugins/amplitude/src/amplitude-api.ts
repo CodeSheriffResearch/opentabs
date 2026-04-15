@@ -103,5 +103,9 @@ export const gql = async <T>(
     throw ToolError.internal(`GraphQL error: ${msg}`);
   }
 
+  if (json.data === undefined) {
+    throw ToolError.internal('GraphQL response contained neither data nor errors');
+  }
+
   return json.data as T;
 };
