@@ -335,9 +335,12 @@ const handleToolProgress: MessageHandler = (message, sendResponse) => {
  * Re-probes the plugin's readiness across all matching tabs and sends a
  * tab.stateChanged notification if the state actually changed.
  */
-const handlePluginReadinessChanged: MessageHandler = (message, _sendResponse) => {
+const handlePluginReadinessChanged: MessageHandler = (message, sendResponse) => {
   const plugin = message.plugin;
-  if (typeof plugin !== 'string' || plugin === '') return;
+  if (typeof plugin !== 'string' || plugin === '') {
+    sendResponse({ ok: true });
+    return;
+  }
 
   (async () => {
     const meta = await getPluginMeta(plugin);
@@ -346,6 +349,7 @@ const handlePluginReadinessChanged: MessageHandler = (message, _sendResponse) =>
   })().catch((err: unknown) => {
     console.warn('[opentabs] handlePluginReadinessChanged failed:', err);
   });
+  sendResponse({ ok: true });
 };
 
 /** Handle sp:confirmationResponse — forward confirmation response to the MCP server */
