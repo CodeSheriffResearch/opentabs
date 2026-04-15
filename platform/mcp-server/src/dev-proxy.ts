@@ -32,6 +32,7 @@ const DIST_DIR = resolve(import.meta.dirname);
 const PROXY_PORT = Number(process.env.PORT ?? DEFAULT_PORT);
 const DEBOUNCE_MS = 300;
 const READY_TIMEOUT_MS = 5000;
+const SESSION_IDLE_TTL_MS = 10 * 60 * 1000;
 
 let workerPort: number | null = null;
 let worker: ChildProcess | null = null;
@@ -59,6 +60,10 @@ interface ProxySession {
   authHeader: string | null;
   /** Original URL path for this session (e.g., '/mcp' or '/mcp/gateway'). */
   path: string;
+  /** Timer that fires cleanupSession after SESSION_IDLE_TTL_MS without an
+   *  active upstream SSE connection. Set when the upstream disconnects,
+   *  cleared when a new upstream SSE connects or the session is cleaned up. */
+  idleTimer: ReturnType<typeof setTimeout> | null;
   /**
    * The single upstream SSE connection to the worker for this session.
    * The MCP SDK enforces exactly one GET SSE stream per session — opening a
@@ -187,6 +192,10 @@ const reinitializeSessions = async (port: number): Promise<void> => {
 const cleanupSession = (proxySessionId: string): void => {
   const session = sessions.get(proxySessionId);
   if (!session) return;
+  if (session.idleTimer) {
+    clearTimeout(session.idleTimer);
+    session.idleTimer = null;
+  }
   workerToProxySession.delete(session.workerSessionId);
   disconnectUpstreamSse(session);
   for (const res of session.sseStreams) {
@@ -477,6 +486,7 @@ const handleMcpPost = async (req: IncomingMessage, res: ServerResponse, port: nu
         sseStreams: new Set(),
         authHeader: authHeader ?? null,
         path: mcpPath,
+        idleTimer: null,
         upstreamSse: null,
       };
       sessions.set(proxySessionId, session);
@@ -606,17 +616,27 @@ const handleMcpGet = (req: IncomingMessage, res: ServerResponse, port: number): 
   // Track this SSE stream for reconnection after worker restart
   session.sseStreams.add(res);
 
+  // Cancel idle eviction — the session is active again.
+  if (session.idleTimer) {
+    clearTimeout(session.idleTimer);
+    session.idleTimer = null;
+  }
+
   res.on('close', () => {
     session.sseStreams.delete(res);
     // If this was the last client SSE stream, disconnect the upstream too —
     // no point keeping it open with no one to fan out to.
     if (session.sseStreams.size === 0) {
       disconnectUpstreamSse(session);
+      // Start idle TTL — if no SSE stream reconnects within the TTL, evict
+      // the session. This prevents leaked sessions when clients crash or
+      // disconnect without sending DELETE /mcp.
+      session.idleTimer = setTimeout(() => cleanupSession(session.proxySessionId), SESSION_IDLE_TTL_MS);
     }
     // Do NOT clean up the session itself when SSE streams close. The MCP
     // client (e.g., OpenCode) still holds the proxy session ID and can
     // re-establish an SSE stream with a new GET /mcp. Sessions are cleaned
-    // up only via explicit DELETE /mcp or when the proxy restarts.
+    // up after SESSION_IDLE_TTL_MS or via explicit DELETE /mcp.
   });
 
   // Connect the upstream SSE stream if not already active. The MCP SDK
