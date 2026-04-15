@@ -646,6 +646,41 @@ describe('handlePluginToolCall', () => {
     expect(text).toContain('OpenTabs side panel');
   });
 
+  test('per-tool override off on reviewed plugin returns disabled-tool error', async () => {
+    vi.mocked(getToolPermission).mockReturnValue('off');
+    const pluginMap = new Map([['testplugin', { name: 'testplugin', version: '2.0.0' }]]) as unknown as ReadonlyMap<
+      string,
+      RegisteredPlugin
+    >;
+    const state = createMockState({
+      registry: { plugins: pluginMap, toolLookup: new Map(), failures: [] },
+      pluginPermissions: {
+        testplugin: { permission: 'auto', reviewedVersion: '2.0.0', tools: { test_action: 'off' } },
+      },
+    });
+    const lookup = createMockLookup();
+    const extra = createMockExtra();
+    const callbacks = createMockCallbacks();
+
+    const result = await handlePluginToolCall(
+      state,
+      'testplugin_test_action',
+      {},
+      'testplugin',
+      'test_action',
+      lookup,
+      extra,
+      callbacks,
+    );
+
+    expect(result.isError).toBe(true);
+    const text = result.content[0]?.text ?? '';
+    expect(text).toContain('is currently disabled');
+    expect(text).toContain('OpenTabs side panel');
+    expect(text).not.toContain('plugin_inspect');
+    expect(text).not.toContain('has not been reviewed');
+  });
+
   test('browser tool off error has no review flow', async () => {
     vi.mocked(getToolPermission).mockReturnValue('off');
     const state = createMockState();

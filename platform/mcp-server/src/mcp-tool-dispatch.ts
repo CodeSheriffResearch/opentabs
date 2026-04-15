@@ -333,6 +333,23 @@ const handlePluginToolCall = async (
     const pluginVersion = plugin?.version ?? 'unknown';
     const permConfig = state.pluginPermissions[pluginName];
     const reviewedVersion = permConfig?.reviewedVersion;
+    const pluginPermission = permConfig?.permission;
+
+    // Per-tool override 'off' on a reviewed plugin: the tool is individually disabled
+    const isToolLevelDisable =
+      permConfig?.tools?.[toolBaseName] === 'off' && pluginPermission && pluginPermission !== 'off';
+
+    if (isToolLevelDisable) {
+      return {
+        content: [
+          {
+            type: 'text' as const,
+            text: `Tool "${toolName}" is currently disabled. Ask the user to enable it in the OpenTabs side panel.`,
+          },
+        ],
+        isError: true,
+      };
+    }
 
     let statusLine: string;
     if (reviewedVersion && reviewedVersion !== pluginVersion) {

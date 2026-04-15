@@ -348,10 +348,10 @@ test.describe('Side panel — disabled tool dispatch rejection', () => {
         )
         .toBe(true);
 
-      // Call the disabled tool — should return isError: true with review flow message
+      // Call the disabled tool — should return isError: true with disabled-tool message
       const disabledResult = await mcpClient.callTool('e2e-test_echo', { message: 'hello' });
       expect(disabledResult.isError).toBe(true);
-      expect(disabledResult.content).toContain('has not been reviewed yet');
+      expect(disabledResult.content).toContain('is currently disabled');
 
       // Re-enable the echo tool
       await selectPermission(sidePanelPage, 'Permission for echo tool', 'Auto');
