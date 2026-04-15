@@ -159,9 +159,11 @@ test.describe('Multi-tab targeting — targeted dispatch', () => {
     if (marker1Value === 'tab-one') {
       tabOneId = firstTab.tabId;
       tabTwoId = secondTab.tabId;
-    } else {
+    } else if (marker1Value === 'tab-two') {
       tabOneId = secondTab.tabId;
       tabTwoId = firstTab.tabId;
+    } else {
+      throw new Error(`Unexpected tab marker value: ${String(marker1Value)}`);
     }
 
     // Call sdk_get_page_global with tabId targeting 'tab-two'
@@ -606,9 +608,11 @@ test.describe('Multi-tab targeting — concurrent targeted dispatches', () => {
     if (marker1Value === 'alpha') {
       tabAlphaId = firstTab.tabId;
       tabBetaId = secondTab.tabId;
-    } else {
+    } else if (marker1Value === 'beta') {
       tabAlphaId = secondTab.tabId;
       tabBetaId = firstTab.tabId;
+    } else {
+      throw new Error(`Unexpected tab marker value: ${String(marker1Value)}`);
     }
 
     // Launch two concurrent tool calls targeting different tabs
@@ -886,9 +890,11 @@ test.describe('Multi-tab targeting — tab closes mid-execution', () => {
     if (marker1Value === 'page-one') {
       pageOneTabId = firstTab.tabId;
       pageTwoTabId = secondTab.tabId;
-    } else {
+    } else if (marker1Value === 'page-two') {
       pageOneTabId = secondTab.tabId;
       pageTwoTabId = firstTab.tabId;
+    } else {
+      throw new Error(`Unexpected tab marker value: ${String(marker1Value)}`);
     }
 
     // Verify tools work normally before adding the delay
