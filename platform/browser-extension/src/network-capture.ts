@@ -437,6 +437,7 @@ chrome.debugger.onDetach.addListener((source: chrome.debugger.Debuggee, _reason:
   if (tabId !== undefined) {
     cleanupInterception(tabId);
     cleanupEmulation(tabId);
+    cleanupThrottle(tabId);
     const state = captures.get(tabId);
     if (state) clearInterval(state.pruneIntervalId);
     captures.delete(tabId);
