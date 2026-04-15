@@ -660,6 +660,7 @@ test.describe('Config mutex serializes concurrent permission writes', () => {
       OPENTABS_DANGEROUSLY_SKIP_PERMISSIONS: '',
     });
 
+    let ws: WebSocket | undefined;
     try {
       await server.waitForHealth(h => h.status === 'ok');
 
@@ -667,15 +668,16 @@ test.describe('Config mutex serializes concurrent permission writes', () => {
       const { wsUrl, wsSecret } = await fetchWsInfo(server.port, server.secret);
       const protocols = ['opentabs'];
       if (wsSecret) protocols.push(wsSecret);
-      const ws = protocols.length > 1 ? new WebSocket(wsUrl, protocols) : new WebSocket(wsUrl);
+      ws = protocols.length > 1 ? new WebSocket(wsUrl, protocols) : new WebSocket(wsUrl);
+      const wsConn = ws;
 
       await new Promise<void>((resolve, reject) => {
         const timer = setTimeout(() => reject(new Error('WebSocket connect timeout')), 5_000);
-        ws.onopen = () => {
+        wsConn.onopen = () => {
           clearTimeout(timer);
           resolve();
         };
-        ws.onerror = () => {
+        wsConn.onerror = () => {
           clearTimeout(timer);
           reject(new Error('WebSocket connect failed'));
         };
@@ -683,7 +685,7 @@ test.describe('Config mutex serializes concurrent permission writes', () => {
 
       // Pending response resolvers keyed by request id
       const pending = new Map<string, (resp: Record<string, unknown>) => void>();
-      ws.onmessage = event => {
+      wsConn.onmessage = event => {
         try {
           const msg = JSON.parse(typeof event.data === 'string' ? event.data : '') as Record<string, unknown>;
           const id = msg.id;
@@ -710,7 +712,7 @@ test.describe('Config mutex serializes concurrent permission writes', () => {
             clearTimeout(timeout);
             resolve(resp);
           });
-          ws.send(JSON.stringify({ jsonrpc: '2.0', method, params, id }));
+          wsConn.send(JSON.stringify({ jsonrpc: '2.0', method, params, id }));
         });
       };
 
@@ -769,9 +771,8 @@ test.describe('Config mutex serializes concurrent permission writes', () => {
       // No JSON parse errors in server logs
       const jsonParseErrors = server.logs.filter(l => l.includes('JSON') && l.includes('parse'));
       expect(jsonParseErrors, 'no JSON parse errors in server logs').toHaveLength(0);
-
-      ws.close();
     } finally {
+      ws?.close();
       await server.kill();
       cleanupTestConfigDir(configDir);
     }
