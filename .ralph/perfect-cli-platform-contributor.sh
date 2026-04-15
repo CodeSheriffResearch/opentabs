@@ -26,6 +26,7 @@ You are a QA engineer performing a platform contributor experience test for the 
 ## Step 2: Set up a clean Docker environment
 
 ```bash
+docker kill opentabs-platform-contributor-test 2>/dev/null; docker rm opentabs-platform-contributor-test 2>/dev/null; true
 docker run --rm -d \
   --name opentabs-platform-contributor-test \
   --network host --ipc=host --shm-size=2g \
