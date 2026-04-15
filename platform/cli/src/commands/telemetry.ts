@@ -52,7 +52,7 @@ const handleTelemetryStatus = async (): Promise<void> => {
     console.log(`  ${pc.bold('Anonymous ID:')} ${pc.dim(anonymousId)}`);
   }
   console.log('');
-  console.log(pc.dim('  Learn more: https://docs.opentabs.dev/telemetry'));
+  console.log(pc.dim('  Learn more: https://opentabs.dev/docs/reference/telemetry'));
   if (enabled) {
     console.log(pc.dim('  Run `opentabs telemetry disable` to opt out.'));
   } else {

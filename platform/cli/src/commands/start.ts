@@ -447,7 +447,7 @@ const handleStart = async (options: StartOptions): Promise<void> => {
       console.log(pc.dim('  This helps us understand how OpenTabs is used and where to focus improvements.'));
       console.log('');
       console.log(pc.dim(`  You can opt out at any time by running: ${pc.bold('opentabs telemetry disable')}`));
-      console.log(pc.dim('  Learn more: https://docs.opentabs.dev/telemetry'));
+      console.log(pc.dim('  Learn more: https://opentabs.dev/docs/reference/telemetry'));
       console.log('');
 
       config.telemetryNoticeShown = true;
